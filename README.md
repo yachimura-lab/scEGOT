@@ -1,0 +1,2 @@
+# scEGOT
+Hello, world!
