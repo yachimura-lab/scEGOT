@@ -1,0 +1,31 @@
+[tool.poetry]
+name = "sc-egot"
+version = "0.1.0"
+description = "single cell trajectory inference framework based on Entropic Gaussian mixture Optimal Transport"
+authors = ["Your Name <you@example.com>"]
+readme = "README.md"
+packages = [{include = "sc_egot"}]
+
+[tool.poetry.dependencies]
+python = "<3.12,>=3.8"
+numpy = "<1.24"
+pandas = "^1.5.3"
+scipy = "^1.10.0"
+scikit-learn = "^1.2.1"
+matplotlib = "^3.6.3"
+umap-learn = "^0.5.3"
+screcode = "^0.1.2"
+seaborn = "^0.12.2"
+natsort = "^8.2.0"
+POT = "^0.8.2"
+networkx = "^3.0"
+plotly = "^5.13.0"
+ipython = "^8.9.0"
+pydotplus = "^2.0.2"
+
+[tool.poetry.group.dev.dependencies]
+jupyterlab = "^3.5.3"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
