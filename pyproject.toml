@@ -31,6 +31,8 @@ jupyter-git = "^1.0.22"
 jupyter-black = "^0.3.3"
 nbdime = "^3.1.1"
 tqdm = "^4.64.1"
+nbresuse = "^0.4.0"
+jupyter-kite = "^2.0.2"
 
 [build-system]
 requires = ["poetry-core"]
