@@ -159,6 +159,10 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 
+# For Mac
+.DS_Store
+scECOT/.DS_Store
+
 # scECOT's folder and file in development environment
 scEGOT/dataset/
 scEGOT/output/
