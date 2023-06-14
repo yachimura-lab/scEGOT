@@ -7,14 +7,14 @@ readme = "README.md"
 packages = [{include = "sc_egot"}]
 
 [tool.poetry.dependencies]
-python = "<3.12,>=3.8"
+python = "<3.11,>=3.8"
 numpy = "<1.24"
 pandas = "^1.5.3"
 scipy = "^1.10.0"
 scikit-learn = "^1.2.1"
 matplotlib = "^3.6.3"
 umap-learn = "^0.5.3"
-screcode = "^0.1.2"
+screcode = "0.1.2.dev202304070357"
 seaborn = "^0.12.2"
 natsort = "^8.2.0"
 POT = "^0.8.2"
@@ -24,7 +24,7 @@ ipython = "^8.9.0"
 pydotplus = "^2.0.2"
 graphviz = "^0.20.1"
 scvelo = "^0.2.5"
-anndata = "^0.9.1"
+anndata = "0.8"
 kaleido = "0.2.1"
 
 [tool.poetry.group.dev.dependencies]
