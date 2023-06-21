@@ -166,3 +166,6 @@ scECOT/.DS_Store
 # scECOT's folder and file in development environment
 scEGOT/dataset/
 scEGOT/output/
+
+# VSCode
+.vscode/
