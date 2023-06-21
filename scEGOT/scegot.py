@@ -24,9 +24,31 @@ import screcode
 import seaborn as sns
 import pydotplus
 from tqdm import tqdm
+from io import BytesIO
+from PIL import Image as PILImage
 
 sns.set_style("whitegrid")
 # warnings.filterwarnings("ignore")
+
+
+def is_notebook() -> bool:
+    try:
+        from IPython import get_ipython
+
+        shell = get_ipython().__class__.__name__
+        if shell == "ZMQInteractiveShell":
+            # Jupyter notebook or qtconsole
+            return True
+        elif shell == "TerminalInteractiveShell":
+            # Terminal running IPython
+            return False
+        else:
+            # Other type (?)
+            return False
+    except NameError:
+        # Probably standard Python interpreter
+        return False
+
 
 class scEGOT:
     def __init__(
@@ -432,8 +454,10 @@ class scEGOT:
                 ims.append(im + [title])
 
         anim = animation.ArtistAnimation(fig, ims, interval=100)
-        plt.close()
-        display(HTML(anim.to_jshtml()))
+        if is_notebook():
+            display(HTML(anim.to_jshtml()))
+        else:
+            plt.show()
 
         if save:
             anim.save(save_path, writer="pillow")
@@ -1054,6 +1078,7 @@ class scEGOT:
         t=0.5,
         plot_source_and_target=True,
         alpha_true=0.5,
+        mode="pca",
         x_col_name=None,
         y_col_name=None,
         x_range=None,
@@ -1067,9 +1092,26 @@ class scEGOT:
             t,
             self.X_PCA[0].columns,
         )
-        X_true = self.X_PCA[interpolate_index]
-        X_source = self.X_PCA[interpolate_index - 1]
-        X_target = self.X_PCA[interpolate_index + 1]
+        if mode == "umap":
+            X_interpolation = pd.DataFrame(
+                self.umap_model.transform(X_interpolation),
+                columns=self.X_UMAP[0].columns,
+            )
+        X_true = (
+            self.X_PCA[interpolate_index]
+            if mode == "pca"
+            else self.X_UMAP[interpolate_index]
+        )
+        X_source = (
+            self.X_PCA[interpolate_index - 1]
+            if mode == "pca"
+            else self.X_UMAP[interpolate_index - 1]
+        )
+        X_target = (
+            self.X_PCA[interpolate_index + 1]
+            if mode == "pca"
+            else self.X_UMAP[interpolate_index + 1]
+        )
 
         if x_range is None or y_range is None:
             df_concated = pd.concat([X_source, X_target, X_true, X_interpolation])
@@ -1130,6 +1172,8 @@ class scEGOT:
         plt.ylim(y_range)
         plt.legend(loc=0)
         plt.title("true and interpolation distributions")
+
+        plt.show()
 
         if save:
             plt.savefig(save_path)
@@ -1198,7 +1242,8 @@ class scEGOT:
 
                 if mode == "umap":
                     X_interpolation = pd.DataFrame(
-                        self.umap_model.transform(X_interpolation)
+                        self.umap_model.transform(X_interpolation),
+                        columns=self.X_UMAP[0].columns,
                     )
 
                 im = plt.scatter(
@@ -1228,8 +1273,10 @@ class scEGOT:
                 ims.append([im] + [title])
 
         anim_gene = animation.ArtistAnimation(fig, ims, interval=100)
-        plt.close()
-        display(HTML(anim_gene.to_jshtml()))
+        if is_notebook():
+            display(HTML(anim_gene.to_jshtml()))
+        else:
+            plt.show()
 
         if save:
             anim_gene.save(save_path, writer="pillow")
@@ -1316,7 +1363,7 @@ class scEGOT:
         y_velocity,
         speed,
         cmap="rainbow",
-        mode="PCA",
+        mode="pca",
         save=False,
         save_path=None,
     ):
@@ -1348,6 +1395,8 @@ class scEGOT:
         plt.ylabel(X_concated.columns[1])
 
         plt.colorbar()
+
+        plt.show()
 
         if save:
             plt.savefig(save_path)
@@ -1477,6 +1526,8 @@ class scEGOT:
         if color_streams:
             plt.colorbar(stream.lines)
 
+        plt.show()
+
         if save:
             plt.savefig(save_path)
 
@@ -1542,7 +1593,11 @@ class scEGOT:
             GRNgraph = self.make_GRN_graph(
                 GRN[selected_genes].loc[selected_genes], threshold=thresh
             )
-            display(Image(GRNgraph.create(format=save_format)))
+            if is_notebook():
+                display(Image(GRNgraph.create(format=save_format)))
+            else:
+                img = PILImage.open(BytesIO(GRNgraph.create(format=save_format)))
+                img.show()
             if save:
                 GRNgraph.write(save_paths[i], format=save_format)
 
