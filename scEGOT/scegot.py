@@ -462,108 +462,7 @@ class scEGOT:
         if save:
             anim.save(save_path, writer="pillow")
 
-    def plot_cell_state_graph(
-        self,
-        cluster_names,
-        tf_gene_names,
-        mode="pca",
-        tf_gene_pick_num=5,
-        thresh=0.05,
-        save=False,
-        save_path=None,
-    ):
-        if save and save_path is None:
-            save_path = "./cell_state_graph.png"
-
-        gmm_means = self.get_gmm_means()
-
-        gmm_means_flattened = np.array(list(itertools.chain.from_iterable(gmm_means)))
-        if mode == "umap":
-            gmm_means_flattened = self.umap_model.transform(gmm_means_flattened)
-
-        cell_state_graph = self._make_cell_state_graph(cluster_names, thresh)
-        G = nx.from_pandas_edgelist(
-            cell_state_graph,
-            source="source",
-            target="target",
-            edge_attr=["edge_weights", "edge_colors"],
-            create_using=nx.DiGraph,
-        )
-        node_weights_and_pos = pd.DataFrame(
-            self._get_gmm_node_weights_flattened(),
-            index=list(itertools.chain.from_iterable(cluster_names)),
-            columns=["node_weights"],
-        )
-        node_weights_and_pos["xpos"] = gmm_means_flattened.T[0]
-        node_weights_and_pos["ypos"] = gmm_means_flattened.T[1]
-        node_weights_and_pos["node_days"] = LabelEncoder().fit_transform(
-            self._get_day_names_of_each_node()
-        )
-        pos = {}
-        for row in node_weights_and_pos.itertuples():
-            G.add_node(row.Index, weight=row.node_weights)
-            G.add_node(row.Index, day=row.node_days)
-            pos[row.Index] = (row.xpos, row.ypos)
-
-        mean_gene_values_per_cluster = self.get_gmm_mean_gene_values_per_cluster(
-            gmm_means,
-            list(itertools.chain.from_iterable(cluster_names)),
-        )
-        mean_tf_gene_values_per_cluster = mean_gene_values_per_cluster.loc[
-            :, mean_gene_values_per_cluster.columns.isin(tf_gene_names)
-        ]
-        # nodes
-        tf_nlargest = mean_tf_gene_values_per_cluster.T.apply(
-            self._get_nlargest_gene_indices, num=tf_gene_pick_num
-        ).T
-        tf_nsmallest = mean_tf_gene_values_per_cluster.T.apply(
-            self._get_nsmallest_gene_indices, num=tf_gene_pick_num
-        ).T
-        tf_nlargest.columns += 1
-        tf_nsmallest.columns += 1
-        # edges
-        tf_up_genes = self._get_up_regulated_genes(
-            mean_tf_gene_values_per_cluster, cell_state_graph, num=tf_gene_pick_num
-        )
-        tf_down_genes = self._get_down_regulated_genes(
-            mean_tf_gene_values_per_cluster, cell_state_graph, num=tf_gene_pick_num
-        )
-        tf_up_genes.columns += 1
-        tf_down_genes.columns += 1
-
-        self._plot_cell_state_graph(
-            G,
-            pos,
-            nodes_up_gene=tf_nlargest,
-            nodes_down_gene=tf_nsmallest,
-            edges_up_gene=tf_up_genes,
-            edges_down_gene=tf_down_genes,
-            save=save,
-            save_path=save_path,
-        )
-
-    def _get_gmm_node_weights_flattened(self):
-        node_weights = [
-            self.gmm_models[i].weights_ for i in range(len(self.gmm_models))
-        ]
-        node_weights = itertools.chain.from_iterable(node_weights)
-        return node_weights
-
-    def _get_day_names_of_each_node(self):
-        day_names_of_each_node = []
-        for i, gmm_n_components in enumerate(self.gmm_n_components_list):
-            day_names_of_each_node += [self.day_names[i]] * gmm_n_components
-        return day_names_of_each_node
-
-    def _get_nlargest_gene_indices(self, row, num=10):
-        nlargest = row.nlargest(num)
-        return nlargest.index
-
-    def _get_nsmallest_gene_indices(self, row, num=10):
-        nsmallest = row.nsmallest(num)
-        return nsmallest.index
-
-    def _make_cell_state_graph(self, cluster_names, thresh):
+    def _get_cell_state_edge_list(self, cluster_names, thresh):
         node_source_target_combinations, edge_colors_based_on_source = [], []
         for i in range(len(self.gmm_n_components_list) - 1):
             current_combinations = [
@@ -588,40 +487,43 @@ class scEGOT:
 
         return cell_state_graph
 
-    def _get_fold_change(self, gene_values, source, target):
-        fold_change = pd.Series(
-            gene_values.T[target] - gene_values.T[source], index=gene_values.T.index
+    def make_cell_state_graph(
+        self,
+        cluster_names,
+        mode="pca",
+        thresh=0.05,
+    ):
+        gmm_means_flattened = np.array(
+            list(itertools.chain.from_iterable(self.get_gmm_means()))
         )
-        fold_change = fold_change.sort_values(ascending=False)
-        return fold_change
+        if mode == "umap":
+            gmm_means_flattened = self.umap_model.transform(gmm_means_flattened)
 
-    def _get_up_regulated_genes(self, gene_values, cell_state_graph, num=10):
-        df_upgenes = pd.DataFrame([])
-        for i in range(len(cell_state_graph)):
-            s1 = cell_state_graph["source"].iloc[i]
-            s2 = cell_state_graph["target"].iloc[i]
-            fold_change = self._get_fold_change(gene_values, s1, s2)
-            upgenes = pd.Series(
-                self._get_nlargest_gene_indices(fold_change, num=num).values
-            )
-            df_upgenes = df_upgenes.append(upgenes, ignore_index=True)
-        df_upgenes.index = cell_state_graph["source"] + cell_state_graph["target"]
-        df_upgenes.columns = df_upgenes.columns
-        return df_upgenes
+        cell_state_edge_list = self._get_cell_state_edge_list(cluster_names, thresh)
+        G = nx.from_pandas_edgelist(
+            cell_state_edge_list,
+            source="source",
+            target="target",
+            edge_attr=["edge_weights", "edge_colors"],
+            create_using=nx.DiGraph,
+        )
+        node_weights_and_pos = pd.DataFrame(
+            self._get_gmm_node_weights_flattened(),
+            index=list(itertools.chain.from_iterable(cluster_names)),
+            columns=["node_weights"],
+        )
+        node_weights_and_pos["xpos"] = gmm_means_flattened.T[0]
+        node_weights_and_pos["ypos"] = gmm_means_flattened.T[1]
+        node_weights_and_pos["node_days"] = LabelEncoder().fit_transform(
+            self._get_day_names_of_each_node()
+        )
+        pos = {}
+        for row in node_weights_and_pos.itertuples():
+            G.add_node(row.Index, weight=row.node_weights)
+            G.add_node(row.Index, day=row.node_days)
+            pos[row.Index] = (row.xpos, row.ypos)
 
-    def _get_down_regulated_genes(self, gene_values, cell_state_graph, num=10):
-        df_downgenes = pd.DataFrame([])
-        for i in range(len(cell_state_graph)):
-            s1 = cell_state_graph["source"].iloc[i]
-            s2 = cell_state_graph["target"].iloc[i]
-            fold_change = self._get_fold_change(gene_values, s1, s2)
-            downgenes = pd.Series(
-                self._get_nsmallest_gene_indices(fold_change, num=num).values
-            )
-            df_downgenes = df_downgenes.append(downgenes, ignore_index=True)
-        df_downgenes.index = cell_state_graph["source"] + cell_state_graph["target"]
-        df_downgenes.columns = df_downgenes.columns
-        return df_downgenes
+        return G, cell_state_edge_list, pos
 
     def _plot_cell_state_graph(
         self,
@@ -773,6 +675,115 @@ class scEGOT:
 
         if save:
             fig.write_image(save_path)
+
+    def plot_cell_state_graph(
+        self,
+        G,
+        cell_state_edge_list,
+        pos,
+        cluster_names,
+        tf_gene_names,
+        tf_gene_pick_num=5,
+        save=False,
+        save_path=None,
+    ):
+        if save and save_path is None:
+            save_path = "./cell_state_graph.png"
+
+        mean_gene_values_per_cluster = self.get_gmm_mean_gene_values_per_cluster(
+            self.get_gmm_means(),
+            list(itertools.chain.from_iterable(cluster_names)),
+        )
+        mean_tf_gene_values_per_cluster = mean_gene_values_per_cluster.loc[
+            :, mean_gene_values_per_cluster.columns.isin(tf_gene_names)
+        ]
+        # nodes
+        tf_nlargest = mean_tf_gene_values_per_cluster.T.apply(
+            self._get_nlargest_gene_indices, num=tf_gene_pick_num
+        ).T
+        tf_nsmallest = mean_tf_gene_values_per_cluster.T.apply(
+            self._get_nsmallest_gene_indices, num=tf_gene_pick_num
+        ).T
+        tf_nlargest.columns += 1
+        tf_nsmallest.columns += 1
+        # edges
+        tf_up_genes = self._get_up_regulated_genes(
+            mean_tf_gene_values_per_cluster, cell_state_edge_list, num=tf_gene_pick_num
+        )
+        tf_down_genes = self._get_down_regulated_genes(
+            mean_tf_gene_values_per_cluster, cell_state_edge_list, num=tf_gene_pick_num
+        )
+        tf_up_genes.columns += 1
+        tf_down_genes.columns += 1
+
+        self._plot_cell_state_graph(
+            G,
+            pos,
+            nodes_up_gene=tf_nlargest,
+            nodes_down_gene=tf_nsmallest,
+            edges_up_gene=tf_up_genes,
+            edges_down_gene=tf_down_genes,
+            save=save,
+            save_path=save_path,
+        )
+
+    def _get_gmm_node_weights_flattened(self):
+        node_weights = [
+            self.gmm_models[i].weights_ for i in range(len(self.gmm_models))
+        ]
+        node_weights = itertools.chain.from_iterable(node_weights)
+        return node_weights
+
+    def _get_day_names_of_each_node(self):
+        day_names_of_each_node = []
+        for i, gmm_n_components in enumerate(self.gmm_n_components_list):
+            day_names_of_each_node += [self.day_names[i]] * gmm_n_components
+        return day_names_of_each_node
+
+    def _get_nlargest_gene_indices(self, row, num=10):
+        nlargest = row.nlargest(num)
+        return nlargest.index
+
+    def _get_nsmallest_gene_indices(self, row, num=10):
+        nsmallest = row.nsmallest(num)
+        return nsmallest.index
+
+    def _get_fold_change(self, gene_values, source, target):
+        fold_change = pd.Series(
+            gene_values.T[target] - gene_values.T[source], index=gene_values.T.index
+        )
+        fold_change = fold_change.sort_values(ascending=False)
+        return fold_change
+
+    def _get_up_regulated_genes(self, gene_values, cell_state_edge_list, num=10):
+        df_upgenes = pd.DataFrame([])
+        for i in range(len(cell_state_edge_list)):
+            s1 = cell_state_edge_list["source"].iloc[i]
+            s2 = cell_state_edge_list["target"].iloc[i]
+            fold_change = self._get_fold_change(gene_values, s1, s2)
+            upgenes = pd.Series(
+                self._get_nlargest_gene_indices(fold_change, num=num).values
+            )
+            df_upgenes = df_upgenes.append(upgenes, ignore_index=True)
+        df_upgenes.index = (
+            cell_state_edge_list["source"] + cell_state_edge_list["target"]
+        )
+        return df_upgenes
+
+    def _get_down_regulated_genes(self, gene_values, cell_state_edge_list, num=10):
+        df_downgenes = pd.DataFrame([])
+        for i in range(len(cell_state_edge_list)):
+            s1 = cell_state_edge_list["source"].iloc[i]
+            s2 = cell_state_edge_list["target"].iloc[i]
+            fold_change = self._get_fold_change(gene_values, s1, s2)
+            downgenes = pd.Series(
+                self._get_nsmallest_gene_indices(fold_change, num=num).values
+            )
+            df_downgenes = df_downgenes.append(downgenes, ignore_index=True)
+        df_downgenes.index = (
+            cell_state_edge_list["source"] + cell_state_edge_list["target"]
+        )
+        return df_downgenes
 
     def plot_fold_change(
         self,
