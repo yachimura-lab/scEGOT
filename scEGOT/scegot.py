@@ -517,18 +517,19 @@ class scEGOT:
         node_weights_and_pos["node_days"] = LabelEncoder().fit_transform(
             self._get_day_names_of_each_node()
         )
-        pos = {}
         for row in node_weights_and_pos.itertuples():
-            G.add_node(row.Index, weight=row.node_weights)
-            G.add_node(row.Index, day=row.node_days)
-            pos[row.Index] = (row.xpos, row.ypos)
+            G.add_node(
+                row.Index,
+                weight=row.node_weights,
+                day=row.node_days,
+                pos=(row.xpos, row.ypos),
+            )
 
-        return G, cell_state_edge_list, pos
+        return G, cell_state_edge_list
 
     def _plot_cell_state_graph(
         self,
         G,
-        pos,
         nodes_up_gene,
         nodes_down_gene,
         edges_up_gene,
@@ -545,10 +546,10 @@ class scEGOT:
 
         colors = plt.cm.inferno(np.linspace(0, 1, day_num + 2))
         for edge in G.edges():
-            x0, y0 = pos[edge[0]]
-            x1, y1 = pos[edge[1]]
-            tail_list.append(pos[edge[0]])
-            head_list.append(pos[edge[1]])
+            x0, y0 = G.nodes[edge[0]]["pos"]
+            x1, y1 = G.nodes[edge[1]]["pos"]
+            tail_list.append((x0, y0))
+            head_list.append((x1, y1))
             weight = G.edges[edge]["edge_weights"] * 25
             color = colors[G.edges[edge]["edge_colors"] + 1]
 
@@ -580,9 +581,9 @@ class scEGOT:
             opacity=0,
         )
 
-        for edge in G.edges:
-            x0, y0 = pos[edge[0]]
-            x1, y1 = pos[edge[1]]
+        for edge in G.edges():
+            x0, y0 = G.nodes[edge[0]]["pos"]
+            x1, y1 = G.nodes[edge[1]]["pos"]
             from_to = str(edge[0]) + str(edge[1])
             hovertext1 = edges_up_gene.T[from_to].values
             hovertext2 = edges_down_gene.T[from_to].values
@@ -632,7 +633,7 @@ class scEGOT:
         )
 
         for node in G.nodes():
-            x, y = pos[node]
+            x, y = G.nodes[node]["pos"]
             node_x.append(x)
             node_y.append(y)
             hovertext1 = nodes_up_gene.T[node].values
@@ -680,7 +681,6 @@ class scEGOT:
         self,
         G,
         cell_state_edge_list,
-        pos,
         cluster_names,
         tf_gene_names,
         tf_gene_pick_num=5,
@@ -718,7 +718,6 @@ class scEGOT:
 
         self._plot_cell_state_graph(
             G,
-            pos,
             nodes_up_gene=tf_nlargest,
             nodes_down_gene=tf_nsmallest,
             edges_up_gene=tf_up_genes,
