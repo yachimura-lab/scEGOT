@@ -1571,26 +1571,18 @@ class scEGOT:
                 gmm_source, gmm_target, self.X_PCA[i], self.solutions[i]
             )
 
-            df_X_inverse = pd.DataFrame(
-                self.pca_model.inverse_transform(self.X_PCA[i].values),
-                columns=self.gene_names,
-            )
-
-            df_velo_inverse = pd.DataFrame(
-                self.pca_model.inverse_transform(velo), columns=self.gene_names
-            )
-
             alphas_cv = np.logspace(-2, 2, num=20)
             ridgeCV = linear_model.RidgeCV(alphas=alphas_cv, cv=3, fit_intercept=False)
-            ridgeCV.fit(df_X_inverse, df_velo_inverse)
+            ridgeCV.fit(self.X_PCA[i], velo)
             ridgeCVs.append(ridgeCV)
 
             GRN = linear_model.Ridge(alpha=ridgeCV.alpha_, fit_intercept=False)
-            GRN.fit(df_X_inverse, df_velo_inverse)
+            GRN.fit(self.X_PCA[i], velo)
             df_GRN = pd.DataFrame(
-                GRN.coef_, index=self.gene_names, columns=self.gene_names
+                self.pca_model.components_.T @ GRN.coef_ @ self.pca_model.components_,
+                index=self.gene_names,
+                columns=self.gene_names,
             )
-
             GRNs.append(df_GRN)
 
         return GRNs, ridgeCVs
