@@ -16,7 +16,6 @@ from sklearn.decomposition import PCA
 import umap.umap_ as umap
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
-from matplotlib.colors import Normalize
 from matplotlib import patheffects
 import networkx as nx
 import plotly.express as px
@@ -31,7 +30,6 @@ from PIL import Image as PILImage
 from adjustText import adjust_text
 
 sns.set_style("whitegrid")
-# warnings.filterwarnings("ignore")
 
 
 def is_notebook() -> bool:
@@ -64,7 +62,7 @@ class scEGOT:
         umap_n_components=None,
         umap_n_neighbors=None,
         verbose=True,
-        umi_norm=1e4,
+        target_sum=1e4,
     ):
         self.pca_n_components = pca_n_components
         self.gmm_n_components_list = gmm_n_components_list
@@ -73,11 +71,11 @@ class scEGOT:
         self.umap_n_neighbors = umap_n_neighbors
         self.verbose = verbose
 
-        self.umi_norm = umi_norm
+        self.target_sum = target_sum
 
         self.X_raw = [df.copy() for df in X]
-        self.X_PCA = None
-        self.X_UMAP = None
+        self.X_pca = None
+        self.X_umap = None
         self.X_normalized = None
 
         self.pca_model = None
@@ -112,7 +110,7 @@ class scEGOT:
         return X_concated, pca_model
 
     def _normalize_umi(self, X_concated):
-        X_concated = X_concated.div(X_concated.sum(axis=1), axis=0) * self.umi_norm
+        X_concated = X_concated.div(X_concated.sum(axis=1), axis=0) * self.target_sum
         return X_concated
 
     def _normalize_log1p(self, X_concated):
@@ -145,8 +143,8 @@ class scEGOT:
         apply_normalization_log1p=True,
         apply_normalization_umi=True,
     ):
-        if self.X_PCA is not None:
-            return self.X_PCA, self.pca_model
+        if self.X_pca is not None:
+            return self.X_pca, self.pca_model
 
         X_concated = pd.concat(self.X_raw)
 
@@ -180,7 +178,7 @@ class scEGOT:
 
         X = self._split_dataframe_by_row(X_concated, [len(x) for x in self.X_raw])
 
-        self.X_PCA = [df.copy() for df in X]
+        self.X_pca = [df.copy() for df in X]
         self.pca_model = pca_model
 
         return X, pca_model
@@ -205,16 +203,16 @@ class scEGOT:
         return X_concated, umap_model
 
     def apply_umap(self, random_state=None, min_dist=0.8):
-        if self.X_UMAP is not None:
-            return self.X_UMAP, self.umap_model
+        if self.X_umap is not None:
+            return self.X_umap, self.umap_model
 
-        X_concated = pd.concat(self.X_PCA)
+        X_concated = pd.concat(self.X_pca)
         X_concated, umap_model = self._apply_umap_to_concated_data(
             X_concated, random_state, min_dist
         )
         X = self._split_dataframe_by_row(X_concated, [len(x) for x in self.X_raw])
 
-        self.X_UMAP = [df.copy() for df in X]
+        self.X_umap = [df.copy() for df in X]
         self.umap_model = umap_model
 
         return X, umap_model
@@ -232,7 +230,7 @@ class scEGOT:
         gmm_models = []
 
         for i in (
-            tqdm(range(len(self.X_PCA))) if self.verbose else range(len(self.X_PCA))
+            tqdm(range(len(self.X_pca))) if self.verbose else range(len(self.X_pca))
         ):
             gmm_model = GaussianMixture(
                 self.gmm_n_components_list[i],
@@ -241,7 +239,7 @@ class scEGOT:
                 n_init=n_init,
                 random_state=random_state,
             )
-            gmm_model.fit(self.X_PCA[i].values)
+            gmm_model.fit(self.X_pca[i].values)
             gmm_models.append(gmm_model)
 
         self.gmm_models = gmm_models
@@ -260,7 +258,7 @@ class scEGOT:
 
         gmm_models, gmm_labels = [], []
         for i in (
-            tqdm(range(len(self.X_PCA))) if self.verbose else range(len(self.X_PCA))
+            tqdm(range(len(self.X_pca))) if self.verbose else range(len(self.X_pca))
         ):
             if self.gmm_models is None:
                 gmm_model = GaussianMixture(
@@ -270,10 +268,10 @@ class scEGOT:
                     n_init=n_init,
                     random_state=random_state,
                 )
-                gmm_labels.append(gmm_model.fit_predict(self.X_PCA[i].values))
+                gmm_labels.append(gmm_model.fit_predict(self.X_pca[i].values))
                 gmm_models.append(gmm_model)
             else:
-                gmm_labels.append(self.gmm_models[i].predict(self.X_PCA[i].values))
+                gmm_labels.append(self.gmm_models[i].predict(self.X_pca[i].values))
 
         if self.gmm_models is None:
             self.gmm_models = gmm_models
@@ -335,7 +333,7 @@ class scEGOT:
         save_paths=None,
         cmap="plasma",
     ):
-        X = self.X_PCA if mode == "pca" else self.X_UMAP
+        X = self.X_pca if mode == "pca" else self.X_umap
 
         if x_range is None:
             x_min = min([np.min(df.iloc[:, 0].values) for df in X])
@@ -402,18 +400,18 @@ class scEGOT:
     def _interpolation_contour(
         self, gmm_source, gmm_target, t, x_range, y_range, cmap="rainbow"
     ):
-        K0, K1 = gmm_source.means_.shape[0], gmm_target.means_.shape[0]
+        K_0, K_1 = gmm_source.means_.shape[0], gmm_target.means_.shape[0]
 
         solution = self.calculate_solution(gmm_source, gmm_target)
-        pit = solution.reshape(K0 * K1, 1).T
+        pit = solution.reshape(K_0 * K_1, 1).T
 
-        mut, St = self.calculate_mut_St(gmm_source, gmm_target, t)
+        mut, st = self.calculate_mut_st(gmm_source, gmm_target, t)
         x, y = np.meshgrid(
             np.linspace(x_range[0], x_range[1], 1000),
             np.linspace(y_range[0], y_range[1], 1000),
         )
-        xx = np.array([x.ravel(), y.ravel()]).T
-        z = self.theoretical_density_2d(mut[:, 0:2], St[:, 0:2, 0:2], pit, xx)
+        flattened = np.array([x.ravel(), y.ravel()]).T
+        z = self.theoretical_density_2d(mut[:, 0:2], st[:, 0:2, 0:2], pit, flattened)
         z = z.reshape(x.shape)
         max_z = np.max(z)
         min_z = np.min(z)
@@ -433,13 +431,13 @@ class scEGOT:
             save_path = "./cell_state_video.gif"
 
         if x_range is None:
-            x_min = min([np.min(df.iloc[:, 0].values) for df in self.X_PCA])
-            x_max = max([np.max(df.iloc[:, 0].values) for df in self.X_PCA])
+            x_min = min([np.min(df.iloc[:, 0].values) for df in self.X_pca])
+            x_max = max([np.max(df.iloc[:, 0].values) for df in self.X_pca])
             x_range = (x_min - (x_max - x_min) / 10, x_max + (x_max - x_min) / 10)
 
         if y_range is None:
-            y_min = min([np.min(df.iloc[:, 1].values) for df in self.X_PCA])
-            y_max = max([np.max(df.iloc[:, 1].values) for df in self.X_PCA])
+            y_min = min([np.min(df.iloc[:, 1].values) for df in self.X_pca])
+            y_max = max([np.max(df.iloc[:, 1].values) for df in self.X_pca])
             y_range = (y_min - (y_max - y_min) / 10, y_max + (y_max - y_min) / 10)
 
         ims = []
@@ -486,11 +484,11 @@ class scEGOT:
             ]
             node_source_target_combinations += current_combinations
             edge_colors_based_on_source += [i for _ in range(len(current_combinations))]
-        cell_state_graph = pd.DataFrame(
+        cell_state_edge_list = pd.DataFrame(
             node_source_target_combinations, columns=["source", "target"]
         )
-        cell_state_graph["edge_colors"] = edge_colors_based_on_source
-        cell_state_graph["edge_weights"] = list(
+        cell_state_edge_list["edge_colors"] = edge_colors_based_on_source
+        cell_state_edge_list["edge_weights"] = list(
             itertools.chain.from_iterable(
                 list(
                     itertools.chain.from_iterable(
@@ -499,9 +497,11 @@ class scEGOT:
                 )
             )
         )
-        cell_state_graph = cell_state_graph[cell_state_graph["edge_weights"] > thresh]
+        cell_state_edge_list = cell_state_edge_list[
+            cell_state_edge_list["edge_weights"] > thresh
+        ]
 
-        return cell_state_graph
+        return cell_state_edge_list
 
     def _get_gmm_node_weights_flattened(self):
         node_weights = [
@@ -534,9 +534,11 @@ class scEGOT:
     def _get_up_regulated_genes(self, gene_values, cell_state_edge_list, num=10):
         df_upgenes = pd.DataFrame([])
         for i in range(len(cell_state_edge_list)):
-            s1 = cell_state_edge_list["source"].iloc[i]
-            s2 = cell_state_edge_list["target"].iloc[i]
-            fold_change = self._get_fold_change(gene_values, s1, s2)
+            fold_change = self._get_fold_change(
+                gene_values,
+                cell_state_edge_list["source"].iloc[i],
+                cell_state_edge_list["target"].iloc[i],
+            )
             upgenes = pd.Series(
                 self._get_nlargest_gene_indices(fold_change, num=num).values
             )
@@ -549,9 +551,11 @@ class scEGOT:
     def _get_down_regulated_genes(self, gene_values, cell_state_edge_list, num=10):
         df_downgenes = pd.DataFrame([])
         for i in range(len(cell_state_edge_list)):
-            s1 = cell_state_edge_list["source"].iloc[i]
-            s2 = cell_state_edge_list["target"].iloc[i]
-            fold_change = self._get_fold_change(gene_values, s1, s2)
+            fold_change = self._get_fold_change(
+                gene_values,
+                cell_state_edge_list["source"].iloc[i],
+                cell_state_edge_list["target"].iloc[i],
+            )
             downgenes = pd.Series(
                 self._get_nsmallest_gene_indices(fold_change, num=num).values
             )
@@ -630,18 +634,18 @@ class scEGOT:
 
         colors = plt.cm.inferno(np.linspace(0, 1, day_num + 2))
         for edge in G.edges():
-            x0, y0 = G.nodes[edge[0]]["pos"]
-            x1, y1 = G.nodes[edge[1]]["pos"]
-            tail_list.append((x0, y0))
-            head_list.append((x1, y1))
+            x_0, y_0 = G.nodes[edge[0]]["pos"]
+            x_1, y_1 = G.nodes[edge[1]]["pos"]
+            tail_list.append((x_0, y_0))
+            head_list.append((x_1, y_1))
             weight = G.edges[edge]["edge_weights"] * 25
             color = colors[G.edges[edge]["edge_colors"] + 1]
 
             color_list.append(f"rgb({color[0]},{color[1]},{color[2]})")
 
             edge_trace = go.Scatter(
-                x=tuple([x0, x1, None]),
-                y=tuple([y0, y1, None]),
+                x=tuple([x_0, x_1, None]),
+                y=tuple([y_0, y_1, None]),
                 mode="lines",
                 line={"width": weight},
                 line_color=f"rgb({color[0]},{color[1]},{color[2]})",
@@ -666,16 +670,16 @@ class scEGOT:
         )
 
         for edge in G.edges():
-            x0, y0 = G.nodes[edge[0]]["pos"]
-            x1, y1 = G.nodes[edge[1]]["pos"]
+            x_0, y_0 = G.nodes[edge[0]]["pos"]
+            x_1, y_1 = G.nodes[edge[1]]["pos"]
             from_to = str(edge[0]) + str(edge[1])
-            hovertext1 = edges_up_gene.T[from_to].values
-            hovertext2 = edges_down_gene.T[from_to].values
+            hovertext_1 = edges_up_gene.T[from_to].values
+            hovertext_2 = edges_down_gene.T[from_to].values
             hovertext = (
-                "up_gene: " + hovertext1 + " " + "down_gene: " + hovertext2 + "<br>"
+                "up_gene: " + hovertext_1 + " " + "down_gene: " + hovertext_2 + "<br>"
             )
-            middle_hover_trace["x"] += tuple([(x0 + x1) / 2])
-            middle_hover_trace["y"] += tuple([(y0 + y1) / 2])
+            middle_hover_trace["x"] += tuple([(x_0 + x_1) / 2])
+            middle_hover_trace["y"] += tuple([(y_0 + y_1) / 2])
             middle_hover_trace["hovertext"] += tuple([hovertext])
             trace_recode.append(middle_hover_trace)
 
@@ -720,14 +724,14 @@ class scEGOT:
             x, y = G.nodes[node]["pos"]
             node_x.append(x)
             node_y.append(y)
-            hovertext1 = nodes_up_gene.T[node].values
-            hovertext2 = nodes_down_gene.T[node].values
+            hovertext_1 = nodes_up_gene.T[node].values
+            hovertext_2 = nodes_down_gene.T[node].values
             hovertext = (
                 "largest_gene: "
-                + hovertext1
+                + hovertext_1
                 + " "
                 + "smallest_gene: "
-                + hovertext2
+                + hovertext_2
                 + "<br>"
             )
             node_hover_trace["x"] += tuple([x])
@@ -866,7 +870,7 @@ class scEGOT:
                 va="center",
             )
             text_.set_path_effects(
-                [patheffects.withStroke(linewidth=3, foreground="w")]
+                [patheffects.withstroke(linewidth=3, foreground="w")]
             )
             texts = np.append(texts, text_)
         adjust_text(texts)
@@ -1081,7 +1085,7 @@ class scEGOT:
         if save and save_path is None:
             save_path = "./pathway_single_gene_2d.png"
 
-        X_concated = pd.concat(self.X_PCA if mode == "pca" else self.X_UMAP)
+        X_concated = pd.concat(self.X_pca if mode == "pca" else self.X_umap)
         if col:
             x_col, y_col = col
         else:
@@ -1107,7 +1111,7 @@ class scEGOT:
         if save and save_path is None:
             save_path = "./pathway_single_gene_3d.html"
 
-        X_concated = pd.concat(self.X_PCA if mode == "pca" else self.X_UMAP)
+        X_concated = pd.concat(self.X_pca if mode == "pca" else self.X_umap)
         if col:
             x_col, y_col, z_col = col
         else:
@@ -1137,7 +1141,7 @@ class scEGOT:
         self, gmm_source, gmm_target, t, columns=None, n_samples=2000
     ):
         d = gmm_source.means_.shape[1]
-        K0, K1 = gmm_source.means_.shape[0], gmm_target.means_.shape[0]
+        K_0, K_1 = gmm_source.means_.shape[0], gmm_target.means_.shape[0]
 
         mu0, mu1 = gmm_source.means_, gmm_target.means_
         S0, S1 = gmm_source.covariances_, gmm_target.covariances_
@@ -1147,19 +1151,19 @@ class scEGOT:
         solution = self.EGOT(
             np.ravel(pi0),
             np.ravel(pi1),
-            mu0.reshape(K0, d),
-            mu1.reshape(K1, d),
-            S0.reshape(K0, d, d),
-            S1.reshape(K1, d, d),
+            mu0.reshape(K_0, d),
+            mu1.reshape(K_1, d),
+            S0.reshape(K_0, d, d),
+            S1.reshape(K_1, d, d),
         )
-        pit = solution.reshape(K0 * K1, 1).T
+        pit = solution.reshape(K_0 * K_1, 1).T
 
-        mut, St = self.calculate_mut_St(gmm_source, gmm_target, t)
+        mut, st = self.calculate_mut_st(gmm_source, gmm_target, t)
 
         K = mut.shape[0]
         pit = pit.reshape(1, K)
         means = mut
-        covariances = St
+        covariances = st
         weights = pit[0, :]
         rng = check_random_state(0)
         n_samples_comp = rng.multinomial(n_samples, weights)
@@ -1192,29 +1196,29 @@ class scEGOT:
             self.gmm_models[interpolate_index - 1],
             self.gmm_models[interpolate_index + 1],
             t,
-            self.X_PCA[0].columns,
+            self.X_pca[0].columns,
         )
         if mode == "umap":
             if self.verbose:
                 print("Transforming interpolated data with UMAP...")
             X_interpolation = pd.DataFrame(
                 self.umap_model.transform(X_interpolation),
-                columns=self.X_UMAP[0].columns,
+                columns=self.X_umap[0].columns,
             )
         X_true = (
-            self.X_PCA[interpolate_index]
+            self.X_pca[interpolate_index]
             if mode == "pca"
-            else self.X_UMAP[interpolate_index]
+            else self.X_umap[interpolate_index]
         )
         X_source = (
-            self.X_PCA[interpolate_index - 1]
+            self.X_pca[interpolate_index - 1]
             if mode == "pca"
-            else self.X_UMAP[interpolate_index - 1]
+            else self.X_umap[interpolate_index - 1]
         )
         X_target = (
-            self.X_PCA[interpolate_index + 1]
+            self.X_pca[interpolate_index + 1]
             if mode == "pca"
-            else self.X_UMAP[interpolate_index + 1]
+            else self.X_umap[interpolate_index + 1]
         )
 
         if x_range is None or y_range is None:
@@ -1297,7 +1301,7 @@ class scEGOT:
         save=False,
         save_path=None,
     ):
-        X = self.X_PCA if mode == "pca" else self.X_UMAP
+        X = self.X_pca if mode == "pca" else self.X_umap
         gene_expression_level = pd.concat(self.X_normalized)[target_gene_name]
 
         if x_range is None or y_range is None:
@@ -1334,7 +1338,7 @@ class scEGOT:
                     self.gmm_models[i],
                     self.gmm_models[i + 1],
                     t[j],
-                    columns=self.X_PCA[0].columns,
+                    columns=self.X_pca[0].columns,
                     n_samples=n_samples,
                 )
                 X_genes_interpolation = self.pca_model.inverse_transform(
@@ -1347,7 +1351,7 @@ class scEGOT:
                 if mode == "umap":
                     X_interpolation = pd.DataFrame(
                         self.umap_model.transform(X_interpolation),
-                        columns=self.X_UMAP[0].columns,
+                        columns=self.X_umap[0].columns,
                     )
 
                 im = plt.scatter(
@@ -1397,22 +1401,22 @@ class scEGOT:
 
     def _calculate_cell_velocity(self, gmm_source, gmm_target, X_item, solution):
         d = gmm_source.means_.shape[1]
-        K0, K1 = gmm_source.means_.shape[0], gmm_target.means_.shape[0]
+        K_0, K_1 = gmm_source.means_.shape[0], gmm_target.means_.shape[0]
 
         mu0, mu1 = gmm_source.means_, gmm_target.means_
         S0, S1 = gmm_source.covariances_, gmm_target.covariances_
 
         n = X_item.shape[0]
-        T = np.zeros((K0, K1, d, n))
+        T = np.zeros((K_0, K_1, d, n))
         barycentric_projection_map = np.zeros((d, n))
-        Nj = np.zeros((n, K0))
+        Nj = np.zeros((n, K_0))
 
-        for k in range(K0):
-            for l in range(K1):
+        for k in range(K_0):
+            for l in range(K_1):
                 T[k, l, :, :] = self.get_gaussian_map(
                     mu0[k, :], mu1[l, :], S0[k, :, :], S1[l, :, :], X_item.values
                 ).T
-        for j in range(K0):
+        for j in range(K_0):
             logprob = gmm_source.score_samples(X_item.values)
             Nj[:, j] = np.exp(
                 np.log(
@@ -1422,8 +1426,8 @@ class scEGOT:
                 )
                 - logprob
             )
-        for k in range(K0):
-            for l in range(K1):
+        for k in range(K_0):
+            for l in range(K_1):
                 barycentric_projection_map += (
                     solution[k, l] * Nj[:, k].T * T[k, l, :, :]
                 )
@@ -1433,7 +1437,7 @@ class scEGOT:
 
     def calculate_cell_velocities(self, mode="pca"):
         velocities = pd.DataFrame(
-            columns=self.X_PCA[0].columns if mode == "pca" else self.X_UMAP[0].columns
+            columns=self.X_pca[0].columns if mode == "pca" else self.X_umap[0].columns
         )
 
         if self.solutions is None:
@@ -1448,16 +1452,16 @@ class scEGOT:
             gmm_target = self.gmm_models[i + 1]
 
             velocity = self._calculate_cell_velocity(
-                gmm_source, gmm_target, self.X_PCA[i], self.solutions[i]
+                gmm_source, gmm_target, self.X_pca[i], self.solutions[i]
             )
             if mode == "umap":
                 velocity = self.umap_model.transform(velocity)
 
             velocity = pd.DataFrame(
                 velocity,
-                columns=self.X_PCA[0].columns
+                columns=self.X_pca[0].columns
                 if mode == "pca"
-                else self.X_UMAP[0].columns,
+                else self.X_umap[0].columns,
             )
             velocities = pd.concat([velocities, velocity])
 
@@ -1477,7 +1481,7 @@ class scEGOT:
         scale = 1 if mode == "pca" else 2.5
         margin = 5 if mode == "pca" else 1
 
-        X_concated = pd.concat(self.X_PCA[:-1] if mode == "pca" else self.X_UMAP[:-1])
+        X_concated = pd.concat(self.X_pca[:-1] if mode == "pca" else self.X_umap[:-1])
 
         x_coordinate = X_concated.iloc[:, 0]
         y_coordinate = X_concated.iloc[:, 1]
@@ -1530,7 +1534,7 @@ class scEGOT:
         if save and save_path is None:
             save_path = "./interpolation_of_cell_velocity_gmm_clusters.png"
 
-        X = self.X_PCA if mode == "pca" else self.X_UMAP
+        X = self.X_pca if mode == "pca" else self.X_umap
 
         colors = []
         if color_points == "gmm":
@@ -1639,16 +1643,16 @@ class scEGOT:
             gmm_target = self.gmm_models[i + 1]
 
             velo = self._calculate_cell_velocity(
-                gmm_source, gmm_target, self.X_PCA[i], self.solutions[i]
+                gmm_source, gmm_target, self.X_pca[i], self.solutions[i]
             )
 
             alphas_cv = np.logspace(alpha_range[0], alpha_range[1], num=20)
             ridgeCV = linear_model.RidgeCV(alphas=alphas_cv, cv=3, fit_intercept=False)
-            ridgeCV.fit(self.X_PCA[i], velo)
+            ridgeCV.fit(self.X_pca[i], velo)
             ridgeCVs.append(ridgeCV)
 
             GRN = linear_model.Ridge(alpha=ridgeCV.alpha_, fit_intercept=False)
-            GRN.fit(self.X_PCA[i], velo)
+            GRN.fit(self.X_pca[i], velo)
             df_GRN = pd.DataFrame(
                 self.pca_model.components_.T @ GRN.coef_ @ self.pca_model.components_,
                 index=self.gene_names,
@@ -1712,16 +1716,16 @@ class scEGOT:
         F_all = []
 
         for i in (
-            tqdm(range(len(self.X_PCA) - 1))
+            tqdm(range(len(self.X_pca) - 1))
             if self.verbose
-            else range(len(self.X_PCA) - 1)
+            else range(len(self.X_pca) - 1)
         ):
             solution = self.solutions[i]
 
             gmm_source, gmm_target = self.gmm_models[i], self.gmm_models[i + 1]
 
             d = gmm_source.means_.shape[1]
-            K0, K1 = gmm_source.means_.shape[0], gmm_target.means_.shape[0]
+            K_0, K_1 = gmm_source.means_.shape[0], gmm_target.means_.shape[0]
 
             mu0, mu1 = gmm_source.means_, gmm_target.means_
             S0, S1 = gmm_source.covariances_, gmm_target.covariances_
@@ -1730,31 +1734,31 @@ class scEGOT:
 
             B = 0
             F = 0
-            for j in range(K0):
+            for j in range(K_0):
                 B = B + np.nan_to_num(
                     np.dot(
                         np.linalg.pinv(S0)[j, :, :],
-                        (self.X_PCA[i].values - mu0[j, :]).T,
+                        (self.X_pca[i].values - mu0[j, :]).T,
                     )
                     * pi0[j]
                     * multivariate_normal.pdf(
-                        self.X_PCA[i].values, mean=mu0[j, :], cov=S0[j, :, :]
+                        self.X_pca[i].values, mean=mu0[j, :], cov=S0[j, :, :]
                     )
-                    / self.theoretical_density_2d(mu0, S0, pi0, self.X_PCA[i].values)
+                    / self.theoretical_density_2d(mu0, S0, pi0, self.X_pca[i].values)
                 )
-            for j in range(K0):
+            for j in range(K_0):
                 A = np.dot(
-                    np.linalg.pinv(S0)[j, :, :], (self.X_PCA[i].values - mu0[j, :]).T
+                    np.linalg.pinv(S0)[j, :, :], (self.X_pca[i].values - mu0[j, :]).T
                 )
                 I1 = -A + B
-                for k in range(K1):
+                for k in range(K_1):
                     P = (
                         solution[j, k]
                         * multivariate_normal.pdf(
-                            self.X_PCA[i].values, mean=mu0[j, :], cov=S0[j, :, :]
+                            self.X_pca[i].values, mean=mu0[j, :], cov=S0[j, :, :]
                         )
                         / self.theoretical_density_2d(
-                            mu0, S0, pi0, self.X_PCA[i].values
+                            mu0, S0, pi0, self.X_pca[i].values
                         ).T
                     )
                     P = np.nan_to_num(P)
@@ -1763,7 +1767,7 @@ class scEGOT:
                         mu1[k, :],
                         S0[j, :, :],
                         S1[k, :, :],
-                        self.X_PCA[i].values,
+                        self.X_pca[i].values,
                     ).T
                     Tmap = Tmap.real
                     I2 = np.nan_to_num(
@@ -1780,7 +1784,7 @@ class scEGOT:
         if self.verbose:
             print("Applying knn ...")
         knn = kneighbors_graph(
-            X=pd.concat(self.X_PCA[:-1]).iloc[:, :2].values,
+            X=pd.concat(self.X_pca[:-1]).iloc[:, :2].values,
             n_neighbors=n_neighbors,
             mode="distance",
             metric="euclidean",
@@ -1795,7 +1799,7 @@ class scEGOT:
         sim[nonzero] = np.exp(-np.array(knn[nonzero]) ** 2 / sig**2)
         sim = (sim + sim.T) / 2
         deg = sim.sum(axis=1)
-        n = pd.concat(self.X_PCA[:-1]).iloc[:, :2].values.shape[0]
+        n = pd.concat(self.X_pca[:-1]).iloc[:, :2].values.shape[0]
         dia = np.diag(
             np.array(deg).reshape(
                 n,
@@ -1819,7 +1823,7 @@ class scEGOT:
         if save and save_path is None:
             save_path = "./waddington_potential.html"
 
-        X_concated = pd.concat(self.X_PCA[:-1])
+        X_concated = pd.concat(self.X_pca[:-1])
         gene_expression_level = None
         if gene_name:
             gene_expression_level = pd.concat(self.X_normalized)[: len(Wpotential)][
@@ -1864,7 +1868,7 @@ class scEGOT:
         if save and save_path is None:
             save_path = "./wadding_potential_surface.html"
 
-        X_concated = pd.concat(self.X_PCA[:-1])
+        X_concated = pd.concat(self.X_pca[:-1])
         x, y = X_concated.iloc[:, 0], X_concated.iloc[:, 1]
 
         xi = np.linspace(x.min(), x.max(), 100)
@@ -1906,14 +1910,14 @@ class scEGOT:
         return d
 
     def EGOT(self, pi0, pi1, mu0, mu1, S0, S1):
-        K0 = mu0.shape[0]
-        K1 = mu1.shape[0]
+        K_0 = mu0.shape[0]
+        K_1 = mu1.shape[0]
         d = mu0.shape[1]
-        S0 = S0.reshape(K0, d, d)
-        S1 = S1.reshape(K1, d, d)
-        M = np.zeros((K0, K1))
-        for k in range(K0):
-            for l in range(K1):
+        S0 = S0.reshape(K_0, d, d)
+        S1 = S1.reshape(K_1, d, d)
+        M = np.zeros((K_0, K_1))
+        for k in range(K_0):
+            for l in range(K_1):
                 M[k, l] = self.GaussianW(mu0[k, :], mu1[l, :], S0[k, :, :], S1[l, :, :])
         solution = ot.sinkhorn(
             pi0,
@@ -1965,31 +1969,31 @@ class scEGOT:
             )
         return y
 
-    def calculate_mut_St(self, gmm_source, gmm_target, t):
+    def calculate_mut_st(self, gmm_source, gmm_target, t):
         d = gmm_source.means_.shape[1]
-        K0, K1 = gmm_source.means_.shape[0], gmm_target.means_.shape[0]
+        K_0, K_1 = gmm_source.means_.shape[0], gmm_target.means_.shape[0]
 
         mu0, mu1 = gmm_source.means_, gmm_target.means_
         S0, S1 = gmm_source.covariances_, gmm_target.covariances_
 
-        mut = np.zeros((K0 * K1, d))
-        St = np.zeros((K0 * K1, d, d))
-        for k in range(K0):
-            for l in range(K1):
-                mut[k * K1 + l, :] = (1 - t) * mu0[k, :] + t * mu1[l, :]
+        mut = np.zeros((K_0 * K_1, d))
+        st = np.zeros((K_0 * K_1, d, d))
+        for k in range(K_0):
+            for l in range(K_1):
+                mut[k * K_1 + l, :] = (1 - t) * mu0[k, :] + t * mu1[l, :]
                 Sigma1demi = spl.sqrtm(S1[l, :, :])
                 C = (
                     Sigma1demi
                     @ spl.inv(spl.sqrtm(Sigma1demi @ S0[k, :, :] @ Sigma1demi))
                     @ Sigma1demi
                 )
-                St[k * K1 + l, :, :] = (
+                st[k * K_1 + l, :, :] = (
                     ((1 - t) * np.eye(d) + t * C)
                     @ S0[k, :, :]
                     @ ((1 - t) * np.eye(d) + t * C)
                 )
 
-        return mut, St
+        return mut, st
 
     def generate_cluster_names_with_day(self, cluster_names=None):
         if cluster_names is None:
