@@ -219,7 +219,13 @@ class scEGOT:
 
         return X, umap_model
 
-    def fit_gmm(self, random_state=None):
+    def fit_gmm(
+        self,
+        covariance_type="full",
+        max_iter=2000,
+        n_init=10,
+        random_state=None,
+    ):
         if self.gmm_models is not None:
             return self.gmm_models
 
@@ -230,9 +236,9 @@ class scEGOT:
         ):
             gmm_model = GaussianMixture(
                 self.gmm_n_components_list[i],
-                covariance_type="full",
-                max_iter=2000,
-                n_init=10,
+                covariance_type=covariance_type,
+                max_iter=max_iter,
+                n_init=n_init,
                 random_state=random_state,
             )
             gmm_model.fit(self.X_PCA[i].values)
@@ -242,7 +248,13 @@ class scEGOT:
 
         return gmm_models
 
-    def fit_predict_gmm(self, random_state=None):
+    def fit_predict_gmm(
+        self,
+        covariance_type="full",
+        max_iter=2000,
+        n_init=10,
+        random_state=None,
+    ):
         if self.gmm_models is not None and self.gmm_labels is not None:
             return self.gmm_models, self.gmm_labels
 
@@ -253,9 +265,9 @@ class scEGOT:
             if self.gmm_models is None:
                 gmm_model = GaussianMixture(
                     self.gmm_n_components_list[i],
-                    covariance_type="full",
-                    max_iter=2000,
-                    n_init=10,
+                    covariance_type=covariance_type,
+                    max_iter=max_iter,
+                    n_init=n_init,
                     random_state=random_state,
                 )
                 gmm_labels.append(gmm_model.fit_predict(self.X_PCA[i].values))
@@ -415,6 +427,7 @@ class scEGOT:
         save=False,
         save_path=None,
         cmap="rainbow",
+        interpolate_interval=11,
     ):
         if save and save_path is None:
             save_path = "./cell_state_video.gif"
@@ -433,7 +446,7 @@ class scEGOT:
 
         fig, ax = plt.subplots(figsize=(10, 8))
         for i in range(len(self.day_names) - 1):
-            t = np.linspace(0, 1, 11)
+            t = np.linspace(0, 1, interpolate_interval)
             for j in tqdm(range(11)) if self.verbose else range(11):
                 im = self._interpolation_contour(
                     self.gmm_models[i],
@@ -472,7 +485,7 @@ class scEGOT:
                 x for x in itertools.product(cluster_names[i], cluster_names[i + 1])
             ]
             node_source_target_combinations += current_combinations
-            edge_colors_based_on_source += [i for j in range(len(current_combinations))]
+            edge_colors_based_on_source += [i for _ in range(len(current_combinations))]
         cell_state_graph = pd.DataFrame(
             node_source_target_combinations, columns=["source", "target"]
         )
@@ -494,7 +507,7 @@ class scEGOT:
         node_weights = [
             self.gmm_models[i].weights_ for i in range(len(self.gmm_models))
         ]
-        node_weights = itertools.chain.from_iterable(node_weights)
+        node_weights = list(itertools.chain.from_iterable(node_weights))
         return node_weights
 
     def _get_day_names_of_each_node(self):
@@ -810,8 +823,6 @@ class scEGOT:
 
         node_color = [w["day"] for w in G.nodes.values()]
 
-        fs_clusters = 14
-
         cmap = plt.cm.get_cmap("Reds")
         color_data = np.array(
             [G.edges[e_]["edge_weights"] * G.nodes[e_[0]]["weight"] for e_ in G.edges()]
@@ -849,7 +860,7 @@ class scEGOT:
                 pos[node][0] - 0.2,
                 pos[node][1],
                 str(node),
-                fontsize=fs_clusters,
+                fontsize=14,
                 fontweight="bold",
                 ha="center",
                 va="center",
@@ -1613,7 +1624,7 @@ class scEGOT:
         if save:
             plt.savefig(save_path)
 
-    def calculate_GRNs(self):
+    def calculate_GRNs(self, alpha_range=(-2, 2)):
         GRNs, ridgeCVs = [], []
 
         if self.solutions is None:
@@ -1631,7 +1642,7 @@ class scEGOT:
                 gmm_source, gmm_target, self.X_PCA[i], self.solutions[i]
             )
 
-            alphas_cv = np.logspace(-2, 2, num=20)
+            alphas_cv = np.logspace(alpha_range[0], alpha_range[1], num=20)
             ridgeCV = linear_model.RidgeCV(alphas=alphas_cv, cv=3, fit_intercept=False)
             ridgeCV.fit(self.X_PCA[i], velo)
             ridgeCVs.append(ridgeCV)
