@@ -520,12 +520,22 @@ class scEGOT:
         node_weights_and_pos["node_days"] = LabelEncoder().fit_transform(
             self._get_day_names_of_each_node()
         )
+        node_weights_and_pos["cluster"] = list(
+            itertools.chain.from_iterable(
+                [
+                    list(range(n_components))
+                    for n_components in self.gmm_n_components_list
+                ]
+            )
+        )
+
         for row in node_weights_and_pos.itertuples():
             G.add_node(
                 row.Index,
                 weight=row.node_weights,
                 day=row.node_days,
                 pos=(row.xpos, row.ypos),
+                cluster=row.cluster,
             )
 
         return G, cell_state_edge_list
@@ -730,8 +740,11 @@ class scEGOT:
         )
 
     def plot_simple_cell_state_graph(
-        self, G, cell_state_edge_list, save=False, save_path=None
+        self, G, plot_type="normal", save=False, save_path=None
     ):
+        """
+        plot_type should be "normal" or "align"
+        """
         if save and save_path is None:
             save_path = "./simple_cell_state_graph.png"
 
@@ -743,15 +756,19 @@ class scEGOT:
         color_data = np.array(
             [G.edges[e_]["edge_weights"] * G.nodes[e_[0]]["weight"] for e_ in G.edges()]
         )
-        colors = cmap(
-            Normalize(vmin=np.min(color_data), vmax=np.max(color_data))(color_data)
-        )
+
+        if plot_type == "normal":
+            pos = {w: G.nodes[w]["pos"] for w in G.nodes()}
+        else:
+            pos = {}
+            for node in G.nodes():
+                pos[node] = (G.nodes[node]["day"], -G.nodes[node]["cluster"])
 
         cmap = "tab10"
         fig, ax = plt.subplots(figsize=(12, 10))
         nx.draw(
             G,
-            {w: G.nodes[w]["pos"] for w in G.nodes()},
+            pos,
             node_size=[w["weight"] * 5000 for w in G.nodes.values()],
             node_color=node_color,
             edge_color=color_data,
@@ -769,8 +786,8 @@ class scEGOT:
         texts = []
         for node in G.nodes():
             text_ = ax.text(
-                G.nodes[node]["pos"][0],
-                G.nodes[node]["pos"][1],
+                pos[node][0] - 0.2,
+                pos[node][1],
                 str(node),
                 fontsize=fs_clusters,
                 fontweight="bold",
