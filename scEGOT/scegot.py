@@ -387,7 +387,7 @@ class scEGOT:
                 plt.savefig(save_paths[i], dpi=600)
             plt.show()
 
-    def interpolation_contour(
+    def _interpolation_contour(
         self, gmm_source, gmm_target, t, x_range, y_range, cmap="rainbow"
     ):
         K0, K1 = gmm_source.means_.shape[0], gmm_target.means_.shape[0]
@@ -435,7 +435,7 @@ class scEGOT:
         for i in range(len(self.day_names) - 1):
             t = np.linspace(0, 1, 11)
             for j in tqdm(range(11)) if self.verbose else range(11):
-                im = self.interpolation_contour(
+                im = self._interpolation_contour(
                     self.gmm_models[i],
                     self.gmm_models[i + 1],
                     t[j],
@@ -487,6 +487,8 @@ class scEGOT:
             )
         )
         cell_state_graph = cell_state_graph[cell_state_graph["edge_weights"] > thresh]
+
+        return cell_state_graph
 
     def _get_gmm_node_weights_flattened(self):
         node_weights = [
@@ -545,8 +547,6 @@ class scEGOT:
             cell_state_edge_list["source"] + cell_state_edge_list["target"]
         )
         return df_downgenes
-
-        return cell_state_graph
 
     def make_cell_state_graph(
         self,
@@ -761,9 +761,11 @@ class scEGOT:
         if save and save_path is None:
             save_path = "./cell_state_graph.png"
 
-        mean_gene_values_per_cluster = self.get_gmm_mean_gene_values_per_cluster(
-            self.get_gmm_means(),
-            list(itertools.chain.from_iterable(cluster_names)),
+        mean_gene_values_per_cluster = (
+            self.get_positive_gmm_mean_gene_values_per_cluster(
+                self.get_gmm_means(),
+                list(itertools.chain.from_iterable(cluster_names)),
+            )
         )
         mean_tf_gene_values_per_cluster = mean_gene_values_per_cluster.loc[
             :, mean_gene_values_per_cluster.columns.isin(tf_gene_names)
@@ -876,7 +878,7 @@ class scEGOT:
         if save and save_path is None:
             save_path = "./fold_change.png"
 
-        genes = self.get_gmm_mean_gene_values_per_cluster(
+        genes = self.get_positive_gmm_mean_gene_values_per_cluster(
             self.get_gmm_means(),
             cluster_names=list(itertools.chain.from_iterable(cluster_names)),
         )
@@ -950,7 +952,7 @@ class scEGOT:
         if save and save_path is None:
             save_path = "./pathway_mean_var.png"
 
-        genes = self.get_gmm_mean_gene_values_per_cluster(
+        genes = self.get_positive_gmm_mean_gene_values_per_cluster(
             self.get_gmm_means(),
             cluster_names=list(itertools.chain.from_iterable(cluster_names)),
         )
@@ -1030,7 +1032,7 @@ class scEGOT:
         if save and save_path is None:
             save_path = "./pathway_gene_expressions.png"
 
-        genes = self.get_gmm_mean_gene_values_per_cluster(
+        genes = self.get_positive_gmm_mean_gene_values_per_cluster(
             self.get_gmm_means(),
             cluster_names=list(itertools.chain.from_iterable(cluster_names)),
         )
@@ -1182,6 +1184,8 @@ class scEGOT:
             self.X_PCA[0].columns,
         )
         if mode == "umap":
+            if self.verbose:
+                print("Transforming interpolated data with UMAP...")
             X_interpolation = pd.DataFrame(
                 self.umap_model.transform(X_interpolation),
                 columns=self.X_UMAP[0].columns,
@@ -1609,9 +1613,7 @@ class scEGOT:
         if save:
             plt.savefig(save_path)
 
-    def calculate_GRNs(
-        self,
-    ):
+    def calculate_GRNs(self):
         GRNs, ridgeCVs = [], []
 
         if self.solutions is None:
@@ -1625,7 +1627,7 @@ class scEGOT:
             gmm_source = self.gmm_models[i]
             gmm_target = self.gmm_models[i + 1]
 
-            velo = self.calculate_cell_velocity(
+            velo = self._calculate_cell_velocity(
                 gmm_source, gmm_target, self.X_PCA[i], self.solutions[i]
             )
 
@@ -1645,7 +1647,7 @@ class scEGOT:
 
         return GRNs, ridgeCVs
 
-    def make_GRN_graph(self, df, threshold=0.1):
+    def _make_GRN_graph(self, df, threshold=0.1):
         graph = pydotplus.Dot(graph_type="digraph")
         for c in df.columns:
             node = pydotplus.Node(f'"{c}"', label=c)
@@ -1681,7 +1683,7 @@ class scEGOT:
         for i, GRN in enumerate(GRNs):
             if self.verbose:
                 print(f"alpha = {ridgeCVs[i].alpha_}")
-            GRNgraph = self.make_GRN_graph(
+            GRNgraph = self._make_GRN_graph(
                 GRN[selected_genes].loc[selected_genes], threshold=thresh
             )
             if is_notebook():
@@ -2016,7 +2018,9 @@ class scEGOT:
         )
         return gmm_mean_gene_values_per_cluster
 
-    def get_gmm_mean_gene_values_per_cluster(self, gmm_means, cluster_names=None):
+    def get_positive_gmm_mean_gene_values_per_cluster(
+        self, gmm_means, cluster_names=None
+    ):
         gmm_mean_gene_values_per_cluster = self._get_gmm_mean_gene_values_per_cluster(
             gmm_means, cluster_names
         )
