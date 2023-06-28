@@ -510,17 +510,17 @@ class scEGOT:
             edge_attr=["edge_weights", "edge_colors"],
             create_using=nx.DiGraph,
         )
-        node_weights_and_pos = pd.DataFrame(
+        node_info = pd.DataFrame(
             self._get_gmm_node_weights_flattened(),
             index=list(itertools.chain.from_iterable(cluster_names)),
             columns=["node_weights"],
         )
-        node_weights_and_pos["xpos"] = gmm_means_flattened.T[0]
-        node_weights_and_pos["ypos"] = gmm_means_flattened.T[1]
-        node_weights_and_pos["node_days"] = LabelEncoder().fit_transform(
+        node_info["xpos"] = gmm_means_flattened.T[0]
+        node_info["ypos"] = gmm_means_flattened.T[1]
+        node_info["node_days"] = LabelEncoder().fit_transform(
             self._get_day_names_of_each_node()
         )
-        node_weights_and_pos["cluster"] = list(
+        node_info["cluster"] = list(
             itertools.chain.from_iterable(
                 [
                     list(range(n_components))
@@ -529,7 +529,7 @@ class scEGOT:
             )
         )
 
-        for row in node_weights_and_pos.itertuples():
+        for row in node_info.itertuples():
             G.add_node(
                 row.Index,
                 weight=row.node_weights,
