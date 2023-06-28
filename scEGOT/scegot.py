@@ -16,6 +16,8 @@ from sklearn.decomposition import PCA
 import umap.umap_ as umap
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
+from matplotlib.colors import Normalize
+from matplotlib import patheffects
 import networkx as nx
 import plotly.express as px
 import plotly.graph_objects as go
@@ -26,6 +28,7 @@ import pydotplus
 from tqdm import tqdm
 from io import BytesIO
 from PIL import Image as PILImage
+from adjustText import adjust_text
 
 sns.set_style("whitegrid")
 # warnings.filterwarnings("ignore")
@@ -264,7 +267,7 @@ class scEGOT:
             self.gmm_models = gmm_models
         self.gmm_labels = gmm_labels
 
-        return gmm_labels, gmm_models
+        return gmm_models, gmm_labels
 
     def predict_gmm_label(self, X_item, gmm_model):
         return gmm_model.predict(X_item.values)
@@ -517,12 +520,22 @@ class scEGOT:
         node_weights_and_pos["node_days"] = LabelEncoder().fit_transform(
             self._get_day_names_of_each_node()
         )
+        node_weights_and_pos["cluster"] = list(
+            itertools.chain.from_iterable(
+                [
+                    list(range(n_components))
+                    for n_components in self.gmm_n_components_list
+                ]
+            )
+        )
+
         for row in node_weights_and_pos.itertuples():
             G.add_node(
                 row.Index,
                 weight=row.node_weights,
                 day=row.node_days,
                 pos=(row.xpos, row.ypos),
+                cluster=row.cluster,
             )
 
         return G, cell_state_edge_list
@@ -725,6 +738,72 @@ class scEGOT:
             save=save,
             save_path=save_path,
         )
+
+    def plot_simple_cell_state_graph(
+        self, G, plot_type="normal", save=False, save_path=None
+    ):
+        """
+        plot_type should be "normal" or "align"
+        """
+        if save and save_path is None:
+            save_path = "./simple_cell_state_graph.png"
+
+        node_color = [w["day"] for w in G.nodes.values()]
+
+        fs_clusters = 14
+
+        cmap = plt.cm.get_cmap("Reds")
+        color_data = np.array(
+            [G.edges[e_]["edge_weights"] * G.nodes[e_[0]]["weight"] for e_ in G.edges()]
+        )
+
+        if plot_type == "normal":
+            pos = {w: G.nodes[w]["pos"] for w in G.nodes()}
+        else:
+            pos = {}
+            for node in G.nodes():
+                pos[node] = (G.nodes[node]["day"], -G.nodes[node]["cluster"])
+
+        cmap = "tab10"
+        fig, ax = plt.subplots(figsize=(12, 10))
+        nx.draw(
+            G,
+            pos,
+            node_size=[w["weight"] * 5000 for w in G.nodes.values()],
+            node_color=node_color,
+            edge_color=color_data,
+            edgecolors="white",
+            arrows=True,
+            arrowsize=30,
+            linewidths=2,
+            cmap=cmap,
+            edge_cmap=plt.cm.Reds,
+            ax=ax,
+            alpha=1,
+            width=5.0,
+        )
+
+        texts = []
+        for node in G.nodes():
+            text_ = ax.text(
+                pos[node][0] - 0.2,
+                pos[node][1],
+                str(node),
+                fontsize=fs_clusters,
+                fontweight="bold",
+                ha="center",
+                va="center",
+            )
+            text_.set_path_effects(
+                [patheffects.withStroke(linewidth=3, foreground="w")]
+            )
+            texts = np.append(texts, text_)
+        adjust_text(texts)
+
+        plt.show()
+
+        if save:
+            fig.savefig(save_path, dpi=200, bbox_inches="tight")
 
     def _get_gmm_node_weights_flattened(self):
         node_weights = [
