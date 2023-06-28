@@ -387,7 +387,7 @@ class scEGOT:
                 plt.savefig(save_paths[i], dpi=600)
             plt.show()
 
-    def interpolation_contour(
+    def _interpolation_contour(
         self, gmm_source, gmm_target, t, x_range, y_range, cmap="rainbow"
     ):
         K0, K1 = gmm_source.means_.shape[0], gmm_target.means_.shape[0]
@@ -435,7 +435,7 @@ class scEGOT:
         for i in range(len(self.day_names) - 1):
             t = np.linspace(0, 1, 11)
             for j in tqdm(range(11)) if self.verbose else range(11):
-                im = self.interpolation_contour(
+                im = self._interpolation_contour(
                     self.gmm_models[i],
                     self.gmm_models[i + 1],
                     t[j],
@@ -490,6 +490,64 @@ class scEGOT:
 
         return cell_state_graph
 
+    def _get_gmm_node_weights_flattened(self):
+        node_weights = [
+            self.gmm_models[i].weights_ for i in range(len(self.gmm_models))
+        ]
+        node_weights = itertools.chain.from_iterable(node_weights)
+        return node_weights
+
+    def _get_day_names_of_each_node(self):
+        day_names_of_each_node = []
+        for i, gmm_n_components in enumerate(self.gmm_n_components_list):
+            day_names_of_each_node += [self.day_names[i]] * gmm_n_components
+        return day_names_of_each_node
+
+    def _get_nlargest_gene_indices(self, row, num=10):
+        nlargest = row.nlargest(num)
+        return nlargest.index
+
+    def _get_nsmallest_gene_indices(self, row, num=10):
+        nsmallest = row.nsmallest(num)
+        return nsmallest.index
+
+    def _get_fold_change(self, gene_values, source, target):
+        fold_change = pd.Series(
+            gene_values.T[target] - gene_values.T[source], index=gene_values.T.index
+        )
+        fold_change = fold_change.sort_values(ascending=False)
+        return fold_change
+
+    def _get_up_regulated_genes(self, gene_values, cell_state_edge_list, num=10):
+        df_upgenes = pd.DataFrame([])
+        for i in range(len(cell_state_edge_list)):
+            s1 = cell_state_edge_list["source"].iloc[i]
+            s2 = cell_state_edge_list["target"].iloc[i]
+            fold_change = self._get_fold_change(gene_values, s1, s2)
+            upgenes = pd.Series(
+                self._get_nlargest_gene_indices(fold_change, num=num).values
+            )
+            df_upgenes = df_upgenes.append(upgenes, ignore_index=True)
+        df_upgenes.index = (
+            cell_state_edge_list["source"] + cell_state_edge_list["target"]
+        )
+        return df_upgenes
+
+    def _get_down_regulated_genes(self, gene_values, cell_state_edge_list, num=10):
+        df_downgenes = pd.DataFrame([])
+        for i in range(len(cell_state_edge_list)):
+            s1 = cell_state_edge_list["source"].iloc[i]
+            s2 = cell_state_edge_list["target"].iloc[i]
+            fold_change = self._get_fold_change(gene_values, s1, s2)
+            downgenes = pd.Series(
+                self._get_nsmallest_gene_indices(fold_change, num=num).values
+            )
+            df_downgenes = df_downgenes.append(downgenes, ignore_index=True)
+        df_downgenes.index = (
+            cell_state_edge_list["source"] + cell_state_edge_list["target"]
+        )
+        return df_downgenes
+
     def make_cell_state_graph(
         self,
         cluster_names,
@@ -510,17 +568,17 @@ class scEGOT:
             edge_attr=["edge_weights", "edge_colors"],
             create_using=nx.DiGraph,
         )
-        node_weights_and_pos = pd.DataFrame(
+        node_info = pd.DataFrame(
             self._get_gmm_node_weights_flattened(),
             index=list(itertools.chain.from_iterable(cluster_names)),
             columns=["node_weights"],
         )
-        node_weights_and_pos["xpos"] = gmm_means_flattened.T[0]
-        node_weights_and_pos["ypos"] = gmm_means_flattened.T[1]
-        node_weights_and_pos["node_days"] = LabelEncoder().fit_transform(
+        node_info["xpos"] = gmm_means_flattened.T[0]
+        node_info["ypos"] = gmm_means_flattened.T[1]
+        node_info["node_days"] = LabelEncoder().fit_transform(
             self._get_day_names_of_each_node()
         )
-        node_weights_and_pos["cluster"] = list(
+        node_info["cluster"] = list(
             itertools.chain.from_iterable(
                 [
                     list(range(n_components))
@@ -529,7 +587,7 @@ class scEGOT:
             )
         )
 
-        for row in node_weights_and_pos.itertuples():
+        for row in node_info.itertuples():
             G.add_node(
                 row.Index,
                 weight=row.node_weights,
@@ -703,9 +761,11 @@ class scEGOT:
         if save and save_path is None:
             save_path = "./cell_state_graph.png"
 
-        mean_gene_values_per_cluster = self.get_gmm_mean_gene_values_per_cluster(
-            self.get_gmm_means(),
-            list(itertools.chain.from_iterable(cluster_names)),
+        mean_gene_values_per_cluster = (
+            self.get_positive_gmm_mean_gene_values_per_cluster(
+                self.get_gmm_means(),
+                list(itertools.chain.from_iterable(cluster_names)),
+            )
         )
         mean_tf_gene_values_per_cluster = mean_gene_values_per_cluster.loc[
             :, mean_gene_values_per_cluster.columns.isin(tf_gene_names)
@@ -805,64 +865,6 @@ class scEGOT:
         if save:
             fig.savefig(save_path, dpi=200, bbox_inches="tight")
 
-    def _get_gmm_node_weights_flattened(self):
-        node_weights = [
-            self.gmm_models[i].weights_ for i in range(len(self.gmm_models))
-        ]
-        node_weights = itertools.chain.from_iterable(node_weights)
-        return node_weights
-
-    def _get_day_names_of_each_node(self):
-        day_names_of_each_node = []
-        for i, gmm_n_components in enumerate(self.gmm_n_components_list):
-            day_names_of_each_node += [self.day_names[i]] * gmm_n_components
-        return day_names_of_each_node
-
-    def _get_nlargest_gene_indices(self, row, num=10):
-        nlargest = row.nlargest(num)
-        return nlargest.index
-
-    def _get_nsmallest_gene_indices(self, row, num=10):
-        nsmallest = row.nsmallest(num)
-        return nsmallest.index
-
-    def _get_fold_change(self, gene_values, source, target):
-        fold_change = pd.Series(
-            gene_values.T[target] - gene_values.T[source], index=gene_values.T.index
-        )
-        fold_change = fold_change.sort_values(ascending=False)
-        return fold_change
-
-    def _get_up_regulated_genes(self, gene_values, cell_state_edge_list, num=10):
-        df_upgenes = pd.DataFrame([])
-        for i in range(len(cell_state_edge_list)):
-            s1 = cell_state_edge_list["source"].iloc[i]
-            s2 = cell_state_edge_list["target"].iloc[i]
-            fold_change = self._get_fold_change(gene_values, s1, s2)
-            upgenes = pd.Series(
-                self._get_nlargest_gene_indices(fold_change, num=num).values
-            )
-            df_upgenes = df_upgenes.append(upgenes, ignore_index=True)
-        df_upgenes.index = (
-            cell_state_edge_list["source"] + cell_state_edge_list["target"]
-        )
-        return df_upgenes
-
-    def _get_down_regulated_genes(self, gene_values, cell_state_edge_list, num=10):
-        df_downgenes = pd.DataFrame([])
-        for i in range(len(cell_state_edge_list)):
-            s1 = cell_state_edge_list["source"].iloc[i]
-            s2 = cell_state_edge_list["target"].iloc[i]
-            fold_change = self._get_fold_change(gene_values, s1, s2)
-            downgenes = pd.Series(
-                self._get_nsmallest_gene_indices(fold_change, num=num).values
-            )
-            df_downgenes = df_downgenes.append(downgenes, ignore_index=True)
-        df_downgenes.index = (
-            cell_state_edge_list["source"] + cell_state_edge_list["target"]
-        )
-        return df_downgenes
-
     def plot_fold_change(
         self,
         cluster_names,
@@ -876,7 +878,7 @@ class scEGOT:
         if save and save_path is None:
             save_path = "./fold_change.png"
 
-        genes = self.get_gmm_mean_gene_values_per_cluster(
+        genes = self.get_positive_gmm_mean_gene_values_per_cluster(
             self.get_gmm_means(),
             cluster_names=list(itertools.chain.from_iterable(cluster_names)),
         )
@@ -950,7 +952,7 @@ class scEGOT:
         if save and save_path is None:
             save_path = "./pathway_mean_var.png"
 
-        genes = self.get_gmm_mean_gene_values_per_cluster(
+        genes = self.get_positive_gmm_mean_gene_values_per_cluster(
             self.get_gmm_means(),
             cluster_names=list(itertools.chain.from_iterable(cluster_names)),
         )
@@ -1030,7 +1032,7 @@ class scEGOT:
         if save and save_path is None:
             save_path = "./pathway_gene_expressions.png"
 
-        genes = self.get_gmm_mean_gene_values_per_cluster(
+        genes = self.get_positive_gmm_mean_gene_values_per_cluster(
             self.get_gmm_means(),
             cluster_names=list(itertools.chain.from_iterable(cluster_names)),
         )
@@ -1182,6 +1184,8 @@ class scEGOT:
             self.X_PCA[0].columns,
         )
         if mode == "umap":
+            if self.verbose:
+                print("Transforming interpolated data with UMAP...")
             X_interpolation = pd.DataFrame(
                 self.umap_model.transform(X_interpolation),
                 columns=self.X_UMAP[0].columns,
@@ -1370,38 +1374,6 @@ class scEGOT:
         if save:
             anim_gene.save(save_path, writer="pillow")
 
-    def prepare_cell_velocity(self, mode="pca"):
-        velocities = pd.DataFrame(
-            columns=self.X_PCA[0].columns if mode == "pca" else self.X_UMAP[0].columns
-        )
-
-        if self.solutions is None:
-            self.solutions = self.calculate_solutions(self.gmm_models)
-
-        for i in (
-            tqdm(range(len(self.gmm_models) - 1))
-            if self.verbose
-            else range(len(self.gmm_models) - 1)
-        ):
-            gmm_source = self.gmm_models[i]
-            gmm_target = self.gmm_models[i + 1]
-
-            velocity = self.compute_cell_velocity(
-                gmm_source, gmm_target, self.X_PCA[i], self.solutions[i]
-            )
-            if mode == "umap":
-                velocity = self.umap_model.transform(velocity)
-
-            velocity = pd.DataFrame(
-                velocity,
-                columns=self.X_PCA[0].columns
-                if mode == "pca"
-                else self.X_UMAP[0].columns,
-            )
-            velocities = pd.concat([velocities, velocity])
-
-        return velocities
-
     def get_gaussian_map(self, m0, m1, Sigma0, Sigma1, x):
         d = Sigma0.shape[0]
         m0 = m0.reshape(1, d)
@@ -1412,7 +1384,7 @@ class scEGOT:
         Tx = m1 + (x - m0) @ Sigma
         return Tx
 
-    def compute_cell_velocity(self, gmm_source, gmm_target, X_item, solution):
+    def _calculate_cell_velocity(self, gmm_source, gmm_target, X_item, solution):
         d = gmm_source.means_.shape[1]
         K0, K1 = gmm_source.means_.shape[0], gmm_target.means_.shape[0]
 
@@ -1447,6 +1419,38 @@ class scEGOT:
         w = barycentric_projection_map.T
         velo = w - X_item.values
         return velo
+
+    def calculate_cell_velocities(self, mode="pca"):
+        velocities = pd.DataFrame(
+            columns=self.X_PCA[0].columns if mode == "pca" else self.X_UMAP[0].columns
+        )
+
+        if self.solutions is None:
+            self.solutions = self.calculate_solutions(self.gmm_models)
+
+        for i in (
+            tqdm(range(len(self.gmm_models) - 1))
+            if self.verbose
+            else range(len(self.gmm_models) - 1)
+        ):
+            gmm_source = self.gmm_models[i]
+            gmm_target = self.gmm_models[i + 1]
+
+            velocity = self._calculate_cell_velocity(
+                gmm_source, gmm_target, self.X_PCA[i], self.solutions[i]
+            )
+            if mode == "umap":
+                velocity = self.umap_model.transform(velocity)
+
+            velocity = pd.DataFrame(
+                velocity,
+                columns=self.X_PCA[0].columns
+                if mode == "pca"
+                else self.X_UMAP[0].columns,
+            )
+            velocities = pd.concat([velocities, velocity])
+
+        return velocities
 
     def plot_cell_velocity(
         self,
@@ -1497,27 +1501,6 @@ class scEGOT:
 
         if save:
             plt.savefig(save_path)
-
-    def make_GRN_graph(self, df, threshold=0.1):
-        graph = pydotplus.Dot(graph_type="digraph")
-        for c in df.columns:
-            node = pydotplus.Node(f'"{c}"', label=c)
-            graph.add_node(node)
-        for i in df.index:
-            for c in df.columns:
-                val = df.loc[i, c]
-                if abs(val) > threshold:
-                    edge = pydotplus.Edge(
-                        graph.get_node(f'"{i}"')[0], graph.get_node(f'"{c}"')[0]
-                    )
-                    edge.set_label("{:.2f}".format(df.loc[i, c]))
-                    edge.set_penwidth(
-                        20 * (abs(val) - threshold) / (1 - threshold) + 0.5
-                    )
-                    h, s, v = 0.0 if val > 0 else 2 / 3, abs(val) + 1, 1.0
-                    edge.set_color(" ".join([str(i) for i in (h, s, v)]))
-                    graph.add_edge(edge)
-        return graph
 
     def plot_interpolation_of_cell_velocity(
         self,
@@ -1630,9 +1613,7 @@ class scEGOT:
         if save:
             plt.savefig(save_path)
 
-    def calculate_GRNs(
-        self,
-    ):
+    def calculate_GRNs(self):
         GRNs, ridgeCVs = [], []
 
         if self.solutions is None:
@@ -1646,7 +1627,7 @@ class scEGOT:
             gmm_source = self.gmm_models[i]
             gmm_target = self.gmm_models[i + 1]
 
-            velo = self.compute_cell_velocity(
+            velo = self._calculate_cell_velocity(
                 gmm_source, gmm_target, self.X_PCA[i], self.solutions[i]
             )
 
@@ -1666,6 +1647,27 @@ class scEGOT:
 
         return GRNs, ridgeCVs
 
+    def _make_GRN_graph(self, df, threshold=0.1):
+        graph = pydotplus.Dot(graph_type="digraph")
+        for c in df.columns:
+            node = pydotplus.Node(f'"{c}"', label=c)
+            graph.add_node(node)
+        for i in df.index:
+            for c in df.columns:
+                val = df.loc[i, c]
+                if abs(val) > threshold:
+                    edge = pydotplus.Edge(
+                        graph.get_node(f'"{i}"')[0], graph.get_node(f'"{c}"')[0]
+                    )
+                    edge.set_label("{:.2f}".format(df.loc[i, c]))
+                    edge.set_penwidth(
+                        20 * (abs(val) - threshold) / (1 - threshold) + 0.5
+                    )
+                    h, s, v = 0.0 if val > 0 else 2 / 3, abs(val) + 1, 1.0
+                    edge.set_color(" ".join([str(i) for i in (h, s, v)]))
+                    graph.add_edge(edge)
+        return graph
+
     def plot_GRN_graph(
         self,
         GRNs,
@@ -1681,7 +1683,7 @@ class scEGOT:
         for i, GRN in enumerate(GRNs):
             if self.verbose:
                 print(f"alpha = {ridgeCVs[i].alpha_}")
-            GRNgraph = self.make_GRN_graph(
+            GRNgraph = self._make_GRN_graph(
                 GRN[selected_genes].loc[selected_genes], threshold=thresh
             )
             if is_notebook():
@@ -2016,7 +2018,9 @@ class scEGOT:
         )
         return gmm_mean_gene_values_per_cluster
 
-    def get_gmm_mean_gene_values_per_cluster(self, gmm_means, cluster_names=None):
+    def get_positive_gmm_mean_gene_values_per_cluster(
+        self, gmm_means, cluster_names=None
+    ):
         gmm_mean_gene_values_per_cluster = self._get_gmm_mean_gene_values_per_cluster(
             gmm_means, cluster_names
         )
