@@ -1292,9 +1292,9 @@ class scEGOT:
             anim_gene.save(save_path, writer="pillow")
 
     def prepare_cell_velocity(self, mode="pca"):
-        x_velocity = []
-        y_velocity = []
-        speed = []
+        velocities = pd.DataFrame(
+            columns=self.X_PCA[0].columns if mode == "pca" else self.X_UMAP[0].columns
+        )
 
         if self.solutions is None:
             self.solutions = self.calculate_solutions(self.gmm_models)
@@ -1312,14 +1312,16 @@ class scEGOT:
             )
             if mode == "umap":
                 velocity = self.umap_model.transform(velocity)
-            U = velocity[:, 0]
-            V = velocity[:, 1]
 
-            x_velocity = np.append(x_velocity, U)
-            y_velocity = np.append(y_velocity, V)
-            speed = np.append(speed, np.sqrt(U**2 + V**2))
+            velocity = pd.DataFrame(
+                velocity,
+                columns=self.X_PCA[0].columns
+                if mode == "pca"
+                else self.X_UMAP[0].columns,
+            )
+            velocities = pd.concat([velocities, velocity])
 
-        return x_velocity, y_velocity, speed
+        return velocities
 
     def get_gaussian_map(self, m0, m1, Sigma0, Sigma1, x):
         d = Sigma0.shape[0]
@@ -1369,9 +1371,7 @@ class scEGOT:
 
     def plot_cell_velocity(
         self,
-        x_velocity,
-        y_velocity,
-        speed,
+        velocities,
         cmap="rainbow",
         mode="pca",
         save=False,
@@ -1387,6 +1387,14 @@ class scEGOT:
 
         x_coordinate = X_concated.iloc[:, 0]
         y_coordinate = X_concated.iloc[:, 1]
+
+        x_velocity = velocities.iloc[:, 0]
+        y_velocity = velocities.iloc[:, 1]
+
+        speed = [
+            np.sqrt(x_vel**2 + y_vel**2)
+            for x_vel, y_vel in zip(x_velocity, y_velocity)
+        ]
 
         plt.figure(figsize=(10, 8))
         plt.quiver(
@@ -1434,8 +1442,7 @@ class scEGOT:
 
     def plot_interpolation_of_cell_velocity(
         self,
-        x_velocity,
-        y_velocity,
+        velocities,
         color_streams=False,
         color_points="gmm",
         cluster_names=None,
@@ -1475,6 +1482,9 @@ class scEGOT:
                 linspace_num,
             ),
         )
+
+        x_velocity = velocities.iloc[:, 0]
+        y_velocity = velocities.iloc[:, 1]
 
         points = np.transpose(
             np.vstack((pd.concat(X[:-1]).iloc[:, 0], pd.concat(X[:-1]).iloc[:, 1]))
