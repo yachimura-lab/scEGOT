@@ -405,13 +405,13 @@ class scEGOT:
         solution = self.calculate_solution(gmm_source, gmm_target)
         pit = solution.reshape(K_0 * K_1, 1).T
 
-        mut, st = self.calculate_mut_st(gmm_source, gmm_target, t)
+        mut, St = self.calculate_mut_st(gmm_source, gmm_target, t)
         x, y = np.meshgrid(
             np.linspace(x_range[0], x_range[1], 1000),
             np.linspace(y_range[0], y_range[1], 1000),
         )
         flattened = np.array([x.ravel(), y.ravel()]).T
-        z = self.theoretical_density_2d(mut[:, 0:2], st[:, 0:2, 0:2], pit, flattened)
+        z = self.theoretical_density_2d(mut[:, 0:2], St[:, 0:2, 0:2], pit, flattened)
         z = z.reshape(x.shape)
         max_z = np.max(z)
         min_z = np.min(z)
@@ -906,9 +906,12 @@ class scEGOT:
         fig = go.Figure()
         gene_exp1 = genes_fold_change[cluster1]
         gene_exp2 = genes_fold_change[cluster2]
-        absFC = (gene_exp2 - gene_exp1).abs()
+        fold_change_abs = (gene_exp2 - gene_exp1).abs()
         genes_fold_change = genes_fold_change.loc[
-            genes_fold_change.index.isin(absFC[absFC.values > threshold].index), :
+            genes_fold_change.index.isin(
+                fold_change_abs[fold_change_abs.values > threshold].index
+            ),
+            :,
         ]
 
         fig.add_trace(
@@ -1143,27 +1146,27 @@ class scEGOT:
         d = gmm_source.means_.shape[1]
         K_0, K_1 = gmm_source.means_.shape[0], gmm_target.means_.shape[0]
 
-        mu0, mu1 = gmm_source.means_, gmm_target.means_
-        S0, S1 = gmm_source.covariances_, gmm_target.covariances_
+        mu_0, mu_1 = gmm_source.means_, gmm_target.means_
+        S_0, S_1 = gmm_source.covariances_, gmm_target.covariances_
 
-        pi0, pi1 = gmm_source.weights_, gmm_target.weights_
+        pi_0, pi_1 = gmm_source.weights_, gmm_target.weights_
 
-        solution = self.EGOT(
-            np.ravel(pi0),
-            np.ravel(pi1),
-            mu0.reshape(K_0, d),
-            mu1.reshape(K_1, d),
-            S0.reshape(K_0, d, d),
-            S1.reshape(K_1, d, d),
+        solution = self.egot(
+            np.ravel(pi_0),
+            np.ravel(pi_1),
+            mu_0.reshape(K_0, d),
+            mu_1.reshape(K_1, d),
+            S_0.reshape(K_0, d, d),
+            S_1.reshape(K_1, d, d),
         )
         pit = solution.reshape(K_0 * K_1, 1).T
 
-        mut, st = self.calculate_mut_st(gmm_source, gmm_target, t)
+        mut, St = self.calculate_mut_st(gmm_source, gmm_target, t)
 
         K = mut.shape[0]
         pit = pit.reshape(1, K)
         means = mut
-        covariances = st
+        covariances = St
         weights = pit[0, :]
         rng = check_random_state(0)
         n_samples_comp = rng.multinomial(n_samples, weights)
@@ -1389,22 +1392,22 @@ class scEGOT:
         if save:
             anim_gene.save(save_path, writer="pillow")
 
-    def get_gaussian_map(self, m0, m1, Sigma0, Sigma1, x):
-        d = Sigma0.shape[0]
-        m0 = m0.reshape(1, d)
-        m1 = m1.reshape(1, d)
-        Sigma0 = Sigma0.reshape(d, d)
-        Sigma1 = Sigma1.reshape(d, d)
-        Sigma = np.linalg.pinv(Sigma0) @ spl.sqrtm(Sigma0 @ Sigma1)
-        Tx = m1 + (x - m0) @ Sigma
+    def get_gaussian_map(self, m_0, m_1, sigma_0, sigma_1, x):
+        d = sigma_0.shape[0]
+        m_0 = m_0.reshape(1, d)
+        m_1 = m_1.reshape(1, d)
+        sigma_0 = sigma_0.reshape(d, d)
+        sigma_1 = sigma_1.reshape(d, d)
+        sigma = np.linalg.pinv(sigma_0) @ spl.sqrtm(sigma_0 @ sigma_1)
+        Tx = m_1 + (x - m_0) @ sigma
         return Tx
 
     def _calculate_cell_velocity(self, gmm_source, gmm_target, X_item, solution):
         d = gmm_source.means_.shape[1]
         K_0, K_1 = gmm_source.means_.shape[0], gmm_target.means_.shape[0]
 
-        mu0, mu1 = gmm_source.means_, gmm_target.means_
-        S0, S1 = gmm_source.covariances_, gmm_target.covariances_
+        mu_0, mu_1 = gmm_source.means_, gmm_target.means_
+        S_0, S_1 = gmm_source.covariances_, gmm_target.covariances_
 
         n = X_item.shape[0]
         T = np.zeros((K_0, K_1, d, n))
@@ -1414,14 +1417,14 @@ class scEGOT:
         for k in range(K_0):
             for l in range(K_1):
                 T[k, l, :, :] = self.get_gaussian_map(
-                    mu0[k, :], mu1[l, :], S0[k, :, :], S1[l, :, :], X_item.values
+                    mu_0[k, :], mu_1[l, :], S_0[k, :, :], S_1[l, :, :], X_item.values
                 ).T
         for j in range(K_0):
             logprob = gmm_source.score_samples(X_item.values)
             Nj[:, j] = np.exp(
                 np.log(
                     multivariate_normal.pdf(
-                        X_item.values, mean=mu0[j, :], cov=S0[j, :, :]
+                        X_item.values, mean=mu_0[j, :], cov=S_0[j, :, :]
                     )
                 )
                 - logprob
@@ -1628,8 +1631,8 @@ class scEGOT:
         if save:
             plt.savefig(save_path)
 
-    def calculate_GRNs(self, alpha_range=(-2, 2)):
-        GRNs, ridgeCVs = [], []
+    def calculate_grns(self, alpha_range=(-2, 2)):
+        grns, ridge_cvs = [], []
 
         if self.solutions is None:
             self.solutions = self.calculate_solutions(self.gmm_models)
@@ -1647,22 +1650,22 @@ class scEGOT:
             )
 
             alphas_cv = np.logspace(alpha_range[0], alpha_range[1], num=20)
-            ridgeCV = linear_model.RidgeCV(alphas=alphas_cv, cv=3, fit_intercept=False)
-            ridgeCV.fit(self.X_pca[i], velo)
-            ridgeCVs.append(ridgeCV)
+            ridge_cv = linear_model.RidgeCV(alphas=alphas_cv, cv=3, fit_intercept=False)
+            ridge_cv.fit(self.X_pca[i], velo)
+            ridge_cvs.append(ridge_cv)
 
-            GRN = linear_model.Ridge(alpha=ridgeCV.alpha_, fit_intercept=False)
-            GRN.fit(self.X_pca[i], velo)
-            df_GRN = pd.DataFrame(
-                self.pca_model.components_.T @ GRN.coef_ @ self.pca_model.components_,
+            grn = linear_model.Ridge(alpha=ridge_cv.alpha_, fit_intercept=False)
+            grn.fit(self.X_pca[i], velo)
+            grn = pd.DataFrame(
+                self.pca_model.components_.T @ grn.coef_ @ self.pca_model.components_,
                 index=self.gene_names,
                 columns=self.gene_names,
             )
-            GRNs.append(df_GRN)
+            grns.append(grn)
 
-        return GRNs, ridgeCVs
+        return grns, ridge_cvs
 
-    def _make_GRN_graph(self, df, threshold=0.1):
+    def _make_grn_graph(self, df, threshold=0.1):
         graph = pydotplus.Dot(graph_type="digraph")
         for c in df.columns:
             node = pydotplus.Node(f'"{c}"', label=c)
@@ -1683,10 +1686,10 @@ class scEGOT:
                     graph.add_edge(edge)
         return graph
 
-    def plot_GRN_graph(
+    def plot_grn_graph(
         self,
-        GRNs,
-        ridgeCVs,
+        grns,
+        ridge_cvs,
         selected_genes,
         thresh=0.01,
         save=False,
@@ -1694,20 +1697,20 @@ class scEGOT:
         save_format="png",
     ):
         if save and save_paths is None:
-            save_paths = [f"./GRN_graph_{i + 1}.png" for i in range(len(GRNs))]
-        for i, GRN in enumerate(GRNs):
+            save_paths = [f"./grn_graph_{i + 1}.png" for i in range(len(grns))]
+        for i, grn in enumerate(grns):
             if self.verbose:
-                print(f"alpha = {ridgeCVs[i].alpha_}")
-            GRNgraph = self._make_GRN_graph(
-                GRN[selected_genes].loc[selected_genes], threshold=thresh
+                print(f"alpha = {ridge_cvs[i].alpha_}")
+            grn_graph = self._make_grn_graph(
+                grn[selected_genes].loc[selected_genes], threshold=thresh
             )
             if is_notebook():
-                display(Image(GRNgraph.create(format=save_format)))
+                display(Image(grn_graph.create(format=save_format)))
             else:
-                img = PILImage.open(BytesIO(GRNgraph.create(format=save_format)))
+                img = PILImage.open(BytesIO(grn_graph.create(format=save_format)))
                 img.show()
             if save:
-                GRNgraph.write(save_paths[i], format=save_format)
+                grn_graph.write(save_paths[i], format=save_format)
 
     def calculate_waddington_potential(self, n_neighbors=100):
         if self.solutions is None:
@@ -1727,57 +1730,57 @@ class scEGOT:
             d = gmm_source.means_.shape[1]
             K_0, K_1 = gmm_source.means_.shape[0], gmm_target.means_.shape[0]
 
-            mu0, mu1 = gmm_source.means_, gmm_target.means_
-            S0, S1 = gmm_source.covariances_, gmm_target.covariances_
+            mu_0, mu_1 = gmm_source.means_, gmm_target.means_
+            S_0, S_1 = gmm_source.covariances_, gmm_target.covariances_
 
-            pi0 = gmm_source.weights_
+            pi_0 = gmm_source.weights_
 
             B = 0
             F = 0
             for j in range(K_0):
                 B = B + np.nan_to_num(
                     np.dot(
-                        np.linalg.pinv(S0)[j, :, :],
-                        (self.X_pca[i].values - mu0[j, :]).T,
+                        np.linalg.pinv(S_0)[j, :, :],
+                        (self.X_pca[i].values - mu_0[j, :]).T,
                     )
-                    * pi0[j]
+                    * pi_0[j]
                     * multivariate_normal.pdf(
-                        self.X_pca[i].values, mean=mu0[j, :], cov=S0[j, :, :]
+                        self.X_pca[i].values, mean=mu_0[j, :], cov=S_0[j, :, :]
                     )
-                    / self.theoretical_density_2d(mu0, S0, pi0, self.X_pca[i].values)
+                    / self.theoretical_density_2d(mu_0, S_0, pi_0, self.X_pca[i].values)
                 )
             for j in range(K_0):
                 A = np.dot(
-                    np.linalg.pinv(S0)[j, :, :], (self.X_pca[i].values - mu0[j, :]).T
+                    np.linalg.pinv(S_0)[j, :, :], (self.X_pca[i].values - mu_0[j, :]).T
                 )
-                I1 = -A + B
+                I_1 = -A + B
                 for k in range(K_1):
                     P = (
                         solution[j, k]
                         * multivariate_normal.pdf(
-                            self.X_pca[i].values, mean=mu0[j, :], cov=S0[j, :, :]
+                            self.X_pca[i].values, mean=mu_0[j, :], cov=S_0[j, :, :]
                         )
                         / self.theoretical_density_2d(
-                            mu0, S0, pi0, self.X_pca[i].values
+                            mu_0, S_0, pi_0, self.X_pca[i].values
                         ).T
                     )
                     P = np.nan_to_num(P)
                     Tmap = self.get_gaussian_map(
-                        mu0[j, :],
-                        mu1[k, :],
-                        S0[j, :, :],
-                        S1[k, :, :],
+                        mu_0[j, :],
+                        mu_1[k, :],
+                        S_0[j, :, :],
+                        S_1[k, :, :],
                         self.X_pca[i].values,
                     ).T
                     Tmap = Tmap.real
-                    I2 = np.nan_to_num(
+                    I_2 = np.nan_to_num(
                         np.trace(
-                            np.linalg.pinv(S0[j, :, :])
-                            @ spl.sqrtm(S0[j, :, :] @ S1[k, :, :])
+                            np.linalg.pinv(S_0[j, :, :])
+                            @ spl.sqrtm(S_0[j, :, :] @ S_1[k, :, :])
                         )
                     )
-                    I2 = I2.real
-                    F = F + np.sum(np.dot(I1, Tmap.T)) * P + I2 * P
+                    I_2 = I_2.real
+                    F = F + np.sum(np.dot(I_1, Tmap.T)) * P + I_2 * P
             F = F - d
             F_all = np.append(F_all, F)
 
@@ -1807,15 +1810,15 @@ class scEGOT:
         )
         lap = dia - sim
         lap = csc_matrix(np.array(lap))
-        Wpotential, *_ = linalg.lsqr(lap, F_all)
+        waddington_potential, *_ = linalg.lsqr(lap, F_all)
 
-        Wpotential = zscore(Wpotential)
+        waddington_potential = zscore(waddington_potential)
 
-        return Wpotential, F_all
+        return waddington_potential, F_all
 
     def plot_waddington_potential(
         self,
-        Wpotential,
+        waddington_potential,
         gene_name=None,
         save=False,
         save_path=None,
@@ -1826,13 +1829,13 @@ class scEGOT:
         X_concated = pd.concat(self.X_pca[:-1])
         gene_expression_level = None
         if gene_name:
-            gene_expression_level = pd.concat(self.X_normalized)[: len(Wpotential)][
-                gene_name
-            ]
+            gene_expression_level = pd.concat(self.X_normalized)[
+                : len(waddington_potential)
+            ][gene_name]
         plot_data = pd.DataFrame(index=X_concated.index)
         plot_data["x"] = X_concated.iloc[:, 0]
         plot_data["y"] = X_concated.iloc[:, 1]
-        plot_data["z"] = Wpotential
+        plot_data["z"] = waddington_potential
         fig = px.scatter_3d(
             plot_data,
             x="x",
@@ -1860,7 +1863,7 @@ class scEGOT:
 
     def plot_waddington_potential_surface(
         self,
-        Wpotential,
+        waddington_potential,
         gene_name=None,
         save=False,
         save_path=None,
@@ -1876,7 +1879,7 @@ class scEGOT:
 
         X, Y = np.meshgrid(xi, yi)
 
-        Z = interpolate.griddata((x, y), Wpotential, (X, Y), method="cubic")
+        Z = interpolate.griddata((x, y), waddington_potential, (X, Y), method="cubic")
 
         fig = go.Figure(
             go.Surface(
@@ -1903,25 +1906,27 @@ class scEGOT:
         if save:
             fig.write_html(save_path)
 
-    def GaussianW(self, m0, m1, Sigma0, Sigma1):
-        Sigma00 = spl.sqrtm(Sigma0)
-        Sigma010 = spl.sqrtm(Sigma00 @ Sigma1 @ Sigma00)
-        d = np.linalg.norm(m0 - m1) ** 2 + np.trace(Sigma0 + Sigma1 - 2 * Sigma010)
+    def gaussian_w(self, m_0, m_1, sigma_0, sigma_1):
+        sigma_00 = spl.sqrtm(sigma_0)
+        sigma_010 = spl.sqrtm(sigma_00 @ sigma_1 @ sigma_00)
+        d = np.linalg.norm(m_0 - m_1) ** 2 + np.trace(sigma_0 + sigma_1 - 2 * sigma_010)
         return d
 
-    def EGOT(self, pi0, pi1, mu0, mu1, S0, S1):
-        K_0 = mu0.shape[0]
-        K_1 = mu1.shape[0]
-        d = mu0.shape[1]
-        S0 = S0.reshape(K_0, d, d)
-        S1 = S1.reshape(K_1, d, d)
+    def egot(self, pi_0, pi_1, mu_0, mu_1, S_0, S_1):
+        K_0 = mu_0.shape[0]
+        K_1 = mu_1.shape[0]
+        d = mu_0.shape[1]
+        S_0 = S_0.reshape(K_0, d, d)
+        S_1 = S_1.reshape(K_1, d, d)
         M = np.zeros((K_0, K_1))
         for k in range(K_0):
             for l in range(K_1):
-                M[k, l] = self.GaussianW(mu0[k, :], mu1[l, :], S0[k, :, :], S1[l, :, :])
+                M[k, l] = self.gaussian_w(
+                    mu_0[k, :], mu_1[l, :], S_0[k, :, :], S_1[l, :, :]
+                )
         solution = ot.sinkhorn(
-            pi0,
-            pi1,
+            pi_0,
+            pi_1,
             M / M.max(),
             0.01,
             method="sinkhorn_epsilon_scaling",
@@ -1932,17 +1937,17 @@ class scEGOT:
         return solution
 
     def calculate_solution(self, gmm_source, gmm_target):
-        pi0, pi1 = gmm_source.weights_, gmm_target.weights_
-        mu0, mu1 = gmm_source.means_, gmm_target.means_
-        S0, S1 = gmm_source.covariances_, gmm_target.covariances_
+        pi_0, pi_1 = gmm_source.weights_, gmm_target.weights_
+        mu_0, mu_1 = gmm_source.means_, gmm_target.means_
+        S_0, S_1 = gmm_source.covariances_, gmm_target.covariances_
 
-        solution = self.EGOT(
-            pi0,
-            pi1,
-            mu0,
-            mu1,
-            S0,
-            S1,
+        solution = self.egot(
+            pi_0,
+            pi_1,
+            mu_0,
+            mu_1,
+            S_0,
+            S_1,
         )
         return solution
 
@@ -1959,13 +1964,13 @@ class scEGOT:
             solutions_normalized.append((solution.T / gmm_models[i].weights_).T)
         return solutions_normalized
 
-    def theoretical_density_2d(self, mu, Sigma, alpha, x):
+    def theoretical_density_2d(self, mu, sigma, alpha, x):
         K = mu.shape[0]
         alpha = alpha.reshape(1, K)
         y = 0
         for j in range(K):
             y += alpha[0, j] * multivariate_normal.pdf(
-                x, mean=mu[j, :], cov=Sigma[j, :, :]
+                x, mean=mu[j, :], cov=sigma[j, :, :]
             )
         return y
 
@@ -1973,27 +1978,27 @@ class scEGOT:
         d = gmm_source.means_.shape[1]
         K_0, K_1 = gmm_source.means_.shape[0], gmm_target.means_.shape[0]
 
-        mu0, mu1 = gmm_source.means_, gmm_target.means_
-        S0, S1 = gmm_source.covariances_, gmm_target.covariances_
+        mu_0, mu_1 = gmm_source.means_, gmm_target.means_
+        S_0, S_1 = gmm_source.covariances_, gmm_target.covariances_
 
         mut = np.zeros((K_0 * K_1, d))
-        st = np.zeros((K_0 * K_1, d, d))
+        St = np.zeros((K_0 * K_1, d, d))
         for k in range(K_0):
             for l in range(K_1):
-                mut[k * K_1 + l, :] = (1 - t) * mu0[k, :] + t * mu1[l, :]
-                Sigma1demi = spl.sqrtm(S1[l, :, :])
+                mut[k * K_1 + l, :] = (1 - t) * mu_0[k, :] + t * mu_1[l, :]
+                sigma_1demi = spl.sqrtm(S_1[l, :, :])
                 C = (
-                    Sigma1demi
-                    @ spl.inv(spl.sqrtm(Sigma1demi @ S0[k, :, :] @ Sigma1demi))
-                    @ Sigma1demi
+                    sigma_1demi
+                    @ spl.inv(spl.sqrtm(sigma_1demi @ S_0[k, :, :] @ sigma_1demi))
+                    @ sigma_1demi
                 )
-                st[k * K_1 + l, :, :] = (
+                St[k * K_1 + l, :, :] = (
                     ((1 - t) * np.eye(d) + t * C)
-                    @ S0[k, :, :]
+                    @ S_0[k, :, :]
                     @ ((1 - t) * np.eye(d) + t * C)
                 )
 
-        return mut, st
+        return mut, St
 
     def generate_cluster_names_with_day(self, cluster_names=None):
         if cluster_names is None:
