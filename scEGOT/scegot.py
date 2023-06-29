@@ -550,11 +550,11 @@ class scEGOT:
                 edge[0],
                 edge[1],
             )
-            upgenes = pd.Series(
+            upgenes = pd.DataFrame(
                 self._get_nlargest_gene_indices(fold_change, num=num).values,
-                name=f"{edge[0]}{edge[1]}",
-            )
-            df_upgenes = df_upgenes.append(upgenes)
+                columns=[f"{edge[0]}{edge[1]}"],
+            ).T
+            df_upgenes = pd.concat([df_upgenes, upgenes])
         return df_upgenes
 
     def _get_down_regulated_genes(self, gene_values, G, num=10):
@@ -565,11 +565,11 @@ class scEGOT:
                 edge[0],
                 edge[1],
             )
-            downgenes = pd.Series(
+            downgenes = pd.DataFrame(
                 self._get_nsmallest_gene_indices(fold_change, num=num).values,
-                name=f"{edge[0]}{edge[1]}",
-            )
-            df_downgenes = df_downgenes.append(downgenes)
+                columns=[f"{edge[0]}{edge[1]}"],
+            ).T
+            df_downgenes = pd.concat([df_downgenes, downgenes])
         return df_downgenes
 
     def make_cell_state_graph(
@@ -796,8 +796,6 @@ class scEGOT:
         tf_down_genes = self._get_down_regulated_genes(
             mean_tf_gene_values_per_cluster, G, num=tf_gene_pick_num
         )
-        print(tf_up_genes)
-        print(tf_down_genes)
         tf_up_genes.columns += 1
         tf_down_genes.columns += 1
 
