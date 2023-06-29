@@ -302,17 +302,17 @@ class scEGOT:
         x_range,
         y_range,
         figure_labels=None,
-        gmm_labels=None,
+        gmm_label=None,
         gmm_n_components=None,
         cmap="plasma",
     ):
-        if gmm_labels is None:
+        if gmm_label is None:
             plt.scatter(X_item.values[:, 0], X_item.values[:, 1], s=0.5, alpha=0.5)
         else:
             plt.scatter(
                 X_item.values[:, 0],
                 X_item.values[:, 1],
-                c=gmm_labels,
+                c=gmm_label,
                 alpha=0.5,
                 cmap=plt.cm.get_cmap(cmap, gmm_n_components),
             )
@@ -478,7 +478,7 @@ class scEGOT:
 
         if self.verbose:
             print("Creating animation...")
-        anim = animation.ArtistAnimation(fig, ims, interval=100)
+        anim = animation.ArtistAnimation(fig, ims, interval=100, repeat=False)
         if is_notebook():
             display(HTML(anim.to_jshtml()))
         else:
@@ -1390,7 +1390,7 @@ class scEGOT:
 
         if self.verbose:
             print("Creating animation...")
-        anim_gene = animation.ArtistAnimation(fig, ims, interval=100)
+        anim_gene = animation.ArtistAnimation(fig, ims, interval=100, repeat=False)
         if is_notebook():
             display(HTML(anim_gene.to_jshtml()))
         else:
