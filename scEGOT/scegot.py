@@ -229,6 +229,8 @@ class scEGOT:
 
         gmm_models = []
 
+        if self.verbose:
+            print("Fitting GMM models with each day's data...")
         for i in (
             tqdm(range(len(self.X_pca))) if self.verbose else range(len(self.X_pca))
         ):
@@ -256,6 +258,10 @@ class scEGOT:
         if self.gmm_models is not None and self.gmm_labels is not None:
             return self.gmm_models, self.gmm_labels
 
+        if self.verbose:
+            print(
+                "Fitting GMM models with each day's data and predicting labels for them..."
+            )
         gmm_models, gmm_labels = [], []
         for i in (
             tqdm(range(len(self.X_pca))) if self.verbose else range(len(self.X_pca))
@@ -445,6 +451,9 @@ class scEGOT:
         fig, ax = plt.subplots(figsize=(10, 8))
         for i in range(len(self.day_names) - 1):
             t = np.linspace(0, 1, interpolate_interval)
+            print(
+                f"Interpolating between {self.day_names[i]} and {self.day_names[i + 1]}..."
+            )
             for j in tqdm(range(11)) if self.verbose else range(11):
                 im = self._interpolation_contour(
                     self.gmm_models[i],
@@ -467,6 +476,8 @@ class scEGOT:
                 plt.ylabel("PC2")
                 ims.append(im + [title])
 
+        if self.verbose:
+            print("Creating animation...")
         anim = animation.ArtistAnimation(fig, ims, interval=100)
         if is_notebook():
             display(HTML(anim.to_jshtml()))
@@ -664,7 +675,7 @@ class scEGOT:
             hoverinfo="text",
             marker={
                 "size": 20,
-                "color": [w["edge_colors"] + 1 for w in G.edges.values()],
+                "color": [edge["edge_colors"] + 1 for edge in G.edges.values()],
             },
             opacity=0,
         )
@@ -673,11 +684,7 @@ class scEGOT:
             x_0, y_0 = G.nodes[edge[0]]["pos"]
             x_1, y_1 = G.nodes[edge[1]]["pos"]
             from_to = str(edge[0]) + str(edge[1])
-            hovertext_1 = edges_up_gene.T[from_to].values
-            hovertext_2 = edges_down_gene.T[from_to].values
-            hovertext = (
-                "up_gene: " + hovertext_1 + " " + "down_gene: " + hovertext_2 + "<br>"
-            )
+            hovertext = f"""up_genes: {', '.join(edges_up_gene.T[from_to].values)}<br>down_genes: {', '.join(edges_down_gene.T[from_to].values)}"""
             middle_hover_trace["x"] += tuple([(x_0 + x_1) / 2])
             middle_hover_trace["y"] += tuple([(y_0 + y_1) / 2])
             middle_hover_trace["hovertext"] += tuple([hovertext])
@@ -715,7 +722,7 @@ class scEGOT:
             hoverinfo="text",
             marker={
                 "size": 20,
-                "color": [w["day"] + 1 for w in G.nodes.values()],
+                "color": [node["day"] + 1 for node in G.nodes.values()],
             },
             opacity=0,
         )
@@ -724,16 +731,7 @@ class scEGOT:
             x, y = G.nodes[node]["pos"]
             node_x.append(x)
             node_y.append(y)
-            hovertext_1 = nodes_up_gene.T[node].values
-            hovertext_2 = nodes_down_gene.T[node].values
-            hovertext = (
-                "largest_gene: "
-                + hovertext_1
-                + " "
-                + "smallest_gene: "
-                + hovertext_2
-                + "<br>"
-            )
+            hovertext = f"""largest_genes: {', '.join(nodes_up_gene.T[node].values)}<br>smallest_genes: {', '.join(nodes_down_gene.T[node].values)}"""
             node_hover_trace["x"] += tuple([x])
             node_hover_trace["y"] += tuple([y])
             node_hover_trace["hovertext"] += tuple([hovertext])
@@ -749,8 +747,8 @@ class scEGOT:
             marker=dict(line_width=2),
         )
 
-        node_trace.marker.color = [w["day"] for w in G.nodes.values()]
-        node_trace.marker.size = [w["weight"] * 140 for w in G.nodes.values()]
+        node_trace.marker.color = [node["day"] for node in G.nodes.values()]
+        node_trace.marker.size = [node["weight"] * 140 for node in G.nodes.values()]
         trace_recode.append(node_trace)
 
         fig = go.Figure(
@@ -825,15 +823,18 @@ class scEGOT:
         if save and save_path is None:
             save_path = "./simple_cell_state_graph.png"
 
-        node_color = [w["day"] for w in G.nodes.values()]
+        node_color = [node["day"] for node in G.nodes.values()]
 
         cmap = plt.cm.get_cmap("Reds")
         color_data = np.array(
-            [G.edges[e_]["edge_weights"] * G.nodes[e_[0]]["weight"] for e_ in G.edges()]
+            [
+                G.edges[edge]["edge_weights"] * G.nodes[edge[0]]["weight"]
+                for edge in G.edges()
+            ]
         )
 
         if plot_type == "normal":
-            pos = {w: G.nodes[w]["pos"] for w in G.nodes()}
+            pos = {node: G.nodes[node]["pos"] for node in G.nodes()}
         else:
             pos = {}
             for node in G.nodes():
@@ -844,7 +845,7 @@ class scEGOT:
         nx.draw(
             G,
             pos,
-            node_size=[w["weight"] * 5000 for w in G.nodes.values()],
+            node_size=[node["weight"] * 5000 for node in G.nodes.values()],
             node_color=node_color,
             edge_color=color_data,
             edgecolors="white",
@@ -870,7 +871,7 @@ class scEGOT:
                 va="center",
             )
             text_.set_path_effects(
-                [patheffects.withstroke(linewidth=3, foreground="w")]
+                [patheffects.withStroke(linewidth=3, foreground="w")]
             )
             texts = np.append(texts, text_)
         adjust_text(texts)
@@ -1332,6 +1333,10 @@ class scEGOT:
         ims = []
         for i in range(len(self.gmm_models) - 1):
             t = np.linspace(0, 1, interpolate_interval)
+            if self.verbose:
+                print(
+                    f"Interpolating between {self.day_names[i]} and {self.day_names[i + 1]}..."
+                )
             for j in (
                 tqdm(range(interpolate_interval))
                 if self.verbose
@@ -1383,6 +1388,8 @@ class scEGOT:
                 )
                 ims.append([im] + [title])
 
+        if self.verbose:
+            print("Creating animation...")
         anim_gene = animation.ArtistAnimation(fig, ims, interval=100)
         if is_notebook():
             display(HTML(anim_gene.to_jshtml()))
@@ -1414,25 +1421,25 @@ class scEGOT:
         barycentric_projection_map = np.zeros((d, n))
         Nj = np.zeros((n, K_0))
 
-        for k in range(K_0):
-            for l in range(K_1):
-                T[k, l, :, :] = self.get_gaussian_map(
-                    mu_0[k, :], mu_1[l, :], S_0[k, :, :], S_1[l, :, :], X_item.values
+        for i in range(K_0):
+            for j in range(K_1):
+                T[i, j, :, :] = self.get_gaussian_map(
+                    mu_0[i, :], mu_1[j, :], S_0[i, :, :], S_1[j, :, :], X_item.values
                 ).T
-        for j in range(K_0):
+        for i in range(K_0):
             logprob = gmm_source.score_samples(X_item.values)
-            Nj[:, j] = np.exp(
+            Nj[:, i] = np.exp(
                 np.log(
                     multivariate_normal.pdf(
-                        X_item.values, mean=mu_0[j, :], cov=S_0[j, :, :]
+                        X_item.values, mean=mu_0[i, :], cov=S_0[i, :, :]
                     )
                 )
                 - logprob
             )
-        for k in range(K_0):
-            for l in range(K_1):
+        for i in range(K_0):
+            for j in range(K_1):
                 barycentric_projection_map += (
-                    solution[k, l] * Nj[:, k].T * T[k, l, :, :]
+                    solution[i, j] * Nj[:, i].T * T[i, j, :, :]
                 )
         w = barycentric_projection_map.T
         velo = w - X_item.values
@@ -1446,6 +1453,8 @@ class scEGOT:
         if self.solutions is None:
             self.solutions = self.calculate_solutions(self.gmm_models)
 
+        if self.verbose:
+            print("Calculating cell velocities between each day...")
         for i in (
             tqdm(range(len(self.gmm_models) - 1))
             if self.verbose
@@ -1637,6 +1646,8 @@ class scEGOT:
         if self.solutions is None:
             self.solutions = self.calculate_solutions(self.gmm_models)
 
+        if self.verbose:
+            print("Calculating GRNs between each day...")
         for i in (
             tqdm(range(len(self.gmm_models) - 1))
             if self.verbose
@@ -1718,6 +1729,8 @@ class scEGOT:
 
         F_all = []
 
+        if self.verbose:
+            print("Calculating F between each day...")  # TODO: Fを何かで置き換える
         for i in (
             tqdm(range(len(self.X_pca) - 1))
             if self.verbose
