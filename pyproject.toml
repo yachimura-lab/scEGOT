@@ -26,6 +26,7 @@ graphviz = "^0.20.1"
 scvelo = "^0.2.5"
 anndata = "0.8"
 kaleido = "0.2.1"
+cellmap = "1.0.1.dev202306050811"
 
 [tool.poetry.group.dev.dependencies]
 jupyterlab = "^3.5.3"
