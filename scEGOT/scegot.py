@@ -1138,7 +1138,7 @@ class scEGOT:
             fig.write_html(save_path)
 
     def make_interpolation_data(
-        self, gmm_source, gmm_target, t, columns=None, n_samples=2000
+        self, gmm_source, gmm_target, t, columns=None, n_samples=2000, seed=0
     ):
         d = gmm_source.means_.shape[1]
         K_0, K_1 = gmm_source.means_.shape[0], gmm_target.means_.shape[0]
@@ -1165,7 +1165,7 @@ class scEGOT:
         means = mut
         covariances = St
         weights = pit[0, :]
-        rng = check_random_state(0)
+        rng = check_random_state(seed)
         n_samples_comp = rng.multinomial(n_samples, weights)
         X_interpolation = np.vstack(
             [
