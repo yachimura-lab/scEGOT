@@ -302,17 +302,17 @@ class scEGOT:
         x_range,
         y_range,
         figure_labels=None,
-        gmm_labels=None,
+        gmm_label=None,
         gmm_n_components=None,
         cmap="plasma",
     ):
-        if gmm_labels is None:
+        if gmm_label is None:
             plt.scatter(X_item.values[:, 0], X_item.values[:, 1], s=0.5, alpha=0.5)
         else:
             plt.scatter(
                 X_item.values[:, 0],
                 X_item.values[:, 1],
-                c=gmm_labels,
+                c=gmm_label,
                 alpha=0.5,
                 cmap=plt.cm.get_cmap(cmap, gmm_n_components),
             )
@@ -478,7 +478,7 @@ class scEGOT:
 
         if self.verbose:
             print("Creating animation...")
-        anim = animation.ArtistAnimation(fig, ims, interval=100)
+        anim = animation.ArtistAnimation(fig, ims, interval=100, repeat=False)
         if is_notebook():
             display(HTML(anim.to_jshtml()))
         else:
@@ -542,38 +542,34 @@ class scEGOT:
         fold_change = fold_change.sort_values(ascending=False)
         return fold_change
 
-    def _get_up_regulated_genes(self, gene_values, cell_state_edge_list, num=10):
+    def _get_up_regulated_genes(self, gene_values, G, num=10):
         df_upgenes = pd.DataFrame([])
-        for i in range(len(cell_state_edge_list)):
+        for edge in G.edges():
             fold_change = self._get_fold_change(
                 gene_values,
-                cell_state_edge_list["source"].iloc[i],
-                cell_state_edge_list["target"].iloc[i],
+                edge[0],
+                edge[1],
             )
-            upgenes = pd.Series(
-                self._get_nlargest_gene_indices(fold_change, num=num).values
-            )
-            df_upgenes = df_upgenes.append(upgenes, ignore_index=True)
-        df_upgenes.index = (
-            cell_state_edge_list["source"] + cell_state_edge_list["target"]
-        )
+            upgenes = pd.DataFrame(
+                self._get_nlargest_gene_indices(fold_change, num=num).values,
+                columns=[f"{edge[0]}{edge[1]}"],
+            ).T
+            df_upgenes = pd.concat([df_upgenes, upgenes])
         return df_upgenes
 
-    def _get_down_regulated_genes(self, gene_values, cell_state_edge_list, num=10):
+    def _get_down_regulated_genes(self, gene_values, G, num=10):
         df_downgenes = pd.DataFrame([])
-        for i in range(len(cell_state_edge_list)):
+        for edge in G.edges():
             fold_change = self._get_fold_change(
                 gene_values,
-                cell_state_edge_list["source"].iloc[i],
-                cell_state_edge_list["target"].iloc[i],
+                edge[0],
+                edge[1],
             )
-            downgenes = pd.Series(
-                self._get_nsmallest_gene_indices(fold_change, num=num).values
-            )
-            df_downgenes = df_downgenes.append(downgenes, ignore_index=True)
-        df_downgenes.index = (
-            cell_state_edge_list["source"] + cell_state_edge_list["target"]
-        )
+            downgenes = pd.DataFrame(
+                self._get_nsmallest_gene_indices(fold_change, num=num).values,
+                columns=[f"{edge[0]}{edge[1]}"],
+            ).T
+            df_downgenes = pd.concat([df_downgenes, downgenes])
         return df_downgenes
 
     def make_cell_state_graph(
@@ -624,7 +620,7 @@ class scEGOT:
                 cluster=row.cluster,
             )
 
-        return G, cell_state_edge_list
+        return G
 
     def _plot_cell_state_graph(
         self,
@@ -766,7 +762,6 @@ class scEGOT:
     def plot_cell_state_graph(
         self,
         G,
-        cell_state_edge_list,
         cluster_names,
         tf_gene_names,
         tf_gene_pick_num=5,
@@ -796,10 +791,10 @@ class scEGOT:
         tf_nsmallest.columns += 1
         # edges
         tf_up_genes = self._get_up_regulated_genes(
-            mean_tf_gene_values_per_cluster, cell_state_edge_list, num=tf_gene_pick_num
+            mean_tf_gene_values_per_cluster, G, num=tf_gene_pick_num
         )
         tf_down_genes = self._get_down_regulated_genes(
-            mean_tf_gene_values_per_cluster, cell_state_edge_list, num=tf_gene_pick_num
+            mean_tf_gene_values_per_cluster, G, num=tf_gene_pick_num
         )
         tf_up_genes.columns += 1
         tf_down_genes.columns += 1
@@ -1390,7 +1385,7 @@ class scEGOT:
 
         if self.verbose:
             print("Creating animation...")
-        anim_gene = animation.ArtistAnimation(fig, ims, interval=100)
+        anim_gene = animation.ArtistAnimation(fig, ims, interval=100, repeat=False)
         if is_notebook():
             display(HTML(anim_gene.to_jshtml()))
         else:
