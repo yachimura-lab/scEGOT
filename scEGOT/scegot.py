@@ -456,7 +456,10 @@ class scEGOT:
             print(
                 f"Interpolating between {self.day_names[i]} and {self.day_names[i + 1]}..."
             )
-            for j in tqdm(range(11)) if self.verbose else range(11):
+            frames = range(int(i > 0), interpolate_interval)
+            for j in tqdm(frames) if self.verbose else frames:
+                if i != 0 and j == 0:
+                    continue
                 im = self._interpolation_contour(
                     self.gmm_models[i],
                     self.gmm_models[i + 1],
@@ -1291,7 +1294,7 @@ class scEGOT:
         self,
         target_gene_name,
         mode="pca",
-        interpolate_interval=10,
+        interpolate_interval=11,
         n_samples=5000,
         x_range=None,
         y_range=None,
@@ -1334,11 +1337,10 @@ class scEGOT:
                 print(
                     f"Interpolating between {self.day_names[i]} and {self.day_names[i + 1]}..."
                 )
-            for j in (
-                tqdm(range(interpolate_interval))
-                if self.verbose
-                else range(interpolate_interval)
-            ):
+            frames = range(int(i > 0), interpolate_interval)
+            for j in tqdm(frames) if self.verbose else frames:
+                if i != 0 and j == 0:
+                    continue
                 X_interpolation = self.make_interpolation_data(
                     self.gmm_models[i],
                     self.gmm_models[i + 1],
@@ -1948,7 +1950,9 @@ class scEGOT:
             )
         return solution
 
-    def calculate_solution(self, gmm_source, gmm_target, reg=None, numItermax=None):
+    def calculate_solution(
+        self, gmm_source, gmm_target, reg=0.01, numItermax=int(1e10)
+    ):
         pi_0, pi_1 = gmm_source.weights_, gmm_target.weights_
         mu_0, mu_1 = gmm_source.means_, gmm_target.means_
         S_0, S_1 = gmm_source.covariances_, gmm_target.covariances_
@@ -1965,7 +1969,7 @@ class scEGOT:
         )
         return solution
 
-    def calculate_solutions(self, gmm_models, reg=None, numItermax=None):
+    def calculate_solutions(self, gmm_models, reg=0.01, numItermax=int(1e10)):
         solutions = []
         for i in range(len(gmm_models) - 1):
             solutions.append(
@@ -1975,7 +1979,9 @@ class scEGOT:
             )
         return solutions
 
-    def calculate_normalized_solutions(self, gmm_models, reg=None, numItermax=None):
+    def calculate_normalized_solutions(
+        self, gmm_models, reg=0.01, numItermax=int(1e10)
+    ):
         solutions_normalized = []
         for i in range(len(gmm_models) - 1):
             solution = self.calculate_solution(
