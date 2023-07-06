@@ -8,7 +8,7 @@ import cellmap
 from scipy import interpolate
 import scipy.linalg as spl
 from scipy.stats import multivariate_normal, zscore
-from scipy.sparse import csr_matrix, csc_matrix, linalg, lil_matrix
+from scipy.sparse import csc_matrix, linalg, lil_matrix
 from sklearn import linear_model
 from sklearn.utils import check_random_state
 from sklearn.preprocessing import LabelEncoder
@@ -1723,7 +1723,11 @@ class scEGOT:
             if save:
                 grn_graph.write(save_paths[i], format=save_format)
 
-    def calculate_waddington_potential(self, n_neighbors=100):
+    def calculate_waddington_potential(
+        self,
+        n_neighbors=100,
+        knn_mode="pca",
+    ):
         if self.solutions is None:
             self.solutions = self.calculate_solutions(self.gmm_models)
 
@@ -1808,8 +1812,7 @@ class scEGOT:
 
         if self.verbose:
             print("Computing kernel ...")
-        sim = csr_matrix(knn.shape)
-        # sim = lil_matrix(knn.shape)
+        sim = lil_matrix(knn.shape)
 
         nonzero = knn.nonzero()
         sig = 10
