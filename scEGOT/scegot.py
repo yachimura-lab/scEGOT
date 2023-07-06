@@ -1,8 +1,9 @@
-# import warnings
 import itertools
 import ot
 import numpy as np
 import pandas as pd
+import anndata
+import cellmap
 from scipy import interpolate
 import scipy.linalg as spl
 from scipy.stats import multivariate_normal, zscore
@@ -1877,42 +1878,40 @@ class scEGOT:
         save_path=None,
     ):
         if save and save_path is None:
-            save_path = "./wadding_potential_surface.html"
+            save_path = "./wadding_potential_surface"
+        if save_path.split(".")[-1] == "html":
+            save_path = save_path[:-5]
 
-        X_concated = pd.concat(self.X_pca[:-1])
-        x, y = X_concated.iloc[:, 0], X_concated.iloc[:, 1]
-
-        xi = np.linspace(x.min(), x.max(), 100)
-        yi = np.linspace(y.min(), y.max(), 100)
-
-        X, Y = np.meshgrid(xi, yi)
-
-        Z = interpolate.griddata((x, y), waddington_potential, (X, Y), method="cubic")
-
-        fig = go.Figure(
-            go.Surface(
-                x=xi,
-                y=yi,
-                z=Z,
+        day_labels = list(
+            itertools.chain.from_iterable(
+                [
+                    [f"day {str(i + 1)}"] * len(self.X_pca[i])
+                    for i in range(len(self.X_pca) - 1)
+                ]
             )
         )
-
-        fig.update_scenes(
-            xaxis_title_text=X_concated.columns[0],
-            yaxis_title_text=X_concated.columns[1],
-            zaxis_title_text="Waddington Potential",
+        adata_cellmap = anndata.AnnData(
+            pd.concat(self.X_pca[:-1]),
+            obs=pd.DataFrame(
+                {
+                    "clusters": day_labels,
+                    "n_counts": np.sum(pd.concat(self.X_pca[:-1]), axis=1),
+                    "potential": waddington_potential,
+                },
+                index=pd.concat(self.X_pca[:-1]).index,
+            ),
+            obsm={
+                "X_pca": pd.concat(self.X_pca[:-1]).iloc[:, :2].values,
+            },
         )
 
-        fig.update_layout(width=1000, height=800)
-
-        if gene_name is None:
-            fig.update_layout(title="Waddington potential")
-        else:
-            fig.update_layout(title=f"Waddington potential, gene = {gene_name}")
-        fig.show()
-
-        if save:
-            fig.write_html(save_path)
+        cellmap.view_3D(
+            adata_cellmap,
+            basis="pca",
+            show_shadow=False,
+            save=save,
+            filename=save_path,
+        )
 
     def gaussian_w(self, m_0, m_1, sigma_0, sigma_1):
         sigma_00 = spl.sqrtm(sigma_0)
