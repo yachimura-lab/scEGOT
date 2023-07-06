@@ -1,5 +1,6 @@
 import itertools
 import ot
+import warnings
 import numpy as np
 import pandas as pd
 import anndata
@@ -7,7 +8,7 @@ import cellmap
 from scipy import interpolate
 import scipy.linalg as spl
 from scipy.stats import multivariate_normal, zscore
-from scipy.sparse import csr_matrix, csc_matrix, linalg
+from scipy.sparse import csr_matrix, csc_matrix, linalg, lil_matrix
 from sklearn import linear_model
 from sklearn.utils import check_random_state
 from sklearn.preprocessing import LabelEncoder
@@ -1424,14 +1425,15 @@ class scEGOT:
                 ).T
         for i in range(K_0):
             logprob = gmm_source.score_samples(X_item.values)
-            Nj[:, i] = np.exp(
-                np.log(
-                    multivariate_normal.pdf(
-                        X_item.values, mean=mu_0[i, :], cov=S_0[i, :, :]
+            with np.errstate(divide="ignore"):
+                Nj[:, i] = np.exp(
+                    np.log(
+                        multivariate_normal.pdf(
+                            X_item.values, mean=mu_0[i, :], cov=S_0[i, :, :]
+                        )
                     )
+                    - logprob
                 )
-                - logprob
-            )
         for i in range(K_0):
             for j in range(K_1):
                 barycentric_projection_map += (
@@ -1805,6 +1807,7 @@ class scEGOT:
         if self.verbose:
             print("Computing kernel ...")
         sim = csr_matrix(knn.shape)
+        # sim = lil_matrix(knn.shape)
 
         nonzero = knn.nonzero()
         sig = 10
@@ -1919,7 +1922,7 @@ class scEGOT:
         d = np.linalg.norm(m_0 - m_1) ** 2 + np.trace(sigma_0 + sigma_1 - 2 * sigma_010)
         return d
 
-    def egot(self, pi_0, pi_1, mu_0, mu_1, S_0, S_1):
+    def egot(self, pi_0, pi_1, mu_0, mu_1, S_0, S_1, reg=0.01, numItermax=int(1e10)):
         K_0 = mu_0.shape[0]
         K_1 = mu_1.shape[0]
         d = mu_0.shape[1]
@@ -1931,19 +1934,21 @@ class scEGOT:
                 M[k, l] = self.gaussian_w(
                     mu_0[k, :], mu_1[l, :], S_0[k, :, :], S_1[l, :, :]
                 )
-        solution = ot.sinkhorn(
-            pi_0,
-            pi_1,
-            M / M.max(),
-            0.01,
-            method="sinkhorn_epsilon_scaling",
-            numItermax=10000000000,
-            tau=1e8,
-            stopThr=1e-9,
-        )
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=UserWarning, module="ot")
+            solution = ot.sinkhorn(
+                pi_0,
+                pi_1,
+                M / M.max(),
+                reg=reg,
+                method="sinkhorn_epsilon_scaling",
+                numItermax=numItermax,
+                tau=1e8,
+                stopThr=1e-9,
+            )
         return solution
 
-    def calculate_solution(self, gmm_source, gmm_target):
+    def calculate_solution(self, gmm_source, gmm_target, reg=None, numItermax=None):
         pi_0, pi_1 = gmm_source.weights_, gmm_target.weights_
         mu_0, mu_1 = gmm_source.means_, gmm_target.means_
         S_0, S_1 = gmm_source.covariances_, gmm_target.covariances_
@@ -1955,19 +1960,27 @@ class scEGOT:
             mu_1,
             S_0,
             S_1,
+            reg,
+            numItermax,
         )
         return solution
 
-    def calculate_solutions(self, gmm_models):
+    def calculate_solutions(self, gmm_models, reg=None, numItermax=None):
         solutions = []
         for i in range(len(gmm_models) - 1):
-            solutions.append(self.calculate_solution(gmm_models[i], gmm_models[i + 1]))
+            solutions.append(
+                self.calculate_solution(
+                    gmm_models[i], gmm_models[i + 1], reg, numItermax
+                )
+            )
         return solutions
 
-    def calculate_normalized_solutions(self, gmm_models):
+    def calculate_normalized_solutions(self, gmm_models, reg=None, numItermax=None):
         solutions_normalized = []
         for i in range(len(gmm_models) - 1):
-            solution = self.calculate_solution(gmm_models[i], gmm_models[i + 1])
+            solution = self.calculate_solution(
+                gmm_models[i], gmm_models[i + 1], reg, numItermax
+            )
             solutions_normalized.append((solution.T / gmm_models[i].weights_).T)
         return solutions_normalized
 
