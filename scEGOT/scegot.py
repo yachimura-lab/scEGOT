@@ -1884,7 +1884,10 @@ class scEGOT:
 
         day_labels = list(
             itertools.chain.from_iterable(
-                [[str(i + 1)] * len(self.X_pca[i]) for i in range(len(self.X_pca) - 1)]
+                [
+                    [f"day {str(i + 1)}"] * len(self.X_pca[i])
+                    for i in range(len(self.X_pca) - 1)
+                ]
             )
         )
         adata_cellmap = anndata.AnnData(
