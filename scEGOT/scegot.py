@@ -107,7 +107,7 @@ class scEGOT:
         X_concated = pd.DataFrame(
             pca_model.fit_transform(X_concated.values),
             index=X_concated.index,
-            columns=["PCA{}".format(i + 1) for i in range(self.pca_n_components)],
+            columns=["PC{}".format(i + 1) for i in range(self.pca_n_components)],
         )
         return X_concated, pca_model
 
