@@ -320,6 +320,7 @@ class scEGOT:
         ]
         if self.gmm_labels is None:
             self.gmm_labels = gmm_labels
+            self.gmm_labels_modified = gmm_labels
         return gmm_labels
 
     def _plot_gmm_predictions(
@@ -1602,7 +1603,7 @@ class scEGOT:
         if color_points == "gmm":
             label_sum = 0
             for i in range(len(self.gmm_labels)):
-                colors += [label + label_sum for label in self.gmm_labels_[i]]
+                colors += [label + label_sum for label in self.gmm_labels_modified[i]]
                 label_sum += self.gmm_n_components_list[i]
         elif color_points == "day":
             for i in range(len(X)):
