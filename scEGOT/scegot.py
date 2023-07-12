@@ -629,7 +629,7 @@ class scEGOT:
         node_info["node_days"] = LabelEncoder().fit_transform(
             self._get_day_names_of_each_node()
         )
-        node_info["cluster"] = list(
+        node_info["cluster_gmm"] = list(
             itertools.chain.from_iterable(
                 [
                     list(range(n_components))
@@ -637,6 +637,23 @@ class scEGOT:
                 ]
             )
         )
+        node_sortby_weight = (
+            node_info.reset_index()
+            .groupby("node_days")
+            .apply(lambda x: x.sort_values("node_weights", ascending=False))
+        )
+        node_info = pd.DataFrame(
+            node_sortby_weight.values, columns=node_sortby_weight.columns
+        )
+        node_info["cluster_weight"] = list(
+            itertools.chain.from_iterable(
+                [
+                    list(range(n_components))
+                    for n_components in self.gmm_n_components_list
+                ]
+            )
+        )
+        node_info.set_index("index", inplace=True)
 
         for row in node_info.itertuples():
             G.add_node(
@@ -644,7 +661,8 @@ class scEGOT:
                 weight=row.node_weights,
                 day=row.node_days,
                 pos=(row.xpos, row.ypos),
-                cluster=row.cluster,
+                cluster_gmm=row.cluster_gmm,
+                cluster_weight=row.cluster_weight,
             )
 
         return G
@@ -837,7 +855,7 @@ class scEGOT:
         )
 
     def plot_simple_cell_state_graph(
-        self, G, plot_type="normal", save=False, save_path=None
+        self, G, plot_type="normal", order=None, save=False, save_path=None
     ):
         """
         plot_type should be "normal" or "hierarchy"
@@ -860,7 +878,10 @@ class scEGOT:
         else:
             pos = {}
             for node in G.nodes():
-                pos[node] = (G.nodes[node]["day"], -G.nodes[node]["cluster"])
+                if order is None:
+                    pos[node] = (G.nodes[node]["day"], -G.nodes[node]["cluster_gmm"])
+                elif order == "weight":
+                    pos[node] = (G.nodes[node]["day"], -G.nodes[node]["cluster_weight"])
 
         cmap = "tab10"
         fig, ax = plt.subplots(figsize=(12, 10))
