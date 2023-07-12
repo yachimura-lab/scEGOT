@@ -1894,7 +1894,7 @@ class scEGOT:
     ):
         if save and save_path is None:
             save_path = "./wadding_potential_surface"
-        if save_path.split(".")[-1] == "html":
+        if save_path is not None and save_path.split(".")[-1] == "html":
             save_path = save_path[:-5]
 
         day_labels = list(
