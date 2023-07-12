@@ -1,5 +1,6 @@
 import itertools
 import ot
+import warnings
 import numpy as np
 import pandas as pd
 import anndata
@@ -7,7 +8,7 @@ import cellmap
 from scipy import interpolate
 import scipy.linalg as spl
 from scipy.stats import multivariate_normal, zscore
-from scipy.sparse import csr_matrix, csc_matrix, linalg
+from scipy.sparse import csc_matrix, linalg, lil_matrix
 from sklearn import linear_model
 from sklearn.utils import check_random_state
 from sklearn.preprocessing import LabelEncoder
@@ -106,7 +107,7 @@ class scEGOT:
         X_concated = pd.DataFrame(
             pca_model.fit_transform(X_concated.values),
             index=X_concated.index,
-            columns=["PCA{}".format(i + 1) for i in range(self.pca_n_components)],
+            columns=["PC{}".format(i + 1) for i in range(self.pca_n_components)],
         )
         return X_concated, pca_model
 
@@ -455,7 +456,10 @@ class scEGOT:
             print(
                 f"Interpolating between {self.day_names[i]} and {self.day_names[i + 1]}..."
             )
-            for j in tqdm(range(11)) if self.verbose else range(11):
+            frames = range(int(i > 0), interpolate_interval)
+            for j in tqdm(frames) if self.verbose else frames:
+                if i != 0 and j == 0:
+                    continue
                 im = self._interpolation_contour(
                     self.gmm_models[i],
                     self.gmm_models[i + 1],
@@ -1138,7 +1142,7 @@ class scEGOT:
             fig.write_html(save_path)
 
     def make_interpolation_data(
-        self, gmm_source, gmm_target, t, columns=None, n_samples=2000
+        self, gmm_source, gmm_target, t, columns=None, n_samples=2000, seed=0
     ):
         d = gmm_source.means_.shape[1]
         K_0, K_1 = gmm_source.means_.shape[0], gmm_target.means_.shape[0]
@@ -1165,7 +1169,7 @@ class scEGOT:
         means = mut
         covariances = St
         weights = pit[0, :]
-        rng = check_random_state(0)
+        rng = check_random_state(seed)
         n_samples_comp = rng.multinomial(n_samples, weights)
         X_interpolation = np.vstack(
             [
@@ -1290,7 +1294,7 @@ class scEGOT:
         self,
         target_gene_name,
         mode="pca",
-        interpolate_interval=10,
+        interpolate_interval=11,
         n_samples=5000,
         x_range=None,
         y_range=None,
@@ -1333,11 +1337,10 @@ class scEGOT:
                 print(
                     f"Interpolating between {self.day_names[i]} and {self.day_names[i + 1]}..."
                 )
-            for j in (
-                tqdm(range(interpolate_interval))
-                if self.verbose
-                else range(interpolate_interval)
-            ):
+            frames = range(int(i > 0), interpolate_interval)
+            for j in tqdm(frames) if self.verbose else frames:
+                if i != 0 and j == 0:
+                    continue
                 X_interpolation = self.make_interpolation_data(
                     self.gmm_models[i],
                     self.gmm_models[i + 1],
@@ -1424,14 +1427,15 @@ class scEGOT:
                 ).T
         for i in range(K_0):
             logprob = gmm_source.score_samples(X_item.values)
-            Nj[:, i] = np.exp(
-                np.log(
-                    multivariate_normal.pdf(
-                        X_item.values, mean=mu_0[i, :], cov=S_0[i, :, :]
+            with np.errstate(divide="ignore"):
+                Nj[:, i] = np.exp(
+                    np.log(
+                        multivariate_normal.pdf(
+                            X_item.values, mean=mu_0[i, :], cov=S_0[i, :, :]
+                        )
                     )
+                    - logprob
                 )
-                - logprob
-            )
         for i in range(K_0):
             for j in range(K_1):
                 barycentric_projection_map += (
@@ -1719,7 +1723,11 @@ class scEGOT:
             if save:
                 grn_graph.write(save_paths[i], format=save_format)
 
-    def calculate_waddington_potential(self, n_neighbors=100):
+    def calculate_waddington_potential(
+        self,
+        n_neighbors=100,
+        knn_mode="pca",
+    ):
         if self.solutions is None:
             self.solutions = self.calculate_solutions(self.gmm_models)
 
@@ -1795,16 +1803,24 @@ class scEGOT:
 
         if self.verbose:
             print("Applying knn ...")
-        knn = kneighbors_graph(
-            X=pd.concat(self.X_pca[:-1]).iloc[:, :2].values,
-            n_neighbors=n_neighbors,
-            mode="distance",
-            metric="euclidean",
-        )
+        if knn_mode == "pca":
+            knn = kneighbors_graph(
+                X=pd.concat(self.X_pca[:-1]).iloc[:, :2].values,
+                n_neighbors=n_neighbors,
+                mode="distance",
+                metric="euclidean",
+            )
+        else:
+            knn = kneighbors_graph(
+                X=pd.concat(self.X_umap[:-1]).iloc[:, :2].values,
+                n_neighbors=n_neighbors,
+                mode="distance",
+                metric="euclidean",
+            )
 
         if self.verbose:
             print("Computing kernel ...")
-        sim = csr_matrix(knn.shape)
+        sim = lil_matrix(knn.shape)
 
         nonzero = knn.nonzero()
         sig = 10
@@ -1919,7 +1935,7 @@ class scEGOT:
         d = np.linalg.norm(m_0 - m_1) ** 2 + np.trace(sigma_0 + sigma_1 - 2 * sigma_010)
         return d
 
-    def egot(self, pi_0, pi_1, mu_0, mu_1, S_0, S_1):
+    def egot(self, pi_0, pi_1, mu_0, mu_1, S_0, S_1, reg=0.01, numItermax=int(1e10)):
         K_0 = mu_0.shape[0]
         K_1 = mu_1.shape[0]
         d = mu_0.shape[1]
@@ -1931,19 +1947,23 @@ class scEGOT:
                 M[k, l] = self.gaussian_w(
                     mu_0[k, :], mu_1[l, :], S_0[k, :, :], S_1[l, :, :]
                 )
-        solution = ot.sinkhorn(
-            pi_0,
-            pi_1,
-            M / M.max(),
-            0.01,
-            method="sinkhorn_epsilon_scaling",
-            numItermax=10000000000,
-            tau=1e8,
-            stopThr=1e-9,
-        )
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=UserWarning, module="ot")
+            solution = ot.sinkhorn(
+                pi_0,
+                pi_1,
+                M / M.max(),
+                reg=reg,
+                method="sinkhorn_epsilon_scaling",
+                numItermax=numItermax,
+                tau=1e8,
+                stopThr=1e-9,
+            )
         return solution
 
-    def calculate_solution(self, gmm_source, gmm_target):
+    def calculate_solution(
+        self, gmm_source, gmm_target, reg=0.01, numItermax=int(1e10)
+    ):
         pi_0, pi_1 = gmm_source.weights_, gmm_target.weights_
         mu_0, mu_1 = gmm_source.means_, gmm_target.means_
         S_0, S_1 = gmm_source.covariances_, gmm_target.covariances_
@@ -1955,19 +1975,29 @@ class scEGOT:
             mu_1,
             S_0,
             S_1,
+            reg,
+            numItermax,
         )
         return solution
 
-    def calculate_solutions(self, gmm_models):
+    def calculate_solutions(self, gmm_models, reg=0.01, numItermax=int(1e10)):
         solutions = []
         for i in range(len(gmm_models) - 1):
-            solutions.append(self.calculate_solution(gmm_models[i], gmm_models[i + 1]))
+            solutions.append(
+                self.calculate_solution(
+                    gmm_models[i], gmm_models[i + 1], reg, numItermax
+                )
+            )
         return solutions
 
-    def calculate_normalized_solutions(self, gmm_models):
+    def calculate_normalized_solutions(
+        self, gmm_models, reg=0.01, numItermax=int(1e10)
+    ):
         solutions_normalized = []
         for i in range(len(gmm_models) - 1):
-            solution = self.calculate_solution(gmm_models[i], gmm_models[i + 1])
+            solution = self.calculate_solution(
+                gmm_models[i], gmm_models[i + 1], reg, numItermax
+            )
             solutions_normalized.append((solution.T / gmm_models[i].weights_).T)
         return solutions_normalized
 
