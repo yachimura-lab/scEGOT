@@ -85,7 +85,7 @@ class scEGOT:
         self.gmm_labels = None
         self.umap_model = None
 
-        self.gene_names = X[0].columns
+        self.gene_names = None
         self.day_names = day_names
 
         self.solutions = None
@@ -129,6 +129,21 @@ class scEGOT:
         X_concated = self._normalize_log1p(X_concated)
         return X_concated
 
+    def _select_marker_genes(self, X_concated, n_select_genes=2000):
+        genes = pd.DataFrame(index=X_concated.columns)
+        mean = X_concated.values.mean(axis=0)
+        mean[mean == 0] = 1e-12
+        dispersion = X_concated.values.var(axis=0) / mean
+        dispersion[dispersion == 0] = np.nan
+        genes["Dispersion"] = dispersion
+        highvar_gene_names = (
+            genes.sort_values(by=["Dispersion"], ascending=False)
+            .head(n_select_genes)
+            .index
+        )
+        highvar_genes = X_concated.loc[:, highvar_gene_names]
+        return highvar_genes
+
     def _split_dataframe_by_row(self, df, row_counts):
         split_indices = list(itertools.accumulate(row_counts))
         df_list = [
@@ -144,6 +159,8 @@ class scEGOT:
         apply_recode=True,
         apply_normalization_log1p=True,
         apply_normalization_umi=True,
+        select_genes=True,
+        n_select_genes=2000,
     ):
         if self.X_pca is not None:
             return self.X_pca, self.pca_model
@@ -164,6 +181,11 @@ class scEGOT:
             if self.verbose:
                 print("Applying log1p normalization...")
             X_concated = self._normalize_log1p(X_concated)
+
+        if select_genes:
+            X_concated = self._select_marker_genes(X_concated, n_select_genes)
+
+        self.gene_names = X_concated.columns
 
         self.X_normalized = self._split_dataframe_by_row(
             X_concated.copy(), [len(x) for x in self.X_raw]
