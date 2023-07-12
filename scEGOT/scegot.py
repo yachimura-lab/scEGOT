@@ -84,6 +84,7 @@ class scEGOT:
         self.gmm_models = None
         self.gmm_labels = None
         self.gmm_labels_modified = None
+        self.gmm_label_converter = None
         self.umap_model = None
 
         self.gene_names = None
@@ -632,14 +633,20 @@ class scEGOT:
         node_info["node_days"] = LabelEncoder().fit_transform(
             self._get_day_names_of_each_node()
         )
-        node_info["cluster_gmm"] = list(
-            itertools.chain.from_iterable(
-                [
-                    list(range(n_components))
-                    for n_components in self.gmm_n_components_list
-                ]
+        if self.gmm_label_converter is None:
+            node_info["cluster_gmm"] = list(
+                itertools.chain.from_iterable(
+                    [
+                        list(range(n_components))
+                        for n_components in self.gmm_n_components_list
+                    ]
+                )
             )
-        )
+        else:
+            node_info["cluster_gmm"] = list(
+                itertools.chain.from_iterable(self.gmm_label_converter)
+            )
+
         node_sortby_weight = (
             node_info.reset_index()
             .groupby("node_days")
@@ -884,9 +891,8 @@ class scEGOT:
             for node in G.nodes():
                 if order is None:
                     pos[node] = (G.nodes[node]["day"], -G.nodes[node]["cluster_gmm"])
-                else order == "weight":
+                else:
                     pos[node] = (G.nodes[node]["day"], -G.nodes[node]["cluster_weight"])
-                    
 
         cmap = "tab10"
         fig, ax = plt.subplots(figsize=(12, 10))
@@ -2090,10 +2096,13 @@ class scEGOT:
     def generate_cluster_names_with_day(self, cluster_names=None):
         if cluster_names is None:
             cluster_names = []
-            for i in range(len(self.gmm_n_components_list)):
-                cluster_names.append(
-                    [f"{j}" for j in range(self.gmm_n_components_list[i])]
-                )
+            if self.gmm_label_converter is None:
+                for i in range(len(self.gmm_n_components_list)):
+                    cluster_names.append(
+                        [f"{j}" for j in range(self.gmm_n_components_list[i])]
+                    )
+            else:
+                cluster_names = self.gmm_label_converter
 
         cluster_names_with_day = []
         for i in range(len(self.day_names)):
@@ -2135,3 +2144,12 @@ class scEGOT:
             gmm_mean_gene_values_per_cluster > 0, 0
         )
         return gmm_mean_gene_values_per_cluster
+
+    def replace_gmm_labels(self, converter):
+        gmm_labels_modified = []
+        for i in range(len(self.gmm_labels)):
+            gmm_labels_modified.append(
+                [converter[i][label] for label in self.gmm_labels[i]]
+            )
+        self.gmm_labels_modified = gmm_labels_modified
+        self.gmm_label_converter = converter
