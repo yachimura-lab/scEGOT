@@ -1889,7 +1889,6 @@ class scEGOT:
     def plot_waddington_potential_surface(
         self,
         waddington_potential,
-        gene_name=None,
         save=False,
         save_path=None,
     ):
@@ -1901,7 +1900,7 @@ class scEGOT:
         day_labels = list(
             itertools.chain.from_iterable(
                 [
-                    [f"day {str(i + 1)}"] * len(self.X_pca[i])
+                    [f"{str(self.day_names[i])}"] * len(self.X_pca[i])
                     for i in range(len(self.X_pca) - 1)
                 ]
             )
