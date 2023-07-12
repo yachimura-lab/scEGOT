@@ -1803,12 +1803,20 @@ class scEGOT:
 
         if self.verbose:
             print("Applying knn ...")
-        knn = kneighbors_graph(
-            X=pd.concat(self.X_pca[:-1]).iloc[:, :2].values,
-            n_neighbors=n_neighbors,
-            mode="distance",
-            metric="euclidean",
-        )
+        if knn_mode == "pca":
+            knn = kneighbors_graph(
+                X=pd.concat(self.X_pca[:-1]).iloc[:, :2].values,
+                n_neighbors=n_neighbors,
+                mode="distance",
+                metric="euclidean",
+            )
+        else:
+            knn = kneighbors_graph(
+                X=pd.concat(self.X_umap[:-1]).iloc[:, :2].values,
+                n_neighbors=n_neighbors,
+                mode="distance",
+                metric="euclidean",
+            )
 
         if self.verbose:
             print("Computing kernel ...")
