@@ -83,6 +83,7 @@ class scEGOT:
         self.pca_model = None
         self.gmm_models = None
         self.gmm_labels = None
+        self.gmm_labels_modified = None
         self.umap_model = None
 
         self.gene_names = None
@@ -306,6 +307,7 @@ class scEGOT:
         if self.gmm_models is None:
             self.gmm_models = gmm_models
         self.gmm_labels = gmm_labels
+        self.gmm_labels_modified = gmm_labels
 
         return gmm_models, gmm_labels
 
@@ -417,7 +419,7 @@ class scEGOT:
                 x_range,
                 y_range,
                 figure_labels,
-                self.gmm_labels[i],
+                self.gmm_labels_modified[i],
                 self.gmm_n_components_list[i],
                 cmap,
             )
@@ -858,7 +860,8 @@ class scEGOT:
         self, G, plot_type="normal", order=None, save=False, save_path=None
     ):
         """
-        plot_type should be "normal" or "hierarchy"
+        plot_type = "normal" or "hierarchy"
+        order = None or "weight"
         """
         if save and save_path is None:
             save_path = "./simple_cell_state_graph.png"
@@ -880,8 +883,9 @@ class scEGOT:
             for node in G.nodes():
                 if order is None:
                     pos[node] = (G.nodes[node]["day"], -G.nodes[node]["cluster_gmm"])
-                elif order == "weight":
+                else order == "weight":
                     pos[node] = (G.nodes[node]["day"], -G.nodes[node]["cluster_weight"])
+                    
 
         cmap = "tab10"
         fig, ax = plt.subplots(figsize=(12, 10))
@@ -1598,7 +1602,7 @@ class scEGOT:
         if color_points == "gmm":
             label_sum = 0
             for i in range(len(self.gmm_labels)):
-                colors += [label + label_sum for label in self.gmm_labels[i]]
+                colors += [label + label_sum for label in self.gmm_labels_[i]]
                 label_sum += self.gmm_n_components_list[i]
         elif color_points == "day":
             for i in range(len(X)):
