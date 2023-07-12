@@ -83,6 +83,8 @@ class scEGOT:
         self.pca_model = None
         self.gmm_models = None
         self.gmm_labels = None
+        self.gmm_labels_modified = None
+        self.gmm_label_converter = None
         self.umap_model = None
 
         self.gene_names = None
@@ -306,6 +308,7 @@ class scEGOT:
         if self.gmm_models is None:
             self.gmm_models = gmm_models
         self.gmm_labels = gmm_labels
+        self.gmm_labels_modified = gmm_labels
 
         return gmm_models, gmm_labels
 
@@ -318,6 +321,7 @@ class scEGOT:
         ]
         if self.gmm_labels is None:
             self.gmm_labels = gmm_labels
+            self.gmm_labels_modified = gmm_labels
         return gmm_labels
 
     def _plot_gmm_predictions(
@@ -417,7 +421,7 @@ class scEGOT:
                 x_range,
                 y_range,
                 figure_labels,
-                self.gmm_labels[i],
+                self.gmm_labels_modified[i],
                 self.gmm_n_components_list[i],
                 cmap,
             )
@@ -629,7 +633,29 @@ class scEGOT:
         node_info["node_days"] = LabelEncoder().fit_transform(
             self._get_day_names_of_each_node()
         )
-        node_info["cluster"] = list(
+        if self.gmm_label_converter is None:
+            node_info["cluster_gmm"] = list(
+                itertools.chain.from_iterable(
+                    [
+                        list(range(n_components))
+                        for n_components in self.gmm_n_components_list
+                    ]
+                )
+            )
+        else:
+            node_info["cluster_gmm"] = list(
+                itertools.chain.from_iterable(self.gmm_label_converter)
+            )
+
+        node_sortby_weight = (
+            node_info.reset_index()
+            .groupby("node_days")
+            .apply(lambda x: x.sort_values("node_weights", ascending=False))
+        )
+        node_info = pd.DataFrame(
+            node_sortby_weight.values, columns=node_sortby_weight.columns
+        )
+        node_info["cluster_weight"] = list(
             itertools.chain.from_iterable(
                 [
                     list(range(n_components))
@@ -637,6 +663,7 @@ class scEGOT:
                 ]
             )
         )
+        node_info.set_index("index", inplace=True)
 
         for row in node_info.itertuples():
             G.add_node(
@@ -644,7 +671,8 @@ class scEGOT:
                 weight=row.node_weights,
                 day=row.node_days,
                 pos=(row.xpos, row.ypos),
-                cluster=row.cluster,
+                cluster_gmm=row.cluster_gmm,
+                cluster_weight=row.cluster_weight,
             )
 
         return G
@@ -837,10 +865,11 @@ class scEGOT:
         )
 
     def plot_simple_cell_state_graph(
-        self, G, plot_type="normal", save=False, save_path=None
+        self, G, plot_type="normal", order=None, save=False, save_path=None
     ):
         """
-        plot_type should be "normal" or "align"
+        plot_type = "normal" or "hierarchy"
+        order = None or "weight"
         """
         if save and save_path is None:
             save_path = "./simple_cell_state_graph.png"
@@ -860,7 +889,10 @@ class scEGOT:
         else:
             pos = {}
             for node in G.nodes():
-                pos[node] = (G.nodes[node]["day"], -G.nodes[node]["cluster"])
+                if order is None:
+                    pos[node] = (G.nodes[node]["day"], -G.nodes[node]["cluster_gmm"])
+                else:
+                    pos[node] = (G.nodes[node]["day"], -G.nodes[node]["cluster_weight"])
 
         cmap = "tab10"
         fig, ax = plt.subplots(figsize=(12, 10))
@@ -1577,7 +1609,7 @@ class scEGOT:
         if color_points == "gmm":
             label_sum = 0
             for i in range(len(self.gmm_labels)):
-                colors += [label + label_sum for label in self.gmm_labels[i]]
+                colors += [label + label_sum for label in self.gmm_labels_modified[i]]
                 label_sum += self.gmm_n_components_list[i]
         elif color_points == "day":
             for i in range(len(X)):
@@ -2064,10 +2096,13 @@ class scEGOT:
     def generate_cluster_names_with_day(self, cluster_names=None):
         if cluster_names is None:
             cluster_names = []
-            for i in range(len(self.gmm_n_components_list)):
-                cluster_names.append(
-                    [f"{j}" for j in range(self.gmm_n_components_list[i])]
-                )
+            if self.gmm_label_converter is None:
+                for i in range(len(self.gmm_n_components_list)):
+                    cluster_names.append(
+                        [f"{j}" for j in range(self.gmm_n_components_list[i])]
+                    )
+            else:
+                cluster_names = self.gmm_label_converter
 
         cluster_names_with_day = []
         for i in range(len(self.day_names)):
@@ -2109,3 +2144,12 @@ class scEGOT:
             gmm_mean_gene_values_per_cluster > 0, 0
         )
         return gmm_mean_gene_values_per_cluster
+
+    def replace_gmm_labels(self, converter):
+        gmm_labels_modified = []
+        for i in range(len(self.gmm_labels)):
+            gmm_labels_modified.append(
+                [converter[i][label] for label in self.gmm_labels[i]]
+            )
+        self.gmm_labels_modified = gmm_labels_modified
+        self.gmm_label_converter = converter
