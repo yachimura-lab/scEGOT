@@ -840,7 +840,7 @@ class scEGOT:
         self, G, plot_type="normal", save=False, save_path=None
     ):
         """
-        plot_type should be "normal" or "align"
+        plot_type should be "normal" or "hierarchy"
         """
         if save and save_path is None:
             save_path = "./simple_cell_state_graph.png"
