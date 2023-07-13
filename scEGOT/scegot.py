@@ -131,13 +131,13 @@ class scEGOT:
         X_concated = self._normalize_log1p(X_concated)
         return X_concated
 
-    def _select_marker_genes(self, X_concated, n_select_genes=2000):
+    def _select_highly_variable_genes(self, X_concated, n_select_genes=2000):
         genes = pd.DataFrame(index=X_concated.columns)
         mean = X_concated.values.mean(axis=0)
         mean[mean == 0] = 1e-12
-        dispersion = X_concated.values.var(axis=0) / mean
-        dispersion[dispersion == 0] = np.nan
-        genes["Dispersion"] = dispersion
+        var_norm = X_concated.values.var(axis=0) / mean
+        var_norm[var_norm == 0] = np.nan
+        genes["Dispersion"] = var_norm
         highvar_gene_names = (
             genes.sort_values(by=["Dispersion"], ascending=False)
             .head(n_select_genes)
@@ -185,7 +185,7 @@ class scEGOT:
             X_concated = self._normalize_log1p(X_concated)
 
         if select_genes:
-            X_concated = self._select_marker_genes(X_concated, n_select_genes)
+            X_concated = self._select_highly_variable_genes(X_concated, n_select_genes)
 
         self.gene_names = X_concated.columns
 
