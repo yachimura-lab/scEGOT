@@ -18,6 +18,7 @@ from sklearn.decomposition import PCA
 import umap.umap_ as umap
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
+from matplotlib.colors import ListedColormap
 from matplotlib import patheffects
 import networkx as nx
 import plotly.express as px
@@ -865,10 +866,10 @@ class scEGOT:
         )
 
     def plot_simple_cell_state_graph(
-        self, G, plot_type="normal", order=None, save=False, save_path=None
+        self, G, layout="normal", order=None, save=False, save_path=None
     ):
         """
-        plot_type = "normal" or "hierarchy"
+        layout = "normal" or "hierarchy"
         order = None or "weight"
         """
         if save and save_path is None:
@@ -876,7 +877,6 @@ class scEGOT:
 
         node_color = [node["day"] for node in G.nodes.values()]
 
-        cmap = plt.cm.get_cmap("Reds")
         color_data = np.array(
             [
                 G.edges[edge]["edge_weights"] * G.nodes[edge[0]]["weight"]
@@ -884,7 +884,7 @@ class scEGOT:
             ]
         )
 
-        if plot_type == "normal":
+        if layout == "normal":
             pos = {node: G.nodes[node]["pos"] for node in G.nodes()}
         else:
             pos = {}
@@ -894,8 +894,12 @@ class scEGOT:
                 else:
                     pos[node] = (G.nodes[node]["day"], -G.nodes[node]["cluster_weight"])
 
-        cmap = "tab10"
         fig, ax = plt.subplots(figsize=(12, 10))
+        node_cmap = (
+            plt.cm.tab10(np.arange(10))
+            if len(self.X_raw) <= 10
+            else plt.cm.tab20(np.arange(20))
+        )
         nx.draw(
             G,
             pos,
@@ -906,7 +910,7 @@ class scEGOT:
             arrows=True,
             arrowsize=30,
             linewidths=2,
-            cmap=cmap,
+            cmap=ListedColormap(node_cmap[: len(self.X_raw)]),
             edge_cmap=plt.cm.Reds,
             ax=ax,
             alpha=1,
