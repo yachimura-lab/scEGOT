@@ -77,9 +77,10 @@ class scEGOT:
         self.target_sum = target_sum
 
         self.X_raw = [df.copy() for df in X]
+        self.X_recode = None
+        self.X_normalized = None
         self.X_pca = None
         self.X_umap = None
-        self.X_normalized = None
 
         self.pca_model = None
         self.gmm_models = None
@@ -184,6 +185,10 @@ class scEGOT:
             if self.verbose:
                 print("Applying log1p normalization...")
             X_concated = self._normalize_log1p(X_concated)
+
+        self.X_recode = self._split_dataframe_by_row(
+            X_concated.copy(), [len(x) for x in self.X_raw]
+        )
 
         if select_genes:
             X_concated = self._select_highly_variable_genes(X_concated, n_select_genes)
