@@ -1,5 +1,6 @@
 import itertools
 import ot
+import warnings
 import numpy as np
 import pandas as pd
 import anndata
@@ -7,7 +8,7 @@ import cellmap
 from scipy import interpolate
 import scipy.linalg as spl
 from scipy.stats import multivariate_normal, zscore
-from scipy.sparse import csr_matrix, csc_matrix, linalg
+from scipy.sparse import csc_matrix, linalg, lil_matrix
 from sklearn import linear_model
 from sklearn.utils import check_random_state
 from sklearn.preprocessing import LabelEncoder
@@ -17,6 +18,7 @@ from sklearn.decomposition import PCA
 import umap.umap_ as umap
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
+from matplotlib.colors import ListedColormap
 from matplotlib import patheffects
 import networkx as nx
 import plotly.express as px
@@ -75,16 +77,19 @@ class scEGOT:
         self.target_sum = target_sum
 
         self.X_raw = [df.copy() for df in X]
+        self.X_recode = None
+        self.X_normalized = None
         self.X_pca = None
         self.X_umap = None
-        self.X_normalized = None
 
         self.pca_model = None
         self.gmm_models = None
         self.gmm_labels = None
+        self.gmm_labels_modified = None
+        self.gmm_label_converter = None
         self.umap_model = None
 
-        self.gene_names = X[0].columns
+        self.gene_names = None
         self.day_names = day_names
 
         self.solutions = None
@@ -106,7 +111,7 @@ class scEGOT:
         X_concated = pd.DataFrame(
             pca_model.fit_transform(X_concated.values),
             index=X_concated.index,
-            columns=["PCA{}".format(i + 1) for i in range(self.pca_n_components)],
+            columns=["PC{}".format(i + 1) for i in range(self.pca_n_components)],
         )
         return X_concated, pca_model
 
@@ -128,6 +133,21 @@ class scEGOT:
         X_concated = self._normalize_log1p(X_concated)
         return X_concated
 
+    def _select_highly_variable_genes(self, X_concated, n_select_genes=2000):
+        genes = pd.DataFrame(index=X_concated.columns)
+        mean = X_concated.values.mean(axis=0)
+        mean[mean == 0] = 1e-12
+        var_norm = X_concated.values.var(axis=0) / mean
+        var_norm[var_norm == 0] = np.nan
+        genes["Dispersion"] = var_norm
+        highvar_gene_names = (
+            genes.sort_values(by=["Dispersion"], ascending=False)
+            .head(n_select_genes)
+            .index
+        )
+        highvar_genes = X_concated.loc[:, highvar_gene_names]
+        return highvar_genes
+
     def _split_dataframe_by_row(self, df, row_counts):
         split_indices = list(itertools.accumulate(row_counts))
         df_list = [
@@ -143,6 +163,8 @@ class scEGOT:
         apply_recode=True,
         apply_normalization_log1p=True,
         apply_normalization_umi=True,
+        select_genes=True,
+        n_select_genes=2000,
     ):
         if self.X_pca is not None:
             return self.X_pca, self.pca_model
@@ -163,6 +185,15 @@ class scEGOT:
             if self.verbose:
                 print("Applying log1p normalization...")
             X_concated = self._normalize_log1p(X_concated)
+
+        self.X_recode = self._split_dataframe_by_row(
+            X_concated.copy(), [len(x) for x in self.X_raw]
+        )
+
+        if select_genes:
+            X_concated = self._select_highly_variable_genes(X_concated, n_select_genes)
+
+        self.gene_names = X_concated.columns
 
         self.X_normalized = self._split_dataframe_by_row(
             X_concated.copy(), [len(x) for x in self.X_raw]
@@ -283,6 +314,7 @@ class scEGOT:
         if self.gmm_models is None:
             self.gmm_models = gmm_models
         self.gmm_labels = gmm_labels
+        self.gmm_labels_modified = gmm_labels
 
         return gmm_models, gmm_labels
 
@@ -295,6 +327,7 @@ class scEGOT:
         ]
         if self.gmm_labels is None:
             self.gmm_labels = gmm_labels
+            self.gmm_labels_modified = gmm_labels
         return gmm_labels
 
     def _plot_gmm_predictions(
@@ -394,7 +427,7 @@ class scEGOT:
                 x_range,
                 y_range,
                 figure_labels,
-                self.gmm_labels[i],
+                self.gmm_labels_modified[i],
                 self.gmm_n_components_list[i],
                 cmap,
             )
@@ -455,7 +488,10 @@ class scEGOT:
             print(
                 f"Interpolating between {self.day_names[i]} and {self.day_names[i + 1]}..."
             )
-            for j in tqdm(range(11)) if self.verbose else range(11):
+            frames = range(int(i > 0), interpolate_interval)
+            for j in tqdm(frames) if self.verbose else frames:
+                if i != 0 and j == 0:
+                    continue
                 im = self._interpolation_contour(
                     self.gmm_models[i],
                     self.gmm_models[i + 1],
@@ -603,7 +639,29 @@ class scEGOT:
         node_info["node_days"] = LabelEncoder().fit_transform(
             self._get_day_names_of_each_node()
         )
-        node_info["cluster"] = list(
+        if self.gmm_label_converter is None:
+            node_info["cluster_gmm"] = list(
+                itertools.chain.from_iterable(
+                    [
+                        list(range(n_components))
+                        for n_components in self.gmm_n_components_list
+                    ]
+                )
+            )
+        else:
+            node_info["cluster_gmm"] = list(
+                itertools.chain.from_iterable(self.gmm_label_converter)
+            )
+
+        node_sortby_weight = (
+            node_info.reset_index()
+            .groupby("node_days")
+            .apply(lambda x: x.sort_values("node_weights", ascending=False))
+        )
+        node_info = pd.DataFrame(
+            node_sortby_weight.values, columns=node_sortby_weight.columns
+        )
+        node_info["cluster_weight"] = list(
             itertools.chain.from_iterable(
                 [
                     list(range(n_components))
@@ -611,6 +669,7 @@ class scEGOT:
                 ]
             )
         )
+        node_info.set_index("index", inplace=True)
 
         for row in node_info.itertuples():
             G.add_node(
@@ -618,7 +677,8 @@ class scEGOT:
                 weight=row.node_weights,
                 day=row.node_days,
                 pos=(row.xpos, row.ypos),
-                cluster=row.cluster,
+                cluster_gmm=row.cluster_gmm,
+                cluster_weight=row.cluster_weight,
             )
 
         return G
@@ -811,17 +871,17 @@ class scEGOT:
         )
 
     def plot_simple_cell_state_graph(
-        self, G, plot_type="normal", save=False, save_path=None
+        self, G, layout="normal", order=None, save=False, save_path=None
     ):
         """
-        plot_type should be "normal" or "align"
+        layout = "normal" or "hierarchy"
+        order = None or "weight"
         """
         if save and save_path is None:
             save_path = "./simple_cell_state_graph.png"
 
         node_color = [node["day"] for node in G.nodes.values()]
 
-        cmap = plt.cm.get_cmap("Reds")
         color_data = np.array(
             [
                 G.edges[edge]["edge_weights"] * G.nodes[edge[0]]["weight"]
@@ -829,15 +889,22 @@ class scEGOT:
             ]
         )
 
-        if plot_type == "normal":
+        if layout == "normal":
             pos = {node: G.nodes[node]["pos"] for node in G.nodes()}
         else:
             pos = {}
             for node in G.nodes():
-                pos[node] = (G.nodes[node]["day"], -G.nodes[node]["cluster"])
+                if order is None:
+                    pos[node] = (G.nodes[node]["day"], -G.nodes[node]["cluster_gmm"])
+                else:
+                    pos[node] = (G.nodes[node]["day"], -G.nodes[node]["cluster_weight"])
 
-        cmap = "tab10"
         fig, ax = plt.subplots(figsize=(12, 10))
+        node_cmap = (
+            plt.cm.tab10(np.arange(10))
+            if len(self.X_raw) <= 10
+            else plt.cm.tab20(np.arange(20))
+        )
         nx.draw(
             G,
             pos,
@@ -848,7 +915,7 @@ class scEGOT:
             arrows=True,
             arrowsize=30,
             linewidths=2,
-            cmap=cmap,
+            cmap=ListedColormap(node_cmap[: len(self.X_raw)]),
             edge_cmap=plt.cm.Reds,
             ax=ax,
             alpha=1,
@@ -1138,7 +1205,7 @@ class scEGOT:
             fig.write_html(save_path)
 
     def make_interpolation_data(
-        self, gmm_source, gmm_target, t, columns=None, n_samples=2000
+        self, gmm_source, gmm_target, t, columns=None, n_samples=2000, seed=0
     ):
         d = gmm_source.means_.shape[1]
         K_0, K_1 = gmm_source.means_.shape[0], gmm_target.means_.shape[0]
@@ -1165,7 +1232,7 @@ class scEGOT:
         means = mut
         covariances = St
         weights = pit[0, :]
-        rng = check_random_state(0)
+        rng = check_random_state(seed)
         n_samples_comp = rng.multinomial(n_samples, weights)
         X_interpolation = np.vstack(
             [
@@ -1290,7 +1357,7 @@ class scEGOT:
         self,
         target_gene_name,
         mode="pca",
-        interpolate_interval=10,
+        interpolate_interval=11,
         n_samples=5000,
         x_range=None,
         y_range=None,
@@ -1333,11 +1400,10 @@ class scEGOT:
                 print(
                     f"Interpolating between {self.day_names[i]} and {self.day_names[i + 1]}..."
                 )
-            for j in (
-                tqdm(range(interpolate_interval))
-                if self.verbose
-                else range(interpolate_interval)
-            ):
+            frames = range(int(i > 0), interpolate_interval)
+            for j in tqdm(frames) if self.verbose else frames:
+                if i != 0 and j == 0:
+                    continue
                 X_interpolation = self.make_interpolation_data(
                     self.gmm_models[i],
                     self.gmm_models[i + 1],
@@ -1424,21 +1490,21 @@ class scEGOT:
                 ).T
         for i in range(K_0):
             logprob = gmm_source.score_samples(X_item.values)
-            Nj[:, i] = np.exp(
-                np.log(
-                    multivariate_normal.pdf(
-                        X_item.values, mean=mu_0[i, :], cov=S_0[i, :, :]
+            with np.errstate(divide="ignore"):
+                Nj[:, i] = np.exp(
+                    np.log(
+                        multivariate_normal.pdf(
+                            X_item.values, mean=mu_0[i, :], cov=S_0[i, :, :]
+                        )
                     )
+                    - logprob
                 )
-                - logprob
-            )
         for i in range(K_0):
             for j in range(K_1):
                 barycentric_projection_map += (
                     solution[i, j] * Nj[:, i].T * T[i, j, :, :]
                 )
-        w = barycentric_projection_map.T
-        velo = w - X_item.values
+        velo = barycentric_projection_map.T - X_item.values
         return velo
 
     def calculate_cell_velocities(self, mode="pca"):
@@ -1463,7 +1529,11 @@ class scEGOT:
                 gmm_source, gmm_target, self.X_pca[i], self.solutions[i]
             )
             if mode == "umap":
-                velocity = self.umap_model.transform(velocity)
+                # velocity = self.umap_model.transform(velocity)
+                velocity = (
+                    self.umap_model.transform(velocity + self.X_pca[i].values)
+                    - self.X_umap[i]
+                )
 
             velocity = pd.DataFrame(
                 velocity,
@@ -1548,7 +1618,7 @@ class scEGOT:
         if color_points == "gmm":
             label_sum = 0
             for i in range(len(self.gmm_labels)):
-                colors += [label + label_sum for label in self.gmm_labels[i]]
+                colors += [label + label_sum for label in self.gmm_labels_modified[i]]
                 label_sum += self.gmm_n_components_list[i]
         elif color_points == "day":
             for i in range(len(X)):
@@ -1719,7 +1789,11 @@ class scEGOT:
             if save:
                 grn_graph.write(save_paths[i], format=save_format)
 
-    def calculate_waddington_potential(self, n_neighbors=100):
+    def calculate_waddington_potential(
+        self,
+        n_neighbors=100,
+        knn_mode="pca",
+    ):
         if self.solutions is None:
             self.solutions = self.calculate_solutions(self.gmm_models)
 
@@ -1795,16 +1869,24 @@ class scEGOT:
 
         if self.verbose:
             print("Applying knn ...")
-        knn = kneighbors_graph(
-            X=pd.concat(self.X_pca[:-1]).iloc[:, :2].values,
-            n_neighbors=n_neighbors,
-            mode="distance",
-            metric="euclidean",
-        )
+        if knn_mode == "pca":
+            knn = kneighbors_graph(
+                X=pd.concat(self.X_pca[:-1]).iloc[:, :2].values,
+                n_neighbors=n_neighbors,
+                mode="distance",
+                metric="euclidean",
+            )
+        else:
+            knn = kneighbors_graph(
+                X=pd.concat(self.X_umap[:-1]).iloc[:, :2].values,
+                n_neighbors=n_neighbors,
+                mode="distance",
+                metric="euclidean",
+            )
 
         if self.verbose:
             print("Computing kernel ...")
-        sim = csr_matrix(knn.shape)
+        sim = lil_matrix(knn.shape)
 
         nonzero = knn.nonzero()
         sig = 10
@@ -1873,19 +1955,18 @@ class scEGOT:
     def plot_waddington_potential_surface(
         self,
         waddington_potential,
-        gene_name=None,
         save=False,
         save_path=None,
     ):
         if save and save_path is None:
             save_path = "./wadding_potential_surface"
-        if save_path.split(".")[-1] == "html":
+        if save_path is not None and save_path.split(".")[-1] == "html":
             save_path = save_path[:-5]
 
         day_labels = list(
             itertools.chain.from_iterable(
                 [
-                    [f"day {str(i + 1)}"] * len(self.X_pca[i])
+                    [f"{str(self.day_names[i])}"] * len(self.X_pca[i])
                     for i in range(len(self.X_pca) - 1)
                 ]
             )
@@ -1919,7 +2000,7 @@ class scEGOT:
         d = np.linalg.norm(m_0 - m_1) ** 2 + np.trace(sigma_0 + sigma_1 - 2 * sigma_010)
         return d
 
-    def egot(self, pi_0, pi_1, mu_0, mu_1, S_0, S_1):
+    def egot(self, pi_0, pi_1, mu_0, mu_1, S_0, S_1, reg=0.01, numItermax=int(1e10)):
         K_0 = mu_0.shape[0]
         K_1 = mu_1.shape[0]
         d = mu_0.shape[1]
@@ -1931,19 +2012,23 @@ class scEGOT:
                 M[k, l] = self.gaussian_w(
                     mu_0[k, :], mu_1[l, :], S_0[k, :, :], S_1[l, :, :]
                 )
-        solution = ot.sinkhorn(
-            pi_0,
-            pi_1,
-            M / M.max(),
-            0.01,
-            method="sinkhorn_epsilon_scaling",
-            numItermax=10000000000,
-            tau=1e8,
-            stopThr=1e-9,
-        )
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=UserWarning, module="ot")
+            solution = ot.sinkhorn(
+                pi_0,
+                pi_1,
+                M / M.max(),
+                reg=reg,
+                method="sinkhorn_epsilon_scaling",
+                numItermax=numItermax,
+                tau=1e8,
+                stopThr=1e-9,
+            )
         return solution
 
-    def calculate_solution(self, gmm_source, gmm_target):
+    def calculate_solution(
+        self, gmm_source, gmm_target, reg=0.01, numItermax=int(1e10)
+    ):
         pi_0, pi_1 = gmm_source.weights_, gmm_target.weights_
         mu_0, mu_1 = gmm_source.means_, gmm_target.means_
         S_0, S_1 = gmm_source.covariances_, gmm_target.covariances_
@@ -1955,19 +2040,29 @@ class scEGOT:
             mu_1,
             S_0,
             S_1,
+            reg,
+            numItermax,
         )
         return solution
 
-    def calculate_solutions(self, gmm_models):
+    def calculate_solutions(self, gmm_models, reg=0.01, numItermax=int(1e10)):
         solutions = []
         for i in range(len(gmm_models) - 1):
-            solutions.append(self.calculate_solution(gmm_models[i], gmm_models[i + 1]))
+            solutions.append(
+                self.calculate_solution(
+                    gmm_models[i], gmm_models[i + 1], reg, numItermax
+                )
+            )
         return solutions
 
-    def calculate_normalized_solutions(self, gmm_models):
+    def calculate_normalized_solutions(
+        self, gmm_models, reg=0.01, numItermax=int(1e10)
+    ):
         solutions_normalized = []
         for i in range(len(gmm_models) - 1):
-            solution = self.calculate_solution(gmm_models[i], gmm_models[i + 1])
+            solution = self.calculate_solution(
+                gmm_models[i], gmm_models[i + 1], reg, numItermax
+            )
             solutions_normalized.append((solution.T / gmm_models[i].weights_).T)
         return solutions_normalized
 
@@ -2010,10 +2105,13 @@ class scEGOT:
     def generate_cluster_names_with_day(self, cluster_names=None):
         if cluster_names is None:
             cluster_names = []
-            for i in range(len(self.gmm_n_components_list)):
-                cluster_names.append(
-                    [f"{j}" for j in range(self.gmm_n_components_list[i])]
-                )
+            if self.gmm_label_converter is None:
+                for i in range(len(self.gmm_n_components_list)):
+                    cluster_names.append(
+                        [f"{j}" for j in range(self.gmm_n_components_list[i])]
+                    )
+            else:
+                cluster_names = self.gmm_label_converter
 
         cluster_names_with_day = []
         for i in range(len(self.day_names)):
@@ -2055,3 +2153,12 @@ class scEGOT:
             gmm_mean_gene_values_per_cluster > 0, 0
         )
         return gmm_mean_gene_values_per_cluster
+
+    def replace_gmm_labels(self, converter):
+        gmm_labels_modified = []
+        for i in range(len(self.gmm_labels)):
+            gmm_labels_modified.append(
+                [converter[i][label] for label in self.gmm_labels[i]]
+            )
+        self.gmm_labels_modified = gmm_labels_modified
+        self.gmm_label_converter = converter
