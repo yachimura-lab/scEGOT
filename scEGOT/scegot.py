@@ -18,6 +18,7 @@ from sklearn.decomposition import PCA
 import umap.umap_ as umap
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
+from matplotlib.colors import ListedColormap
 from matplotlib import patheffects
 import networkx as nx
 import plotly.express as px
@@ -76,9 +77,10 @@ class scEGOT:
         self.target_sum = target_sum
 
         self.X_raw = [df.copy() for df in X]
+        self.X_recode = None
+        self.X_normalized = None
         self.X_pca = None
         self.X_umap = None
-        self.X_normalized = None
 
         self.pca_model = None
         self.gmm_models = None
@@ -131,13 +133,13 @@ class scEGOT:
         X_concated = self._normalize_log1p(X_concated)
         return X_concated
 
-    def _select_marker_genes(self, X_concated, n_select_genes=2000):
+    def _select_highly_variable_genes(self, X_concated, n_select_genes=2000):
         genes = pd.DataFrame(index=X_concated.columns)
         mean = X_concated.values.mean(axis=0)
         mean[mean == 0] = 1e-12
-        dispersion = X_concated.values.var(axis=0) / mean
-        dispersion[dispersion == 0] = np.nan
-        genes["Dispersion"] = dispersion
+        var_norm = X_concated.values.var(axis=0) / mean
+        var_norm[var_norm == 0] = np.nan
+        genes["Dispersion"] = var_norm
         highvar_gene_names = (
             genes.sort_values(by=["Dispersion"], ascending=False)
             .head(n_select_genes)
@@ -184,8 +186,12 @@ class scEGOT:
                 print("Applying log1p normalization...")
             X_concated = self._normalize_log1p(X_concated)
 
+        self.X_recode = self._split_dataframe_by_row(
+            X_concated.copy(), [len(x) for x in self.X_raw]
+        )
+
         if select_genes:
-            X_concated = self._select_marker_genes(X_concated, n_select_genes)
+            X_concated = self._select_highly_variable_genes(X_concated, n_select_genes)
 
         self.gene_names = X_concated.columns
 
@@ -865,10 +871,10 @@ class scEGOT:
         )
 
     def plot_simple_cell_state_graph(
-        self, G, plot_type="normal", order=None, save=False, save_path=None
+        self, G, layout="normal", order=None, save=False, save_path=None
     ):
         """
-        plot_type = "normal" or "hierarchy"
+        layout = "normal" or "hierarchy"
         order = None or "weight"
         """
         if save and save_path is None:
@@ -876,7 +882,6 @@ class scEGOT:
 
         node_color = [node["day"] for node in G.nodes.values()]
 
-        cmap = plt.cm.get_cmap("Reds")
         color_data = np.array(
             [
                 G.edges[edge]["edge_weights"] * G.nodes[edge[0]]["weight"]
@@ -884,7 +889,7 @@ class scEGOT:
             ]
         )
 
-        if plot_type == "normal":
+        if layout == "normal":
             pos = {node: G.nodes[node]["pos"] for node in G.nodes()}
         else:
             pos = {}
@@ -894,8 +899,12 @@ class scEGOT:
                 else:
                     pos[node] = (G.nodes[node]["day"], -G.nodes[node]["cluster_weight"])
 
-        cmap = "tab10"
         fig, ax = plt.subplots(figsize=(12, 10))
+        node_cmap = (
+            plt.cm.tab10(np.arange(10))
+            if len(self.X_raw) <= 10
+            else plt.cm.tab20(np.arange(20))
+        )
         nx.draw(
             G,
             pos,
@@ -906,7 +915,7 @@ class scEGOT:
             arrows=True,
             arrowsize=30,
             linewidths=2,
-            cmap=cmap,
+            cmap=ListedColormap(node_cmap[: len(self.X_raw)]),
             edge_cmap=plt.cm.Reds,
             ax=ax,
             alpha=1,
