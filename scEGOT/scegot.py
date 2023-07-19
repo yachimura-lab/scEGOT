@@ -137,9 +137,9 @@ class scEGOT:
         mean[mean == 0] = 1e-12
         var_norm = X_concated.values.var(axis=0) / mean
         var_norm[var_norm == 0] = np.nan
-        genes["Dispersion"] = var_norm
+        genes["dispersion"] = var_norm
         highvar_gene_names = (
-            genes.sort_values(by=["Dispersion"], ascending=False)
+            genes.sort_values(by=["dispersion"], ascending=False)
             .head(n_select_genes)
             .index
         )
