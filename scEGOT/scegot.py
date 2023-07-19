@@ -63,7 +63,6 @@ class scEGOT:
         day_names,
         *,
         umap_n_components=None,
-        umap_n_neighbors=None,
         verbose=True,
         target_sum=1e4,
     ):
@@ -71,7 +70,6 @@ class scEGOT:
         self.gmm_n_components_list = gmm_n_components_list
 
         self.umap_n_components = umap_n_components
-        self.umap_n_neighbors = umap_n_neighbors
         self.verbose = verbose
 
         self.target_sum = target_sum
@@ -218,12 +216,13 @@ class scEGOT:
     def _apply_umap_to_concated_data(
         self,
         X_concated,
+        n_neighbors,
         random_state=None,
         min_dist=0.8,
     ):
         umap_model = umap.UMAP(
             n_components=self.umap_n_components,
-            n_neighbors=self.umap_n_neighbors,
+            n_neighbors=n_neighbors,
             random_state=random_state,
             min_dist=min_dist,
         )
@@ -234,13 +233,13 @@ class scEGOT:
         )
         return X_concated, umap_model
 
-    def apply_umap(self, random_state=None, min_dist=0.8):
+    def apply_umap(self, n_neighbors, random_state=None, min_dist=0.8):
         if self.X_umap is not None:
             return self.X_umap, self.umap_model
 
         X_concated = pd.concat(self.X_pca)
         X_concated, umap_model = self._apply_umap_to_concated_data(
-            X_concated, random_state, min_dist
+            X_concated, n_neighbors, random_state, min_dist
         )
         X = self._split_dataframe_by_row(X_concated, [len(x) for x in self.X_raw])
 
