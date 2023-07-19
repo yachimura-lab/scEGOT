@@ -218,7 +218,7 @@ class scEGOT:
         X_concated,
         n_neighbors,
         random_state=None,
-        min_dist=0.8,
+        min_dist=0.1,
     ):
         umap_model = umap.UMAP(
             n_components=self.umap_n_components,
@@ -233,7 +233,7 @@ class scEGOT:
         )
         return X_concated, umap_model
 
-    def apply_umap(self, n_neighbors, random_state=None, min_dist=0.8):
+    def apply_umap(self, n_neighbors, random_state=None, min_dist=0.1):
         if self.X_umap is not None:
             return self.X_umap, self.umap_model
 
