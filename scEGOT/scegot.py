@@ -615,7 +615,7 @@ class scEGOT:
         self,
         cluster_names,
         mode="pca",
-        thresh=0.05,
+        threshold=0.05,
     ):
         if mode not in ["pca", "umap"]:
             raise ValueError("The parameter 'mode' should be 'pca' or 'umap'.")
@@ -626,7 +626,7 @@ class scEGOT:
         if mode == "umap":
             gmm_means_flattened = self.umap_model.transform(gmm_means_flattened)
 
-        cell_state_edge_list = self._get_cell_state_edge_list(cluster_names, thresh)
+        cell_state_edge_list = self._get_cell_state_edge_list(cluster_names, threshold)
         G = nx.from_pandas_edgelist(
             cell_state_edge_list,
             source="source",
@@ -1744,7 +1744,7 @@ class scEGOT:
         if save:
             plt.savefig(save_path)
 
-    def calculate_grns(self, alpha_range=(-2, 2)):
+    def calculate_grns(self, selected_clusters=None, alpha_range=(-2, 2)):
         grns, ridge_cvs = [], []
 
         if self.solutions is None:
@@ -1764,13 +1764,24 @@ class scEGOT:
                 gmm_source, gmm_target, self.X_pca[i], self.solutions[i]
             )
 
+            if selected_clusters is None:
+                X_, V_ = self.X_pca[i], velo
+            else:
+                X_ = self.X_pca[selected_clusters[i][0]][
+                    self.gmm_labels[selected_clusters[i][0]] == selected_clusters[i][1]
+                ]
+
+                V_ = velo[
+                    self.gmm_labels[selected_clusters[i][0]] == selected_clusters[i][1]
+                ]
+
             alphas_cv = np.logspace(alpha_range[0], alpha_range[1], num=20)
             ridge_cv = linear_model.RidgeCV(alphas=alphas_cv, cv=3, fit_intercept=False)
-            ridge_cv.fit(self.X_pca[i], velo)
+            ridge_cv.fit(X_, V_)
             ridge_cvs.append(ridge_cv)
 
             grn = linear_model.Ridge(alpha=ridge_cv.alpha_, fit_intercept=False)
-            grn.fit(self.X_pca[i], velo)
+            grn.fit(X_, V_)
             grn = pd.DataFrame(
                 self.pca_model.components_.T @ grn.coef_ @ self.pca_model.components_,
                 index=self.gene_names,
@@ -1780,7 +1791,59 @@ class scEGOT:
 
         return grns, ridge_cvs
 
-    def _make_grn_graph(self, df, threshold=0.1):
+    # def calculate_GRNs_clusters(
+    #     X,
+    #     gmm_models,
+    #     gmm_labels,
+    #     pca_model,
+    #     gene_names,
+    #     velocity,
+    #     cluster_set,
+    #     solutions=None,
+    # ):
+    #     GRNs, ridgeCVs = [], []
+
+    #     if solutions is None:
+    #         solutions = self.calculate_solutions(gmm_models)
+
+    #     for i in tqdm(range(len(cluster_set))):
+    #         alphas_cv = np.logspace(-4, 4, num=20)
+    #         ridgeCV = linear_model.RidgeCV(alphas=alphas_cv, cv=3, fit_intercept=False)
+    #         X_ = X[cluster_set[i][0]][
+    #             gmm_labels[cluster_set[i][0]] == cluster_set[i][1]
+    #         ]
+    #         V_ = velocity[cluster_set[i][0]][
+    #             gmm_labels[cluster_set[i][0]] == cluster_set[i][1]
+    #         ]
+    #         ridgeCV.fit(X_, V_)
+    #         ridgeCVs.append(ridgeCV)
+
+    #         GRN = linear_model.Ridge(alpha=ridgeCV.alpha_, fit_intercept=False)
+    #         GRN.fit(X_, V_)
+    #         df_GRN = pd.DataFrame(
+    #             pca_model.components_.T @ GRN.coef_ @ pca_model.components_,
+    #             index=gene_names,
+    #             columns=gene_names,
+    #         )
+    #         GRNs.append(df_GRN)
+
+    #     return GRNs, ridgeCVs
+
+    # cluster_set_PGC = [[0, 0], [1, 0], [2, 0], [3, 0]]
+
+    # GRNs_PGC, ridgeCVs_PGC = calculate_GRNs_clusters(
+    #     X,
+    #     gmm_models,
+    #     gmm_labels_mod,
+    #     pca_model,
+    #     scegot.gene_names,
+    #     tf_gene_names,
+    #     vel_cluster,
+    #     cluster_set_PGC,
+    #     solutions=solutions,
+    # )
+
+    def _make_grn_graph(self, df, threshold=0.01):
         graph = pydotplus.Dot(graph_type="digraph")
         for c in df.columns:
             node = pydotplus.Node(f'"{c}"', label=c)
@@ -1806,7 +1869,7 @@ class scEGOT:
         grns,
         ridge_cvs,
         selected_genes,
-        thresh=0.01,
+        threshold=0.01,
         save=False,
         save_paths=None,
         save_format="png",
@@ -1817,7 +1880,7 @@ class scEGOT:
             if self.verbose:
                 print(f"alpha = {ridge_cvs[i].alpha_}")
             grn_graph = self._make_grn_graph(
-                grn[selected_genes].loc[selected_genes], threshold=thresh
+                grn[selected_genes].loc[selected_genes], threshold=threshold
             )
             if is_notebook():
                 display(Image(grn_graph.create(format=save_format)))
