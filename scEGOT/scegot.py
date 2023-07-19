@@ -882,6 +882,11 @@ class scEGOT:
         layout = "normal" or "hierarchy"
         order = None or "weight"
         """
+        if layout not in ["normal", "hierarchy"]:
+            raise ValueError("The parameter 'layout' should be 'normal or 'hierarchy'.")
+        if order is not None and order != "weight":
+            raise ValueError("The parameter 'order' should be None or 'weight'.")
+
         if save and save_path is None:
             save_path = "./simple_cell_state_graph.png"
 
@@ -1632,8 +1637,15 @@ class scEGOT:
         save=False,
         save_path=None,
     ):
+        """
+        color_points = "gmm", "day", or None
+        """
         if mode not in ["pca", "umap"]:
             raise ValueError("The parameter 'mode' should be 'pca' or 'umap'.")
+        if color_points is not None and color_points not in ["gmm", "day"]:
+            raise ValueError(
+                "The parameter 'color_points' should be None, 'gmm', or 'day'."
+            )
 
         if save and save_path is None:
             save_path = "./interpolation_of_cell_velocity_gmm_clusters.png"
