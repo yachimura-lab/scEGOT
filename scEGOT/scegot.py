@@ -1744,7 +1744,14 @@ class scEGOT:
         if save:
             plt.savefig(save_path)
 
-    def calculate_grns(self, selected_clusters=None, alpha_range=(-2, 2)):
+    def calculate_grns(
+        self,
+        selected_clusters=None,
+        alpha_range=(-2, 2),
+        cv=3,
+        ridge_cv_fit_intercept=False,
+        ridge_fit_intercept=False,
+    ):
         grns, ridge_cvs = [], []
 
         if self.solutions is None:
@@ -1776,11 +1783,15 @@ class scEGOT:
                 ]
 
             alphas_cv = np.logspace(alpha_range[0], alpha_range[1], num=20)
-            ridge_cv = linear_model.RidgeCV(alphas=alphas_cv, cv=3, fit_intercept=False)
+            ridge_cv = linear_model.RidgeCV(
+                alphas=alphas_cv, cv=cv, fit_intercept=ridge_cv_fit_intercept
+            )
             ridge_cv.fit(X_, V_)
             ridge_cvs.append(ridge_cv)
 
-            grn = linear_model.Ridge(alpha=ridge_cv.alpha_, fit_intercept=False)
+            grn = linear_model.Ridge(
+                alpha=ridge_cv.alpha_, fit_intercept=ridge_fit_intercept
+            )
             grn.fit(X_, V_)
             grn = pd.DataFrame(
                 self.pca_model.components_.T @ grn.coef_ @ self.pca_model.components_,
@@ -2052,7 +2063,20 @@ class scEGOT:
         d = np.linalg.norm(m_0 - m_1) ** 2 + np.trace(sigma_0 + sigma_1 - 2 * sigma_010)
         return d
 
-    def egot(self, pi_0, pi_1, mu_0, mu_1, S_0, S_1, reg=0.01, numItermax=int(1e10)):
+    def egot(
+        self,
+        pi_0,
+        pi_1,
+        mu_0,
+        mu_1,
+        S_0,
+        S_1,
+        reg=0.01,
+        numItermax=int(1e10),
+        method="sinkhorn_epsilon_scaling",
+        tau=1e8,
+        stopThr=1e-9,
+    ):
         K_0 = mu_0.shape[0]
         K_1 = mu_1.shape[0]
         d = mu_0.shape[1]
@@ -2071,49 +2095,69 @@ class scEGOT:
                 pi_1,
                 M / M.max(),
                 reg=reg,
-                method="sinkhorn_epsilon_scaling",
                 numItermax=numItermax,
-                tau=1e8,
-                stopThr=1e-9,
+                method=method,
+                tau=tau,
+                stopThr=stopThr,
             )
         return solution
 
     def calculate_solution(
-        self, gmm_source, gmm_target, reg=0.01, numItermax=int(1e10)
+        self,
+        gmm_source,
+        gmm_target,
+        reg=0.01,
+        numItermax=int(1e10),
+        method="sinkhorn_epsilon_scaling",
+        tau=1e8,
+        stopThr=1e-9,
     ):
         pi_0, pi_1 = gmm_source.weights_, gmm_target.weights_
         mu_0, mu_1 = gmm_source.means_, gmm_target.means_
         S_0, S_1 = gmm_source.covariances_, gmm_target.covariances_
 
         solution = self.egot(
-            pi_0,
-            pi_1,
-            mu_0,
-            mu_1,
-            S_0,
-            S_1,
-            reg,
-            numItermax,
+            pi_0, pi_1, mu_0, mu_1, S_0, S_1, reg, numItermax, method, tau, stopThr
         )
         return solution
 
-    def calculate_solutions(self, gmm_models, reg=0.01, numItermax=int(1e10)):
+    def calculate_solutions(
+        self,
+        gmm_models,
+        reg=0.01,
+        numItermax=int(1e10),
+        method="sinkhorn_epsilon_scaling",
+        tau=1e8,
+        stopThr=1e-9,
+    ):
         solutions = []
         for i in range(len(gmm_models) - 1):
             solutions.append(
                 self.calculate_solution(
-                    gmm_models[i], gmm_models[i + 1], reg, numItermax
+                    gmm_models[i],
+                    gmm_models[i + 1],
+                    reg,
+                    numItermax,
+                    method,
+                    tau,
+                    stopThr,
                 )
             )
         return solutions
 
     def calculate_normalized_solutions(
-        self, gmm_models, reg=0.01, numItermax=int(1e10)
+        self,
+        gmm_models,
+        reg=0.01,
+        numItermax=int(1e10),
+        method="sinkhorn_epsilon_scaling",
+        tau=1e8,
+        stopThr=1e-9,
     ):
         solutions_normalized = []
         for i in range(len(gmm_models) - 1):
             solution = self.calculate_solution(
-                gmm_models[i], gmm_models[i + 1], reg, numItermax
+                gmm_models[i], gmm_models[i + 1], reg, numItermax, method, tau, stopThr
             )
             solutions_normalized.append((solution.T / gmm_models[i].weights_).T)
         return solutions_normalized
