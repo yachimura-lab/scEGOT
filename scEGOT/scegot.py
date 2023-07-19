@@ -1791,58 +1791,6 @@ class scEGOT:
 
         return grns, ridge_cvs
 
-    # def calculate_GRNs_clusters(
-    #     X,
-    #     gmm_models,
-    #     gmm_labels,
-    #     pca_model,
-    #     gene_names,
-    #     velocity,
-    #     cluster_set,
-    #     solutions=None,
-    # ):
-    #     GRNs, ridgeCVs = [], []
-
-    #     if solutions is None:
-    #         solutions = self.calculate_solutions(gmm_models)
-
-    #     for i in tqdm(range(len(cluster_set))):
-    #         alphas_cv = np.logspace(-4, 4, num=20)
-    #         ridgeCV = linear_model.RidgeCV(alphas=alphas_cv, cv=3, fit_intercept=False)
-    #         X_ = X[cluster_set[i][0]][
-    #             gmm_labels[cluster_set[i][0]] == cluster_set[i][1]
-    #         ]
-    #         V_ = velocity[cluster_set[i][0]][
-    #             gmm_labels[cluster_set[i][0]] == cluster_set[i][1]
-    #         ]
-    #         ridgeCV.fit(X_, V_)
-    #         ridgeCVs.append(ridgeCV)
-
-    #         GRN = linear_model.Ridge(alpha=ridgeCV.alpha_, fit_intercept=False)
-    #         GRN.fit(X_, V_)
-    #         df_GRN = pd.DataFrame(
-    #             pca_model.components_.T @ GRN.coef_ @ pca_model.components_,
-    #             index=gene_names,
-    #             columns=gene_names,
-    #         )
-    #         GRNs.append(df_GRN)
-
-    #     return GRNs, ridgeCVs
-
-    # cluster_set_PGC = [[0, 0], [1, 0], [2, 0], [3, 0]]
-
-    # GRNs_PGC, ridgeCVs_PGC = calculate_GRNs_clusters(
-    #     X,
-    #     gmm_models,
-    #     gmm_labels_mod,
-    #     pca_model,
-    #     scegot.gene_names,
-    #     tf_gene_names,
-    #     vel_cluster,
-    #     cluster_set_PGC,
-    #     solutions=solutions,
-    # )
-
     def _make_grn_graph(self, df, threshold=0.01):
         graph = pydotplus.Dot(graph_type="digraph")
         for c in df.columns:
