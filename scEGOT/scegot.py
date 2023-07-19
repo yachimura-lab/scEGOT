@@ -372,6 +372,9 @@ class scEGOT:
         save_paths=None,
         cmap="plasma",
     ):
+        if mode not in ["pca", "umap"]:
+            raise ValueError("The parameter 'mode' should be 'pca' or 'umap'.")
+
         X = self.X_pca if mode == "pca" else self.X_umap
 
         if x_range is None:
@@ -614,6 +617,9 @@ class scEGOT:
         mode="pca",
         thresh=0.05,
     ):
+        if mode not in ["pca", "umap"]:
+            raise ValueError("The parameter 'mode' should be 'pca' or 'umap'.")
+
         gmm_means_flattened = np.array(
             list(itertools.chain.from_iterable(self.get_gmm_means()))
         )
@@ -1148,6 +1154,9 @@ class scEGOT:
     def plot_pathway_single_gene_2d(
         self, gene_name, mode="pca", col=None, save=False, save_path=None
     ):
+        if mode not in ["pca", "umap"]:
+            raise ValueError("The parameter 'mode' should be 'pca' or 'umap'.")
+
         if save and save_path is None:
             save_path = "./pathway_single_gene_2d.png"
 
@@ -1174,6 +1183,9 @@ class scEGOT:
     def plot_pathway_single_gene_3d(
         self, gene_name, mode="pca", col=None, save=False, save_path=None
     ):
+        if mode not in ["pca", "umap"]:
+            raise ValueError("The parameter 'mode' should be 'pca' or 'umap'.")
+
         if save and save_path is None:
             save_path = "./pathway_single_gene_3d.html"
 
@@ -1258,6 +1270,9 @@ class scEGOT:
         save=False,
         save_path=None,
     ):
+        if mode not in ["pca", "umap"]:
+            raise ValueError("The parameter 'mode' should be 'pca' or 'umap'.")
+
         X_interpolation = self.make_interpolation_data(
             self.gmm_models[interpolate_index - 1],
             self.gmm_models[interpolate_index + 1],
@@ -1367,6 +1382,9 @@ class scEGOT:
         save=False,
         save_path=None,
     ):
+        if mode not in ["pca", "umap"]:
+            raise ValueError("The parameter 'mode' should be 'pca' or 'umap'.")
+
         X = self.X_pca if mode == "pca" else self.X_umap
         gene_expression_level = pd.concat(self.X_normalized)[target_gene_name]
 
@@ -1507,6 +1525,9 @@ class scEGOT:
         return velo
 
     def calculate_cell_velocities(self, mode="pca"):
+        if mode not in ["pca", "umap"]:
+            raise ValueError("The parameter 'mode' should be 'pca' or 'umap'.")
+
         velocities = pd.DataFrame(
             columns=self.X_pca[0].columns if mode == "pca" else self.X_umap[0].columns
         )
@@ -1552,6 +1573,9 @@ class scEGOT:
         save=False,
         save_path=None,
     ):
+        if mode not in ["pca", "umap"]:
+            raise ValueError("The parameter 'mode' should be 'pca' or 'umap'.")
+
         if save and save_path is None:
             save_path = "./cell_velocity.png"
 
@@ -1608,6 +1632,9 @@ class scEGOT:
         save=False,
         save_path=None,
     ):
+        if mode not in ["pca", "umap"]:
+            raise ValueError("The parameter 'mode' should be 'pca' or 'umap'.")
+
         if save and save_path is None:
             save_path = "./interpolation_of_cell_velocity_gmm_clusters.png"
 
@@ -1793,6 +1820,9 @@ class scEGOT:
         n_neighbors=100,
         knn_mode="pca",
     ):
+        if knn_mode not in ["pca", "umap"]:
+            raise ValueError("The parameter 'knn_mode' should be 'pca' or 'umap'.")
+
         if self.solutions is None:
             self.solutions = self.calculate_solutions(self.gmm_models)
 
