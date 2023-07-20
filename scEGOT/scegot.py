@@ -935,7 +935,7 @@ class scEGOT:
         texts = []
         for node in G.nodes():
             text_ = ax.text(
-                pos[node][0] - 0.2,
+                pos[node][0],
                 pos[node][1],
                 str(node),
                 fontsize=14,
@@ -947,7 +947,8 @@ class scEGOT:
                 [patheffects.withStroke(linewidth=3, foreground="w")]
             )
             texts = np.append(texts, text_)
-        adjust_text(texts)
+        if layout == "normal":
+            adjust_text(texts)
 
         plt.show()
 
