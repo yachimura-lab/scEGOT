@@ -8,7 +8,7 @@ import cellmap
 from scipy import interpolate
 import scipy.linalg as spl
 from scipy.stats import multivariate_normal, zscore
-from scipy.sparse import csc_matrix, linalg, lil_matrix
+from scipy.sparse import csc_matrix, linalg, lil_matrix, issparse
 from sklearn import linear_model
 from sklearn.utils import check_random_state
 from sklearn.preprocessing import LabelEncoder
@@ -54,17 +54,56 @@ def is_notebook() -> bool:
         return False
 
 
+def _check_input_data(input_data, day_names, adata_day_key):
+    if isinstance(input_data, list):
+        if day_names is None:
+            raise ValueError(
+                "When 'X' is an array of DataFrame, 'day_names' should be specified."
+            )
+        for df in input_data:
+            if not isinstance(df, pd.DataFrame):
+                raise TypeError("'X' should be an array of DataFrames.")
+        return input_data, day_names
+
+    elif isinstance(input_data, anndata.AnnData):
+        if adata_day_key is None:
+            raise ValueError(
+                "When 'X' is AnnData, 'adata_day_key' should be specified."
+            )
+
+        if issparse(input_data.X):
+            X_concated = pd.DataFrame.sparse.from_spmatrix(
+                input_data.X, index=input_data.obs.index, columns=input_data.var.index
+            )
+        else:
+            X_concated = pd.DataFrame(
+                input_data.X, index=input_data.obs.index, columns=input_data.var.index
+            )
+
+        if day_names is None:
+            day_names = np.unique(input_data.obs[adata_day_key])
+
+        X = []
+        for c_ in day_names:
+            X.append(X_concated[input_data.obs[adata_day_key] == c_])
+
+        return X, day_names
+
+    else:
+        raise TypeError("'X' should be AnnData or an array of DataFrames.")
+
+
 class scEGOT:
     def __init__(
         self,
         X,
         pca_n_components,
         gmm_n_components_list,
-        day_names,
-        *,
+        day_names=None,
         umap_n_components=None,
         verbose=True,
         target_sum=1e4,
+        adata_day_key=None,
     ):
         self.pca_n_components = pca_n_components
         self.gmm_n_components_list = gmm_n_components_list
@@ -73,6 +112,8 @@ class scEGOT:
         self.verbose = verbose
 
         self.target_sum = target_sum
+
+        X, day_names = _check_input_data(X, day_names, adata_day_key)
 
         self.X_raw = [df.copy() for df in X]
         self.X_recode = None
