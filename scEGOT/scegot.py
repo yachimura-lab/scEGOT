@@ -71,6 +71,8 @@ def _check_input_data(input_data, day_names, adata_day_key):
                 "When 'X' is AnnData, 'adata_day_key' should be specified."
             )
 
+        print("Processing AnnData...")
+
         if issparse(input_data.X):
             X_concated = pd.DataFrame.sparse.from_spmatrix(
                 input_data.X, index=input_data.obs.index, columns=input_data.var.index
