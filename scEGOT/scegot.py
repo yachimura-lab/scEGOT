@@ -135,12 +135,15 @@ class scEGOT:
 
         self.solutions = None
 
-    def _preprocess_recode(self, X_concated, random_state=None):
+    def _preprocess_recode(
+        self, X_concated, random_state=None, stat_learning=True, recode_params={}
+    ):
         X_concated = pd.DataFrame(
             screcode.RECODE(
                 verbose=self.verbose,
-                stat_learning=True,
+                stat_learning=stat_learning,
                 stat_learning_seed=random_state,
+                **recode_params,
             ).fit_transform(X_concated.values),
             index=X_concated.index,
             columns=X_concated.columns,
@@ -200,6 +203,8 @@ class scEGOT:
     def preprocess(
         self,
         recode_random_state=None,
+        recode_stat_learning=True,
+        recode_params={},
         pca_random_state=None,
         apply_recode=True,
         apply_normalization_log1p=True,
@@ -214,8 +219,10 @@ class scEGOT:
 
         if apply_recode:
             if self.verbose:
-                print("Applying scRECODE...")
-            X_concated = self._preprocess_recode(X_concated, recode_random_state)
+                print("Applying RECODE...")
+            X_concated = self._preprocess_recode(
+                X_concated, recode_random_state, recode_stat_learning, recode_params
+            )
 
         if apply_normalization_umi:
             if self.verbose:
