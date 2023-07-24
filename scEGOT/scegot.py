@@ -274,12 +274,14 @@ class scEGOT:
         n_neighbors,
         random_state=None,
         min_dist=0.1,
+        umap_params={},
     ):
         umap_model = umap.UMAP(
             n_components=self.umap_n_components,
             n_neighbors=n_neighbors,
             random_state=random_state,
             min_dist=min_dist,
+            **umap_params,
         )
         X_concated = pd.DataFrame(
             umap_model.fit_transform(X_concated.values),
@@ -288,13 +290,14 @@ class scEGOT:
         )
         return X_concated, umap_model
 
-    def apply_umap(self, n_neighbors, random_state=None, min_dist=0.1):
-        if self.X_umap is not None:
-            return self.X_umap, self.umap_model
-
+    def apply_umap(self, n_neighbors, random_state=None, min_dist=0.1, umap_params={}):
         X_concated = pd.concat(self.X_pca)
         X_concated, umap_model = self._apply_umap_to_concated_data(
-            X_concated, n_neighbors, random_state, min_dist
+            X_concated,
+            n_neighbors,
+            random_state,
+            min_dist,
+            umap_params,
         )
         X = self._split_dataframe_by_row(X_concated, [len(x) for x in self.X_raw])
 
