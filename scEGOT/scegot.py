@@ -312,6 +312,7 @@ class scEGOT:
         max_iter=2000,
         n_init=10,
         random_state=None,
+        gmm_params={},
     ):
         if self.gmm_models is not None:
             return self.gmm_models
@@ -329,6 +330,7 @@ class scEGOT:
                 max_iter=max_iter,
                 n_init=n_init,
                 random_state=random_state,
+                **gmm_params,
             )
             gmm_model.fit(self.X_pca[i].values)
             gmm_models.append(gmm_model)
@@ -343,6 +345,7 @@ class scEGOT:
         max_iter=2000,
         n_init=10,
         random_state=None,
+        gmm_params={},
     ):
         if self.gmm_models is not None and self.gmm_labels is not None:
             return self.gmm_models, self.gmm_labels
@@ -362,6 +365,7 @@ class scEGOT:
                     max_iter=max_iter,
                     n_init=n_init,
                     random_state=random_state,
+                    **gmm_params,
                 )
                 gmm_labels.append(gmm_model.fit_predict(self.X_pca[i].values))
                 gmm_models.append(gmm_model)
