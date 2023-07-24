@@ -2141,6 +2141,7 @@ class scEGOT:
         method="sinkhorn_epsilon_scaling",
         tau=1e8,
         stopThr=1e-9,
+        sinkhorn_params={},
     ):
         K_0 = mu_0.shape[0]
         K_1 = mu_1.shape[0]
@@ -2164,6 +2165,7 @@ class scEGOT:
                 method=method,
                 tau=tau,
                 stopThr=stopThr,
+                **sinkhorn_params,
             )
         return solution
 
@@ -2176,13 +2178,25 @@ class scEGOT:
         method="sinkhorn_epsilon_scaling",
         tau=1e8,
         stopThr=1e-9,
+        sinkhorn_params={},
     ):
         pi_0, pi_1 = gmm_source.weights_, gmm_target.weights_
         mu_0, mu_1 = gmm_source.means_, gmm_target.means_
         S_0, S_1 = gmm_source.covariances_, gmm_target.covariances_
 
         solution = self.egot(
-            pi_0, pi_1, mu_0, mu_1, S_0, S_1, reg, numItermax, method, tau, stopThr
+            pi_0,
+            pi_1,
+            mu_0,
+            mu_1,
+            S_0,
+            S_1,
+            reg,
+            numItermax,
+            method,
+            tau,
+            stopThr,
+            sinkhorn_params,
         )
         return solution
 
@@ -2194,6 +2208,7 @@ class scEGOT:
         method="sinkhorn_epsilon_scaling",
         tau=1e8,
         stopThr=1e-9,
+        sinkhorn_params={},
     ):
         solutions = []
         for i in range(len(gmm_models) - 1):
@@ -2206,6 +2221,7 @@ class scEGOT:
                     method,
                     tau,
                     stopThr,
+                    sinkhorn_params,
                 )
             )
         return solutions
@@ -2218,11 +2234,19 @@ class scEGOT:
         method="sinkhorn_epsilon_scaling",
         tau=1e8,
         stopThr=1e-9,
+        sinkhorn_params={},
     ):
         solutions_normalized = []
         for i in range(len(gmm_models) - 1):
             solution = self.calculate_solution(
-                gmm_models[i], gmm_models[i + 1], reg, numItermax, method, tau, stopThr
+                gmm_models[i],
+                gmm_models[i + 1],
+                reg,
+                numItermax,
+                method,
+                tau,
+                stopThr,
+                sinkhorn_params,
             )
             solutions_normalized.append((solution.T / gmm_models[i].weights_).T)
         return solutions_normalized
