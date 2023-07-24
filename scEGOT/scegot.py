@@ -150,8 +150,10 @@ class scEGOT:
         )
         return X_concated
 
-    def _preprocess_pca(self, X_concated, random_state=None):
-        pca_model = PCA(n_components=self.pca_n_components, random_state=random_state)
+    def _preprocess_pca(self, X_concated, random_state=None, pca_params={}):
+        pca_model = PCA(
+            n_components=self.pca_n_components, random_state=random_state, **pca_params
+        )
         X_concated = pd.DataFrame(
             pca_model.fit_transform(X_concated.values),
             index=X_concated.index,
@@ -206,6 +208,7 @@ class scEGOT:
         recode_stat_learning=True,
         recode_params={},
         pca_random_state=None,
+        pca_params={},
         apply_recode=True,
         apply_normalization_log1p=True,
         apply_normalization_umi=True,
@@ -249,7 +252,9 @@ class scEGOT:
 
         if self.verbose:
             print("Applying PCA...")
-        X_concated, pca_model = self._preprocess_pca(X_concated, pca_random_state)
+        X_concated, pca_model = self._preprocess_pca(
+            X_concated, pca_random_state, pca_params
+        )
 
         if self.verbose:
             print(
