@@ -1617,7 +1617,6 @@ class scEGOT:
                 gmm_source, gmm_target, self.X_pca[i], self.solutions[i]
             )
             if mode == "umap":
-                # velocity = self.umap_model.transform(velocity)
                 velocity = (
                     self.umap_model.transform(velocity + self.X_pca[i].values)
                     - self.X_umap[i]
@@ -1916,6 +1915,7 @@ class scEGOT:
         self,
         n_neighbors=100,
         knn_mode="pca",
+        knn_params={},
     ):
         if knn_mode not in ["pca", "umap"]:
             raise ValueError("The parameter 'knn_mode' should be 'pca' or 'umap'.")
@@ -2001,6 +2001,7 @@ class scEGOT:
                 n_neighbors=n_neighbors,
                 mode="distance",
                 metric="euclidean",
+                **knn_params,
             )
         else:
             knn = kneighbors_graph(
@@ -2008,6 +2009,7 @@ class scEGOT:
                 n_neighbors=n_neighbors,
                 mode="distance",
                 metric="euclidean",
+                **knn_params,
             )
 
         if self.verbose:
