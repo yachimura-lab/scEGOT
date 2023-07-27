@@ -1251,15 +1251,12 @@ class scEGOT:
             fig.write_image(save_path)
 
     def plot_pathway_single_gene_3d(
-        self, gene_name, mode="pca", col=None, save=False, save_path=None
+        self, gene_name, col=None, save=False, save_path=None
     ):
-        if mode not in ["pca", "umap"]:
-            raise ValueError("The parameter 'mode' should be 'pca' or 'umap'.")
-
         if save and save_path is None:
             save_path = "./pathway_single_gene_3d.html"
 
-        X_concated = pd.concat(self.X_pca if mode == "pca" else self.X_umap)
+        X_concated = pd.concat(self.X_pca)
         if col:
             x_col, y_col, z_col = col
         else:
@@ -1329,10 +1326,11 @@ class scEGOT:
     def plot_true_and_interpolation_distributions(
         self,
         interpolate_index,
+        mode="pca",
+        n_samples=2000,
         t=0.5,
         plot_source_and_target=True,
         alpha_true=0.5,
-        mode="pca",
         x_col_name=None,
         y_col_name=None,
         x_range=None,
@@ -1348,6 +1346,7 @@ class scEGOT:
             self.gmm_models[interpolate_index + 1],
             t,
             self.X_pca[0].columns,
+            n_samples=n_samples,
         )
         if mode == "umap":
             if self.verbose:
