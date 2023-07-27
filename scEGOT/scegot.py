@@ -105,7 +105,6 @@ class scEGOT:
         day_names=None,
         umap_n_components=None,
         verbose=True,
-        target_sum=1e4,
         adata_day_key=None,
     ):
         self.pca_n_components = pca_n_components
@@ -113,8 +112,6 @@ class scEGOT:
 
         self.umap_n_components = umap_n_components
         self.verbose = verbose
-
-        self.target_sum = target_sum
 
         X, day_names = _check_input_data(X, day_names, adata_day_key)
 
@@ -160,8 +157,8 @@ class scEGOT:
         )
         return X_concated, pca_model
 
-    def _normalize_umi(self, X_concated):
-        X_concated = X_concated.div(X_concated.sum(axis=1), axis=0) * self.target_sum
+    def _normalize_umi(self, X_concated, target_sum=1e4):
+        X_concated = X_concated.div(X_concated.sum(axis=1), axis=0) * target_sum
         return X_concated
 
     def _normalize_log1p(self, X_concated):
@@ -173,8 +170,8 @@ class scEGOT:
         )
         return X_concated
 
-    def _normalize_data(self, X_concated):
-        X_concated = self._normalize_umi(X_concated)
+    def _normalize_data(self, X_concated, target_sum=1e4):
+        X_concated = self._normalize_umi(X_concated, target_sum)
         X_concated = self._normalize_log1p(X_concated)
         return X_concated
 
@@ -204,6 +201,7 @@ class scEGOT:
     def preprocess(
         self,
         recode_params={},
+        umi_target_sum=1e4,
         pca_random_state=None,
         pca_other_params={},
         apply_recode=True,
@@ -229,7 +227,7 @@ class scEGOT:
         if apply_normalization_umi:
             if self.verbose:
                 print("Applying UMI normalization...")
-            X_concated = self._normalize_umi(X_concated)
+            X_concated = self._normalize_umi(X_concated, umi_target_sum)
 
         if apply_normalization_log1p:
             if self.verbose:
