@@ -101,6 +101,7 @@ class scEGOT:
         X,
         pca_n_components,
         gmm_n_components_list,
+        gene_names,
         day_names=None,
         umap_n_components=None,
         verbose=True,
@@ -130,20 +131,16 @@ class scEGOT:
         self.gmm_label_converter = None
         self.umap_model = None
 
-        self.gene_names = None
+        self.gene_names = gene_names
         self.day_names = day_names
 
         self.solutions = None
 
-    def _preprocess_recode(
-        self, X_concated, random_state=None, stat_learning=True, recode_other_params={}
-    ):
+    def _preprocess_recode(self, X_concated, recode_params={}):
         X_concated = pd.DataFrame(
             screcode.RECODE(
                 verbose=self.verbose,
-                stat_learning=stat_learning,
-                stat_learning_seed=random_state,
-                **recode_other_params,
+                **recode_params,
             ).fit_transform(X_concated.values),
             index=X_concated.index,
             columns=X_concated.columns,
@@ -206,9 +203,7 @@ class scEGOT:
 
     def preprocess(
         self,
-        recode_random_state=None,
-        recode_stat_learning=True,
-        recode_other_params={},
+        recode_params={},
         pca_random_state=None,
         pca_other_params={},
         apply_recode=True,
@@ -221,15 +216,14 @@ class scEGOT:
             return self.X_pca, self.pca_model
 
         X_concated = pd.concat(self.X_raw)
+        X_concated.columns = self.gene_names
 
         if apply_recode:
             if self.verbose:
                 print("Applying RECODE...")
             X_concated = self._preprocess_recode(
                 X_concated,
-                recode_random_state,
-                recode_stat_learning,
-                recode_other_params,
+                recode_params,
             )
 
         if apply_normalization_umi:
@@ -537,10 +531,10 @@ class scEGOT:
         self,
         x_range=None,
         y_range=None,
+        interpolate_interval=11,
+        cmap="rainbow",
         save=False,
         save_path=None,
-        cmap="rainbow",
-        interpolate_interval=11,
     ):
         if save and save_path is None:
             save_path = "./cell_state_video.gif"
