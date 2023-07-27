@@ -431,6 +431,7 @@ class scEGOT:
     def plot_gmm_predictions(
         self,
         mode="pca",
+        figure_labels=None,
         x_range=None,
         y_range=None,
         figure_titles_without_gmm=None,
