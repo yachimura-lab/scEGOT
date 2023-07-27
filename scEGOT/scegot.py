@@ -437,9 +437,9 @@ class scEGOT:
         figure_titles_without_gmm=None,
         figure_titles_with_gmm=None,
         plot_gmm_means=False,
+        cmap="plasma",
         save=False,
         save_paths=None,
-        cmap="plasma",
     ):
         if mode not in ["pca", "umap"]:
             raise ValueError("The parameter 'mode' should be 'pca' or 'umap'.")
@@ -483,10 +483,14 @@ class scEGOT:
             gmm_model = self.gmm_models[i]
 
             if plot_gmm_means:
+                if mode == "pca":
+                    means = gmm_model.means_
+                else:
+                    means = self.umap_model.transform(gmm_model.means_)
                 for k in range(self.gmm_n_components_list[i]):
                     plt.plot(
-                        gmm_model.means_[k][0],
-                        gmm_model.means_[k][1],
+                        means[k][0],
+                        means[k][1],
                         "ro",
                         markersize=12,
                         markeredgewidth=3,
