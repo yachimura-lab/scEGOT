@@ -970,7 +970,6 @@ class scEGOT:
                     pos[node] = (G.nodes[node]["day"], -G.nodes[node]["cluster_gmm"])
                 else:
                     pos[node] = (G.nodes[node]["day"], -G.nodes[node]["cluster_weight"])
-
         fig, ax = plt.subplots(figsize=(12, 10))
         node_cmap = (
             plt.cm.tab10(np.arange(10))
@@ -2343,7 +2342,7 @@ class scEGOT:
         gmm_labels_modified = []
         for i in range(len(self.gmm_labels)):
             gmm_labels_modified.append(
-                [converter[i][label] for label in self.gmm_labels_modified[i]]
+                [converter[i][label] for label in self.gmm_labels[i]]
             )
         self.gmm_labels_modified = gmm_labels_modified
         self.gmm_label_converter = converter
