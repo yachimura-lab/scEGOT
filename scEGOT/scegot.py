@@ -136,23 +136,25 @@ class scEGOT:
         self.solutions = None
 
     def _preprocess_recode(
-        self, X_concated, random_state=None, stat_learning=True, recode_params={}
+        self, X_concated, random_state=None, stat_learning=True, recode_other_params={}
     ):
         X_concated = pd.DataFrame(
             screcode.RECODE(
                 verbose=self.verbose,
                 stat_learning=stat_learning,
                 stat_learning_seed=random_state,
-                **recode_params,
+                **recode_other_params,
             ).fit_transform(X_concated.values),
             index=X_concated.index,
             columns=X_concated.columns,
         )
         return X_concated
 
-    def _preprocess_pca(self, X_concated, random_state=None, pca_params={}):
+    def _preprocess_pca(self, X_concated, random_state=None, pca_other_params={}):
         pca_model = PCA(
-            n_components=self.pca_n_components, random_state=random_state, **pca_params
+            n_components=self.pca_n_components,
+            random_state=random_state,
+            **pca_other_params,
         )
         X_concated = pd.DataFrame(
             pca_model.fit_transform(X_concated.values),
@@ -206,9 +208,9 @@ class scEGOT:
         self,
         recode_random_state=None,
         recode_stat_learning=True,
-        recode_params={},
+        recode_other_params={},
         pca_random_state=None,
-        pca_params={},
+        pca_other_params={},
         apply_recode=True,
         apply_normalization_log1p=True,
         apply_normalization_umi=True,
@@ -224,7 +226,10 @@ class scEGOT:
             if self.verbose:
                 print("Applying RECODE...")
             X_concated = self._preprocess_recode(
-                X_concated, recode_random_state, recode_stat_learning, recode_params
+                X_concated,
+                recode_random_state,
+                recode_stat_learning,
+                recode_other_params,
             )
 
         if apply_normalization_umi:
@@ -253,7 +258,7 @@ class scEGOT:
         if self.verbose:
             print("Applying PCA...")
         X_concated, pca_model = self._preprocess_pca(
-            X_concated, pca_random_state, pca_params
+            X_concated, pca_random_state, pca_other_params
         )
 
         if self.verbose:
@@ -274,14 +279,14 @@ class scEGOT:
         n_neighbors,
         random_state=None,
         min_dist=0.1,
-        umap_params={},
+        umap_other_params={},
     ):
         umap_model = umap.UMAP(
             n_components=self.umap_n_components,
             n_neighbors=n_neighbors,
             random_state=random_state,
             min_dist=min_dist,
-            **umap_params,
+            **umap_other_params,
         )
         X_concated = pd.DataFrame(
             umap_model.fit_transform(X_concated.values),
@@ -290,14 +295,16 @@ class scEGOT:
         )
         return X_concated, umap_model
 
-    def apply_umap(self, n_neighbors, random_state=None, min_dist=0.1, umap_params={}):
+    def apply_umap(
+        self, n_neighbors, random_state=None, min_dist=0.1, umap_other_params={}
+    ):
         X_concated = pd.concat(self.X_pca)
         X_concated, umap_model = self._apply_umap_to_concated_data(
             X_concated,
             n_neighbors,
             random_state,
             min_dist,
-            umap_params,
+            umap_other_params,
         )
         X = self._split_dataframe_by_row(X_concated, [len(x) for x in self.X_raw])
 
@@ -312,7 +319,7 @@ class scEGOT:
         max_iter=2000,
         n_init=10,
         random_state=None,
-        gmm_params={},
+        gmm_other_params={},
     ):
         if self.gmm_models is not None:
             return self.gmm_models
@@ -330,7 +337,7 @@ class scEGOT:
                 max_iter=max_iter,
                 n_init=n_init,
                 random_state=random_state,
-                **gmm_params,
+                **gmm_other_params,
             )
             gmm_model.fit(self.X_pca[i].values)
             gmm_models.append(gmm_model)
@@ -345,7 +352,7 @@ class scEGOT:
         max_iter=2000,
         n_init=10,
         random_state=None,
-        gmm_params={},
+        gmm_other_params={},
     ):
         if self.gmm_models is not None and self.gmm_labels is not None:
             return self.gmm_models, self.gmm_labels
@@ -365,7 +372,7 @@ class scEGOT:
                     max_iter=max_iter,
                     n_init=n_init,
                     random_state=random_state,
-                    **gmm_params,
+                    **gmm_other_params,
                 )
                 gmm_labels.append(gmm_model.fit_predict(self.X_pca[i].values))
                 gmm_models.append(gmm_model)
@@ -426,7 +433,6 @@ class scEGOT:
         mode="pca",
         x_range=None,
         y_range=None,
-        figure_labels=None,
         figure_titles_without_gmm=None,
         figure_titles_with_gmm=None,
         plot_gmm_means=False,
@@ -1914,7 +1920,7 @@ class scEGOT:
         self,
         n_neighbors=100,
         knn_mode="pca",
-        knn_params={},
+        knn_other_params={},
     ):
         if knn_mode not in ["pca", "umap"]:
             raise ValueError("The parameter 'knn_mode' should be 'pca' or 'umap'.")
@@ -2000,7 +2006,7 @@ class scEGOT:
                 n_neighbors=n_neighbors,
                 mode="distance",
                 metric="euclidean",
-                **knn_params,
+                **knn_other_params,
             )
         else:
             knn = kneighbors_graph(
@@ -2008,7 +2014,7 @@ class scEGOT:
                 n_neighbors=n_neighbors,
                 mode="distance",
                 metric="euclidean",
-                **knn_params,
+                **knn_other_params,
             )
 
         if self.verbose:
@@ -2140,7 +2146,7 @@ class scEGOT:
         method="sinkhorn_epsilon_scaling",
         tau=1e8,
         stopThr=1e-9,
-        sinkhorn_params={},
+        sinkhorn_other_params={},
     ):
         K_0 = mu_0.shape[0]
         K_1 = mu_1.shape[0]
@@ -2164,7 +2170,7 @@ class scEGOT:
                 method=method,
                 tau=tau,
                 stopThr=stopThr,
-                **sinkhorn_params,
+                **sinkhorn_other_params,
             )
         return solution
 
@@ -2177,7 +2183,7 @@ class scEGOT:
         method="sinkhorn_epsilon_scaling",
         tau=1e8,
         stopThr=1e-9,
-        sinkhorn_params={},
+        sinkhorn_other_params={},
     ):
         pi_0, pi_1 = gmm_source.weights_, gmm_target.weights_
         mu_0, mu_1 = gmm_source.means_, gmm_target.means_
@@ -2195,7 +2201,7 @@ class scEGOT:
             method,
             tau,
             stopThr,
-            sinkhorn_params,
+            sinkhorn_other_params,
         )
         return solution
 
@@ -2207,7 +2213,7 @@ class scEGOT:
         method="sinkhorn_epsilon_scaling",
         tau=1e8,
         stopThr=1e-9,
-        sinkhorn_params={},
+        sinkhorn_other_params={},
     ):
         solutions = []
         for i in range(len(gmm_models) - 1):
@@ -2220,7 +2226,7 @@ class scEGOT:
                     method,
                     tau,
                     stopThr,
-                    sinkhorn_params,
+                    sinkhorn_other_params,
                 )
             )
         return solutions
@@ -2233,7 +2239,7 @@ class scEGOT:
         method="sinkhorn_epsilon_scaling",
         tau=1e8,
         stopThr=1e-9,
-        sinkhorn_params={},
+        sinkhorn_other_params={},
     ):
         solutions_normalized = []
         for i in range(len(gmm_models) - 1):
@@ -2245,7 +2251,7 @@ class scEGOT:
                 method,
                 tau,
                 stopThr,
-                sinkhorn_params,
+                sinkhorn_other_params,
             )
             solutions_normalized.append((solution.T / gmm_models[i].weights_).T)
         return solutions_normalized
