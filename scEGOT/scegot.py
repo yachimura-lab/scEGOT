@@ -588,6 +588,8 @@ class scEGOT:
         if save:
             anim.save(save_path, writer="pillow")
 
+        plt.close()
+
     def _get_cell_state_edge_list(self, cluster_names, thresh):
         node_source_target_combinations, edge_colors_based_on_source = [], []
         for i in range(len(self.gmm_n_components_list) - 1):
@@ -1544,6 +1546,8 @@ class scEGOT:
         if save:
             anim_gene.save(save_path, writer="pillow")
 
+        plt.close()
+
     def get_gaussian_map(self, m_0, m_1, sigma_0, sigma_1, x):
         d = sigma_0.shape[0]
         m_0 = m_0.reshape(1, d)
@@ -1916,12 +1920,8 @@ class scEGOT:
     def calculate_waddington_potential(
         self,
         n_neighbors=100,
-        knn_mode="pca",
         knn_other_params={},
     ):
-        if knn_mode not in ["pca", "umap"]:
-            raise ValueError("The parameter 'knn_mode' should be 'pca' or 'umap'.")
-
         if self.solutions is None:
             self.solutions = self.calculate_solutions(self.gmm_models)
 
@@ -1997,22 +1997,13 @@ class scEGOT:
 
         if self.verbose:
             print("Applying knn ...")
-        if knn_mode == "pca":
-            knn = kneighbors_graph(
-                X=pd.concat(self.X_pca[:-1]).iloc[:, :2].values,
-                n_neighbors=n_neighbors,
-                mode="distance",
-                metric="euclidean",
-                **knn_other_params,
-            )
-        else:
-            knn = kneighbors_graph(
-                X=pd.concat(self.X_umap[:-1]).iloc[:, :2].values,
-                n_neighbors=n_neighbors,
-                mode="distance",
-                metric="euclidean",
-                **knn_other_params,
-            )
+        knn = kneighbors_graph(
+            X=pd.concat(self.X_pca[:-1]).iloc[:, :2].values,
+            n_neighbors=n_neighbors,
+            mode="distance",
+            metric="euclidean",
+            **knn_other_params,
+        )
 
         if self.verbose:
             print("Computing kernel ...")
@@ -2040,6 +2031,7 @@ class scEGOT:
     def plot_waddington_potential(
         self,
         waddington_potential,
+        mode="pca",
         gene_name=None,
         save=False,
         save_path=None,
@@ -2047,12 +2039,11 @@ class scEGOT:
         if save and save_path is None:
             save_path = "./waddington_potential.html"
 
-        X_concated = pd.concat(self.X_pca[:-1])
-        gene_expression_level = None
-        if gene_name:
-            gene_expression_level = pd.concat(self.X_normalized)[
-                : len(waddington_potential)
-            ][gene_name]
+        X_concated = pd.concat(self.X_pca[:-1] if mode == "pca" else self.X_umap[:-1])
+        if gene_name is None:
+            color = waddington_potential
+        else:
+            color = pd.concat(self.X_normalized)[: len(waddington_potential)][gene_name]
         plot_data = pd.DataFrame(index=X_concated.index)
         plot_data["x"] = X_concated.iloc[:, 0]
         plot_data["y"] = X_concated.iloc[:, 1]
@@ -2062,7 +2053,7 @@ class scEGOT:
             x="x",
             y="y",
             z="z",
-            color=gene_expression_level,
+            color=color,
             hover_name=X_concated.index,
             width=1000,
             height=800,
@@ -2085,6 +2076,7 @@ class scEGOT:
     def plot_waddington_potential_surface(
         self,
         waddington_potential,
+        mode="pca",
         save=False,
         save_path=None,
     ):
@@ -2102,23 +2094,32 @@ class scEGOT:
             )
         )
         adata_cellmap = anndata.AnnData(
-            pd.concat(self.X_pca[:-1]),
+            pd.concat(self.X_pca[:-1] if mode == "pca" else self.X_umap[:-1]),
             obs=pd.DataFrame(
                 {
                     "clusters": day_labels,
-                    "n_counts": np.sum(pd.concat(self.X_pca[:-1]), axis=1),
+                    "n_counts": np.sum(
+                        pd.concat(
+                            self.X_pca[:-1] if mode == "pca" else self.X_umap[:-1]
+                        ),
+                        axis=1,
+                    ),
                     "potential": waddington_potential,
                 },
                 index=pd.concat(self.X_pca[:-1]).index,
             ),
             obsm={
-                "X_pca": pd.concat(self.X_pca[:-1]).iloc[:, :2].values,
+                "X_show": pd.concat(
+                    self.X_pca[:-1] if mode == "pca" else self.X_umap[:-1]
+                )
+                .iloc[:, :2]
+                .values,
             },
         )
 
         cellmap.view_3D(
             adata_cellmap,
-            basis="pca",
+            basis="show",
             show_shadow=False,
             save=save,
             filename=save_path,
