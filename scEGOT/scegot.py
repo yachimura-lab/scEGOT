@@ -83,7 +83,7 @@ def _check_input_data(input_data, day_names, adata_day_key):
             )
 
         if day_names is None:
-            day_names = np.unique(input_data.obs[adata_day_key])
+            day_names = np.unique(input_data.obs[adata_day_key]).tolist()
 
         X = []
         for c_ in day_names:
@@ -101,7 +101,6 @@ class scEGOT:
         X,
         pca_n_components,
         gmm_n_components_list,
-        gene_names,
         day_names=None,
         umap_n_components=None,
         verbose=True,
@@ -128,7 +127,6 @@ class scEGOT:
         self.gmm_label_converter = None
         self.umap_model = None
 
-        self.gene_names = gene_names
         self.day_names = day_names
 
         self.solutions = None
@@ -214,7 +212,6 @@ class scEGOT:
             return self.X_pca, self.pca_model
 
         X_concated = pd.concat(self.X_raw)
-        X_concated.columns = self.gene_names
 
         if apply_recode:
             if self.verbose:
@@ -959,7 +956,7 @@ class scEGOT:
 
         color_data = np.array(
             [
-                G.edges[edge]["edge_weights"] * G.nodes[edge[0]]["weight"]
+                G.edges[edge]["edge_weights"] / G.nodes[edge[0]]["weight"]
                 for edge in G.edges()
             ]
         )
@@ -1636,8 +1633,8 @@ class scEGOT:
     def plot_cell_velocity(
         self,
         velocities,
-        cmap="rainbow",
         mode="pca",
+        cmap="rainbow",
         save=False,
         save_path=None,
     ):
@@ -1689,10 +1686,10 @@ class scEGOT:
     def plot_interpolation_of_cell_velocity(
         self,
         velocities,
+        mode="pca",
         color_streams=False,
         color_points="gmm",
         cluster_names=None,
-        mode="pca",
         x_range=None,
         y_range=None,
         cmap="rainbow",
@@ -1723,7 +1720,7 @@ class scEGOT:
                 label_sum += self.gmm_n_components_list[i]
         elif color_points == "day":
             for i in range(len(X)):
-                colors += [1] * len(X)
+                colors += [i] * len(X[i])
 
         X_concated = pd.concat(X)
         x, y = np.meshgrid(
@@ -1773,15 +1770,19 @@ class scEGOT:
                 alpha=0.5,
             )
             if color_points == "gmm" and cluster_names is not None:
-                plt.legend(
-                    handles=scatter.legend_elements(num=len(set(colors)))[0],
-                    labels=cluster_names,
-                )
-            if color_points == "day":
-                plt.legend(
-                    handles=scatter.legend_elements(num=len(set(colors)))[0],
-                    labels=self.day_names,
-                )
+                handles = scatter.legend_elements(num=list(range(len(cluster_names))))[
+                    0
+                ]
+                labels = cluster_names
+            else:
+                handles = scatter.legend_elements(num=list(range(len(self.day_names))))[
+                    0
+                ]
+                labels = self.day_names
+            plt.legend(
+                handles=handles,
+                labels=labels,
+            )
         else:
             plt.scatter(
                 pd.concat(X).iloc[:, 0],
