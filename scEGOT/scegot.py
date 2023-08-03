@@ -102,14 +102,12 @@ class scEGOT:
         pca_n_components,
         gmm_n_components_list,
         day_names=None,
-        umap_n_components=None,
         verbose=True,
         adata_day_key=None,
     ):
         self.pca_n_components = pca_n_components
         self.gmm_n_components_list = gmm_n_components_list
 
-        self.umap_n_components = umap_n_components
         self.verbose = verbose
 
         X, day_names = _check_input_data(X, day_names, adata_day_key)
@@ -266,12 +264,13 @@ class scEGOT:
         self,
         X_concated,
         n_neighbors,
+        n_components,
         random_state=None,
         min_dist=0.1,
         umap_other_params={},
     ):
         umap_model = umap.UMAP(
-            n_components=self.umap_n_components,
+            n_components=n_components,
             n_neighbors=n_neighbors,
             random_state=random_state,
             min_dist=min_dist,
@@ -285,12 +284,18 @@ class scEGOT:
         return X_concated, umap_model
 
     def apply_umap(
-        self, n_neighbors, random_state=None, min_dist=0.1, umap_other_params={}
+        self,
+        n_neighbors,
+        n_components=2,
+        random_state=None,
+        min_dist=0.1,
+        umap_other_params={},
     ):
         X_concated = pd.concat(self.X_pca)
         X_concated, umap_model = self._apply_umap_to_concated_data(
             X_concated,
             n_neighbors,
+            n_components,
             random_state,
             min_dist,
             umap_other_params,
