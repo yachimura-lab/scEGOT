@@ -47,7 +47,7 @@ def is_notebook() -> bool:
             # Terminal running IPython
             return False
         else:
-            # Other type (?)
+            # Other type
             return False
     except NameError:
         # Probably standard Python interpreter
@@ -99,15 +99,10 @@ class scEGOT:
     def __init__(
         self,
         X,
-        pca_n_components,
-        gmm_n_components_list,
         day_names=None,
         verbose=True,
         adata_day_key=None,
     ):
-        self.pca_n_components = pca_n_components
-        self.gmm_n_components_list = gmm_n_components_list
-
         self.verbose = verbose
 
         X, day_names = _check_input_data(X, day_names, adata_day_key)
@@ -119,6 +114,7 @@ class scEGOT:
         self.X_umap = None
 
         self.pca_model = None
+        self.gmm_n_components_list = None
         self.gmm_models = None
         self.gmm_labels = None
         self.gmm_labels_modified = None
@@ -140,16 +136,18 @@ class scEGOT:
         )
         return X_concated
 
-    def _preprocess_pca(self, X_concated, random_state=None, pca_other_params={}):
+    def _preprocess_pca(
+        self, X_concated, n_components, random_state=None, pca_other_params={}
+    ):
         pca_model = PCA(
-            n_components=self.pca_n_components,
+            n_components=n_components,
             random_state=random_state,
             **pca_other_params,
         )
         X_concated = pd.DataFrame(
             pca_model.fit_transform(X_concated.values),
             index=X_concated.index,
-            columns=["PC{}".format(i + 1) for i in range(self.pca_n_components)],
+            columns=["PC{}".format(i + 1) for i in range(n_components)],
         )
         return X_concated, pca_model
 
@@ -196,6 +194,7 @@ class scEGOT:
 
     def preprocess(
         self,
+        pca_n_components,
         recode_params={},
         umi_target_sum=1e4,
         pca_random_state=None,
@@ -245,7 +244,7 @@ class scEGOT:
         if self.verbose:
             print("Applying PCA...")
         X_concated, pca_model = self._preprocess_pca(
-            X_concated, pca_random_state, pca_other_params
+            X_concated, pca_n_components, pca_random_state, pca_other_params
         )
 
         if self.verbose:
@@ -309,6 +308,7 @@ class scEGOT:
 
     def fit_gmm(
         self,
+        n_components_list,
         covariance_type="full",
         max_iter=2000,
         n_init=10,
@@ -326,7 +326,7 @@ class scEGOT:
             tqdm(range(len(self.X_pca))) if self.verbose else range(len(self.X_pca))
         ):
             gmm_model = GaussianMixture(
-                self.gmm_n_components_list[i],
+                n_components_list[i],
                 covariance_type=covariance_type,
                 max_iter=max_iter,
                 n_init=n_init,
@@ -337,11 +337,13 @@ class scEGOT:
             gmm_models.append(gmm_model)
 
         self.gmm_models = gmm_models
+        self.gmm_n_components_list = n_components_list
 
         return gmm_models
 
     def fit_predict_gmm(
         self,
+        n_components_list,
         covariance_type="full",
         max_iter=2000,
         n_init=10,
@@ -361,7 +363,7 @@ class scEGOT:
         ):
             if self.gmm_models is None:
                 gmm_model = GaussianMixture(
-                    self.gmm_n_components_list[i],
+                    n_components_list[i],
                     covariance_type=covariance_type,
                     max_iter=max_iter,
                     n_init=n_init,
@@ -373,6 +375,7 @@ class scEGOT:
             else:
                 gmm_labels.append(self.gmm_models[i].predict(self.X_pca[i].values))
 
+        self.gmm_n_components_list = n_components_list
         if self.gmm_models is None:
             self.gmm_models = gmm_models
         self.gmm_labels = gmm_labels
