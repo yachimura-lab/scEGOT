@@ -1,10 +1,10 @@
 [tool.poetry]
-name = "sc-egot"
+name = "scegot"
 version = "0.1.0"
 description = "single cell trajectory inference framework based on Entropic Gaussian mixture Optimal Transport"
 authors = ["Your Name <you@example.com>"]
 readme = "README.md"
-packages = [{include = "sc_egot"}]
+packages = [{include = "scegot"}]
 
 [tool.poetry.dependencies]
 python = "<3.11,>=3.8"
@@ -27,6 +27,7 @@ scvelo = "^0.2.5"
 anndata = "0.8"
 kaleido = "0.2.1"
 cellmap = "1.0.1.dev202306050811"
+tqdm = "^4.65.0"
 
 [tool.poetry.group.dev.dependencies]
 jupyterlab = "^3.5.3"
@@ -34,7 +35,6 @@ ipywidgets = "^8.0.4"
 jupyter-git = "^1.0.22"
 jupyter-black = "^0.3.3"
 nbdime = "^3.1.1"
-tqdm = "^4.64.1"
 nbresuse = "^0.4.0"
 jupyter-kite = "^2.0.2"
 
