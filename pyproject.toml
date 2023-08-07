@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "single cell trajectory inference framework based on Entropic Gaussian mixture Optimal Transport"
 authors = ["Your Name <you@example.com>"]
 readme = "README.md"
-packages = [{include = "scegot"}]
+packages = [{include = "scEGOT/scegot.py"}]
 
 [tool.poetry.dependencies]
 python = "<3.12,>=3.8"
