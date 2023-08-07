@@ -163,9 +163,14 @@ cython_debug/
 .DS_Store
 scECOT/.DS_Store
 
+tmp/.DS_Store
+
 # scECOT's folder and file in development environment
 scEGOT/dataset/
 scEGOT/output/
+
+tmp/dataset/
+tmp/output/
 
 # VSCode
 .vscode/
