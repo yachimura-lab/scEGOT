@@ -951,12 +951,7 @@ class scEGOT:
 
         node_color = [node["day"] for node in G.nodes.values()]
 
-        color_data = np.array(
-            [
-                G.edges[edge]["edge_weights"] / G.nodes[edge[0]]["weight"]
-                for edge in G.edges()
-            ]
-        )
+        color_data = np.array([G.edges[edge]["edge_weights"] for edge in G.edges()])
 
         if layout == "normal":
             pos = {node: G.nodes[node]["pos"] for node in G.nodes()}
