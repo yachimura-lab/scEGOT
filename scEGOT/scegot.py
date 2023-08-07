@@ -205,9 +205,6 @@ class scEGOT:
         select_genes=True,
         n_select_genes=2000,
     ):
-        if self.X_pca is not None:
-            return self.X_pca, self.pca_model
-
         X_concated = pd.concat(self.X_raw)
 
         if apply_recode:
@@ -315,9 +312,6 @@ class scEGOT:
         random_state=None,
         gmm_other_params={},
     ):
-        if self.gmm_models is not None:
-            return self.gmm_models
-
         gmm_models = []
 
         if self.verbose:
@@ -350,9 +344,6 @@ class scEGOT:
         random_state=None,
         gmm_other_params={},
     ):
-        if self.gmm_models is not None and self.gmm_labels is not None:
-            return self.gmm_models, self.gmm_labels
-
         if self.verbose:
             print(
                 "Fitting GMM models with each day's data and predicting labels for them..."
@@ -361,23 +352,19 @@ class scEGOT:
         for i in (
             tqdm(range(len(self.X_pca))) if self.verbose else range(len(self.X_pca))
         ):
-            if self.gmm_models is None:
-                gmm_model = GaussianMixture(
-                    n_components_list[i],
-                    covariance_type=covariance_type,
-                    max_iter=max_iter,
-                    n_init=n_init,
-                    random_state=random_state,
-                    **gmm_other_params,
-                )
-                gmm_labels.append(gmm_model.fit_predict(self.X_pca[i].values))
-                gmm_models.append(gmm_model)
-            else:
-                gmm_labels.append(self.gmm_models[i].predict(self.X_pca[i].values))
+            gmm_model = GaussianMixture(
+                n_components_list[i],
+                covariance_type=covariance_type,
+                max_iter=max_iter,
+                n_init=n_init,
+                random_state=random_state,
+                **gmm_other_params,
+            )
+            gmm_labels.append(gmm_model.fit_predict(self.X_pca[i].values))
+            gmm_models.append(gmm_model)
 
         self.gmm_n_components_list = n_components_list
-        if self.gmm_models is None:
-            self.gmm_models = gmm_models
+        self.gmm_models = gmm_models
         self.gmm_labels = gmm_labels
         self.gmm_labels_modified = gmm_labels
 
