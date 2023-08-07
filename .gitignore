@@ -161,16 +161,11 @@ cython_debug/
 
 # For Mac
 .DS_Store
-scECOT/.DS_Store
-
-tmp/.DS_Store
+scegot/.DS_Store
 
 # scECOT's folder and file in development environment
-scEGOT/dataset/
-scEGOT/output/
-
-tmp/dataset/
-tmp/output/
+scegot/dataset/
+scegot/output/
 
 # VSCode
 .vscode/
