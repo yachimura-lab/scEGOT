@@ -1833,11 +1833,11 @@ class scEGOT:
                 X_, V_ = self.X_pca[i], velo
             else:
                 X_ = self.X_pca[selected_clusters[i][0]][
-                    self.gmm_labels[selected_clusters[i][0]] == selected_clusters[i][1]
+                    self.gmm_labels_modified[selected_clusters[i][0]] == selected_clusters[i][1]
                 ]
 
                 V_ = velo[
-                    self.gmm_labels[selected_clusters[i][0]] == selected_clusters[i][1]
+                    self.gmm_labels_modified[selected_clusters[i][0]] == selected_clusters[i][1]
                 ]
 
             alphas_cv = np.logspace(alpha_range[0], alpha_range[1], num=20)
