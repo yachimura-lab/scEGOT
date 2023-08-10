@@ -1446,7 +1446,7 @@ class scEGOT:
         if save:
             plt.savefig(save_path)
 
-    def animate_interpolation(
+    def animate_gene_expression(
         self,
         target_gene_name,
         mode="pca",
