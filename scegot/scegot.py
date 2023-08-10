@@ -393,7 +393,7 @@ class scEGOT:
         cmap="plasma",
     ):
         if gmm_label is None:
-            plt.scatter(X_item.values[:, 0], X_item.values[:, 1], s=0.5, alpha=0.5)
+            plt.scatter(X_item.values[:, 0], X_item.values[:, 1], s=0.5, alpha=0.8)
         else:
             plt.scatter(
                 X_item.values[:, 0],
@@ -522,7 +522,7 @@ class scEGOT:
         x_range=None,
         y_range=None,
         interpolate_interval=11,
-        cmap="rainbow",
+        cmap="gnuplot2",
         save=False,
         save_path=None,
     ):
@@ -1436,7 +1436,7 @@ class scEGOT:
         c_range=None,
         x_label=None,
         y_label=None,
-        cmap="rainbow",
+        cmap="gnuplot2",
         save=False,
         save_path=None,
     ):
@@ -1628,7 +1628,7 @@ class scEGOT:
         self,
         velocities,
         mode="pca",
-        cmap="rainbow",
+        cmap="gnuplot2",
         save=False,
         save_path=None,
     ):
@@ -1686,7 +1686,7 @@ class scEGOT:
         cluster_names=None,
         x_range=None,
         y_range=None,
-        cmap="rainbow",
+        cmap="gnuplot2",
         linspace_num=300,
         save=False,
         save_path=None,
@@ -1833,11 +1833,13 @@ class scEGOT:
                 X_, V_ = self.X_pca[i], velo
             else:
                 X_ = self.X_pca[selected_clusters[i][0]][
-                    self.gmm_labels_modified[selected_clusters[i][0]] == selected_clusters[i][1]
+                    self.gmm_labels_modified[selected_clusters[i][0]]
+                    == selected_clusters[i][1]
                 ]
 
                 V_ = velo[
-                    self.gmm_labels_modified[selected_clusters[i][0]] == selected_clusters[i][1]
+                    self.gmm_labels_modified[selected_clusters[i][0]]
+                    == selected_clusters[i][1]
                 ]
 
             alphas_cv = np.logspace(alpha_range[0], alpha_range[1], num=20)
