@@ -393,7 +393,7 @@ class scEGOT:
         cmap="plasma",
     ):
         if gmm_label is None:
-            plt.scatter(X_item.values[:, 0], X_item.values[:, 1], s=0.5, alpha=0.8)
+            plt.scatter(X_item.values[:, 0], X_item.values[:, 1], s=1.0, alpha=0.8)
         else:
             plt.scatter(
                 X_item.values[:, 0],
@@ -510,7 +510,7 @@ class scEGOT:
             np.linspace(y_range[0], y_range[1], 1000),
         )
         flattened = np.array([x.ravel(), y.ravel()]).T
-        z = self.theoretical_density_2d(mut[:, 0:2], St[:, 0:2, 0:2], pit, flattened)
+        z = self.gaussian_mixture_density(mut[:, 0:2], St[:, 0:2, 0:2], pit, flattened)
         z = z.reshape(x.shape)
         max_z = np.max(z)
         min_z = np.min(z)
@@ -1920,7 +1920,7 @@ class scEGOT:
         F_all = []
 
         if self.verbose:
-            print("Calculating F between each day...")  # TODO: Fを何かで置き換える
+            print("Calculating F between each day...")
         for i in (
             tqdm(range(len(self.X_pca) - 1))
             if self.verbose
@@ -1950,7 +1950,9 @@ class scEGOT:
                     * multivariate_normal.pdf(
                         self.X_pca[i].values, mean=mu_0[j, :], cov=S_0[j, :, :]
                     )
-                    / self.theoretical_density_2d(mu_0, S_0, pi_0, self.X_pca[i].values)
+                    / self.gaussian_mixture_density(
+                        mu_0, S_0, pi_0, self.X_pca[i].values
+                    )
                 )
             for j in range(K_0):
                 A = np.dot(
@@ -1963,7 +1965,7 @@ class scEGOT:
                         * multivariate_normal.pdf(
                             self.X_pca[i].values, mean=mu_0[j, :], cov=S_0[j, :, :]
                         )
-                        / self.theoretical_density_2d(
+                        / self.gaussian_mixture_density(
                             mu_0, S_0, pi_0, self.X_pca[i].values
                         ).T
                     )
@@ -2117,7 +2119,7 @@ class scEGOT:
             filename=save_path,
         )
 
-    def gaussian_w(self, m_0, m_1, sigma_0, sigma_1):
+    def bures_wasserstein_distance(self, m_0, m_1, sigma_0, sigma_1):
         sigma_00 = spl.sqrtm(sigma_0)
         sigma_010 = spl.sqrtm(sigma_00 @ sigma_1 @ sigma_00)
         d = np.linalg.norm(m_0 - m_1) ** 2 + np.trace(sigma_0 + sigma_1 - 2 * sigma_010)
@@ -2146,7 +2148,7 @@ class scEGOT:
         M = np.zeros((K_0, K_1))
         for k in range(K_0):
             for l in range(K_1):
-                M[k, l] = self.gaussian_w(
+                M[k, l] = self.bures_wasserstein_distance(
                     mu_0[k, :], mu_1[l, :], S_0[k, :, :], S_1[l, :, :]
                 )
         with warnings.catch_warnings():
@@ -2246,7 +2248,7 @@ class scEGOT:
             solutions_normalized.append((solution.T / gmm_models[i].weights_).T)
         return solutions_normalized
 
-    def theoretical_density_2d(self, mu, sigma, alpha, x):
+    def gaussian_mixture_density(self, mu, sigma, alpha, x):
         K = mu.shape[0]
         alpha = alpha.reshape(1, K)
         y = 0
@@ -2268,16 +2270,16 @@ class scEGOT:
         for k in range(K_0):
             for l in range(K_1):
                 mut[k * K_1 + l, :] = (1 - t) * mu_0[k, :] + t * mu_1[l, :]
-                sigma_1demi = spl.sqrtm(S_1[l, :, :])
-                C = (
-                    sigma_1demi
-                    @ spl.inv(spl.sqrtm(sigma_1demi @ S_0[k, :, :] @ sigma_1demi))
-                    @ sigma_1demi
+                sigma_1 = spl.sqrtm(S_1[l, :, :])
+                B = (
+                    sigma_1
+                    @ spl.inv(spl.sqrtm(sigma_1 @ S_0[k, :, :] @ sigma_1))
+                    @ sigma_1
                 )
                 St[k * K_1 + l, :, :] = (
-                    ((1 - t) * np.eye(d) + t * C)
+                    ((1 - t) * np.eye(d) + t * B)
                     @ S_0[k, :, :]
-                    @ ((1 - t) * np.eye(d) + t * C)
+                    @ ((1 - t) * np.eye(d) + t * B)
                 )
 
         return mut, St
