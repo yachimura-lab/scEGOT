@@ -518,7 +518,7 @@ class scEGOT:
         img = plt.contour(x, y, z, np.linspace(min_z - 1e-9, max_z, 20), cmap=cmap)
         return img.collections
 
-    def animate_cell_state(
+    def animatie_interpolated_distribution(
         self,
         x_range=None,
         y_range=None,
@@ -889,13 +889,18 @@ class scEGOT:
         self,
         G,
         cluster_names,
-        tf_gene_names,
+        tf_gene_names=None,
         tf_gene_pick_num=5,
         save=False,
         save_path=None,
     ):
         if save and save_path is None:
             save_path = "./cell_state_graph.png"
+
+        if tf_gene_names is None:
+            gene_names_to_use = self.gene_names
+        else:
+            gene_names_to_use = tf_gene_names
 
         mean_gene_values_per_cluster = (
             self.get_positive_gmm_mean_gene_values_per_cluster(
@@ -904,7 +909,7 @@ class scEGOT:
             )
         )
         mean_tf_gene_values_per_cluster = mean_gene_values_per_cluster.loc[
-            :, mean_gene_values_per_cluster.columns.isin(tf_gene_names)
+            :, mean_gene_values_per_cluster.columns.isin(gene_names_to_use)
         ]
         # nodes
         tf_nlargest = mean_tf_gene_values_per_cluster.T.apply(
@@ -1441,7 +1446,7 @@ class scEGOT:
         if save:
             plt.savefig(save_path)
 
-    def animate_interpolation(
+    def animate_gene_expression(
         self,
         target_gene_name,
         mode="pca",
