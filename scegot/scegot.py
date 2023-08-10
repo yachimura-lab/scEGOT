@@ -518,7 +518,7 @@ class scEGOT:
         img = plt.contour(x, y, z, np.linspace(min_z - 1e-9, max_z, 20), cmap=cmap)
         return img.collections
 
-    def animate_cell_state(
+    def animatie_interpolated_distribution(
         self,
         x_range=None,
         y_range=None,
