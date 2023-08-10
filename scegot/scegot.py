@@ -122,6 +122,7 @@ class scEGOT:
         self.umap_model = None
 
         self.day_names = day_names
+        self.gene_names = None
 
         self.solutions = None
 
@@ -1011,9 +1012,9 @@ class scEGOT:
     def plot_fold_change(
         self,
         cluster_names,
-        tf_gene_names,
         cluster1,
         cluster2,
+        tf_gene_names=None,
         threshold=1.0,
         save=False,
         save_path=None,
@@ -1021,11 +1022,16 @@ class scEGOT:
         if save and save_path is None:
             save_path = "./fold_change.png"
 
+        if tf_gene_names is None:
+            gene_names_to_use = self.gene_names
+        else:
+            gene_names_to_use = tf_gene_names
+
         genes = self.get_positive_gmm_mean_gene_values_per_cluster(
             self.get_gmm_means(),
             cluster_names=list(itertools.chain.from_iterable(cluster_names)),
         )
-        genes = genes.loc[:, genes.columns.isin(tf_gene_names)]
+        genes = genes.loc[:, genes.columns.isin(gene_names_to_use)]
         genes = genes.T
         genes_fold_change = pd.DataFrame(index=genes.index)
         genes_fold_change[cluster1] = genes[cluster1]
@@ -1089,8 +1095,8 @@ class scEGOT:
     def plot_pathway_mean_var(
         self,
         cluster_names,
-        tf_gene_names,
         pathway_names,
+        tf_gene_names=None,
         threshold=1.0,
         save=False,
         save_path=None,
@@ -1098,11 +1104,16 @@ class scEGOT:
         if save and save_path is None:
             save_path = "./pathway_mean_var.png"
 
+        if tf_gene_names is None:
+            gene_names_to_use = self.gene_names
+        else:
+            gene_names_to_use = tf_gene_names
+
         genes = self.get_positive_gmm_mean_gene_values_per_cluster(
             self.get_gmm_means(),
             cluster_names=list(itertools.chain.from_iterable(cluster_names)),
         )
-        genes = genes.loc[:, genes.columns.isin(tf_gene_names)]
+        genes = genes.loc[:, genes.columns.isin(gene_names_to_use)]
 
         pathway_genes = genes.loc[pathway_names]
         mean = pathway_genes.mean(axis=0)
@@ -1169,20 +1180,25 @@ class scEGOT:
     def plot_pathway_gene_expressions(
         self,
         cluster_names,
-        tf_gene_names,
         pathway_names,
         selected_genes,
+        tf_gene_names=None,
         save=False,
         save_path=None,
     ):
         if save and save_path is None:
             save_path = "./pathway_gene_expressions.png"
 
+        if tf_gene_names is None:
+            gene_names_to_use = self.gene_names
+        else:
+            gene_names_to_use = tf_gene_names
+
         genes = self.get_positive_gmm_mean_gene_values_per_cluster(
             self.get_gmm_means(),
             cluster_names=list(itertools.chain.from_iterable(cluster_names)),
         )
-        genes = genes.loc[:, genes.columns.isin(tf_gene_names)]
+        genes = genes.loc[:, genes.columns.isin(gene_names_to_use)]
 
         pathway_selected_genes = genes.loc[pathway_names].loc[:, selected_genes]
         fig = go.Figure()
