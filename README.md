@@ -19,4 +19,4 @@ $ pip install scegot
 
 ## Documentation
 
-ここにドキュメントへのリンクを貼る or 書く
+The tutorial notebook is available [here](scegot/tutorial.ipynb).
