@@ -122,6 +122,7 @@ class scEGOT:
         self.umap_model = None
 
         self.day_names = day_names
+        self.gene_names = None
 
         self.solutions = None
 
@@ -393,7 +394,7 @@ class scEGOT:
         cmap="plasma",
     ):
         if gmm_label is None:
-            plt.scatter(X_item.values[:, 0], X_item.values[:, 1], s=0.5, alpha=0.5)
+            plt.scatter(X_item.values[:, 0], X_item.values[:, 1], s=1.0, alpha=0.8)
         else:
             plt.scatter(
                 X_item.values[:, 0],
@@ -510,19 +511,19 @@ class scEGOT:
             np.linspace(y_range[0], y_range[1], 1000),
         )
         flattened = np.array([x.ravel(), y.ravel()]).T
-        z = self.theoretical_density_2d(mut[:, 0:2], St[:, 0:2, 0:2], pit, flattened)
+        z = self.gaussian_mixture_density(mut[:, 0:2], St[:, 0:2, 0:2], pit, flattened)
         z = z.reshape(x.shape)
         max_z = np.max(z)
         min_z = np.min(z)
         img = plt.contour(x, y, z, np.linspace(min_z - 1e-9, max_z, 20), cmap=cmap)
         return img.collections
 
-    def animate_cell_state(
+    def animatie_interpolated_distribution(
         self,
         x_range=None,
         y_range=None,
         interpolate_interval=11,
-        cmap="rainbow",
+        cmap="gnuplot2",
         save=False,
         save_path=None,
     ):
@@ -888,13 +889,18 @@ class scEGOT:
         self,
         G,
         cluster_names,
-        tf_gene_names,
+        tf_gene_names=None,
         tf_gene_pick_num=5,
         save=False,
         save_path=None,
     ):
         if save and save_path is None:
             save_path = "./cell_state_graph.png"
+
+        if tf_gene_names is None:
+            gene_names_to_use = self.gene_names
+        else:
+            gene_names_to_use = tf_gene_names
 
         mean_gene_values_per_cluster = (
             self.get_positive_gmm_mean_gene_values_per_cluster(
@@ -903,7 +909,7 @@ class scEGOT:
             )
         )
         mean_tf_gene_values_per_cluster = mean_gene_values_per_cluster.loc[
-            :, mean_gene_values_per_cluster.columns.isin(tf_gene_names)
+            :, mean_gene_values_per_cluster.columns.isin(gene_names_to_use)
         ]
         # nodes
         tf_nlargest = mean_tf_gene_values_per_cluster.T.apply(
@@ -1011,9 +1017,9 @@ class scEGOT:
     def plot_fold_change(
         self,
         cluster_names,
-        tf_gene_names,
         cluster1,
         cluster2,
+        tf_gene_names=None,
         threshold=1.0,
         save=False,
         save_path=None,
@@ -1021,11 +1027,16 @@ class scEGOT:
         if save and save_path is None:
             save_path = "./fold_change.png"
 
+        if tf_gene_names is None:
+            gene_names_to_use = self.gene_names
+        else:
+            gene_names_to_use = tf_gene_names
+
         genes = self.get_positive_gmm_mean_gene_values_per_cluster(
             self.get_gmm_means(),
             cluster_names=list(itertools.chain.from_iterable(cluster_names)),
         )
-        genes = genes.loc[:, genes.columns.isin(tf_gene_names)]
+        genes = genes.loc[:, genes.columns.isin(gene_names_to_use)]
         genes = genes.T
         genes_fold_change = pd.DataFrame(index=genes.index)
         genes_fold_change[cluster1] = genes[cluster1]
@@ -1089,8 +1100,8 @@ class scEGOT:
     def plot_pathway_mean_var(
         self,
         cluster_names,
-        tf_gene_names,
         pathway_names,
+        tf_gene_names=None,
         threshold=1.0,
         save=False,
         save_path=None,
@@ -1098,11 +1109,16 @@ class scEGOT:
         if save and save_path is None:
             save_path = "./pathway_mean_var.png"
 
+        if tf_gene_names is None:
+            gene_names_to_use = self.gene_names
+        else:
+            gene_names_to_use = tf_gene_names
+
         genes = self.get_positive_gmm_mean_gene_values_per_cluster(
             self.get_gmm_means(),
             cluster_names=list(itertools.chain.from_iterable(cluster_names)),
         )
-        genes = genes.loc[:, genes.columns.isin(tf_gene_names)]
+        genes = genes.loc[:, genes.columns.isin(gene_names_to_use)]
 
         pathway_genes = genes.loc[pathway_names]
         mean = pathway_genes.mean(axis=0)
@@ -1169,20 +1185,25 @@ class scEGOT:
     def plot_pathway_gene_expressions(
         self,
         cluster_names,
-        tf_gene_names,
         pathway_names,
         selected_genes,
+        tf_gene_names=None,
         save=False,
         save_path=None,
     ):
         if save and save_path is None:
             save_path = "./pathway_gene_expressions.png"
 
+        if tf_gene_names is None:
+            gene_names_to_use = self.gene_names
+        else:
+            gene_names_to_use = tf_gene_names
+
         genes = self.get_positive_gmm_mean_gene_values_per_cluster(
             self.get_gmm_means(),
             cluster_names=list(itertools.chain.from_iterable(cluster_names)),
         )
-        genes = genes.loc[:, genes.columns.isin(tf_gene_names)]
+        genes = genes.loc[:, genes.columns.isin(gene_names_to_use)]
 
         pathway_selected_genes = genes.loc[pathway_names].loc[:, selected_genes]
         fig = go.Figure()
@@ -1425,7 +1446,7 @@ class scEGOT:
         if save:
             plt.savefig(save_path)
 
-    def animate_interpolation(
+    def animate_gene_expression(
         self,
         target_gene_name,
         mode="pca",
@@ -1436,7 +1457,7 @@ class scEGOT:
         c_range=None,
         x_label=None,
         y_label=None,
-        cmap="rainbow",
+        cmap="gnuplot2",
         save=False,
         save_path=None,
     ):
@@ -1628,7 +1649,7 @@ class scEGOT:
         self,
         velocities,
         mode="pca",
-        cmap="rainbow",
+        cmap="gnuplot2",
         save=False,
         save_path=None,
     ):
@@ -1686,7 +1707,7 @@ class scEGOT:
         cluster_names=None,
         x_range=None,
         y_range=None,
-        cmap="rainbow",
+        cmap="gnuplot2",
         linspace_num=300,
         save=False,
         save_path=None,
@@ -1833,11 +1854,13 @@ class scEGOT:
                 X_, V_ = self.X_pca[i], velo
             else:
                 X_ = self.X_pca[selected_clusters[i][0]][
-                    self.gmm_labels_modified[selected_clusters[i][0]] == selected_clusters[i][1]
+                    self.gmm_labels_modified[selected_clusters[i][0]]
+                    == selected_clusters[i][1]
                 ]
 
                 V_ = velo[
-                    self.gmm_labels_modified[selected_clusters[i][0]] == selected_clusters[i][1]
+                    self.gmm_labels_modified[selected_clusters[i][0]]
+                    == selected_clusters[i][1]
                 ]
 
             alphas_cv = np.logspace(alpha_range[0], alpha_range[1], num=20)
@@ -1918,7 +1941,7 @@ class scEGOT:
         F_all = []
 
         if self.verbose:
-            print("Calculating F between each day...")  # TODO: Fを何かで置き換える
+            print("Calculating F between each day...")
         for i in (
             tqdm(range(len(self.X_pca) - 1))
             if self.verbose
@@ -1948,7 +1971,9 @@ class scEGOT:
                     * multivariate_normal.pdf(
                         self.X_pca[i].values, mean=mu_0[j, :], cov=S_0[j, :, :]
                     )
-                    / self.theoretical_density_2d(mu_0, S_0, pi_0, self.X_pca[i].values)
+                    / self.gaussian_mixture_density(
+                        mu_0, S_0, pi_0, self.X_pca[i].values
+                    )
                 )
             for j in range(K_0):
                 A = np.dot(
@@ -1961,7 +1986,7 @@ class scEGOT:
                         * multivariate_normal.pdf(
                             self.X_pca[i].values, mean=mu_0[j, :], cov=S_0[j, :, :]
                         )
-                        / self.theoretical_density_2d(
+                        / self.gaussian_mixture_density(
                             mu_0, S_0, pi_0, self.X_pca[i].values
                         ).T
                     )
@@ -2115,7 +2140,7 @@ class scEGOT:
             filename=save_path,
         )
 
-    def gaussian_w(self, m_0, m_1, sigma_0, sigma_1):
+    def bures_wasserstein_distance(self, m_0, m_1, sigma_0, sigma_1):
         sigma_00 = spl.sqrtm(sigma_0)
         sigma_010 = spl.sqrtm(sigma_00 @ sigma_1 @ sigma_00)
         d = np.linalg.norm(m_0 - m_1) ** 2 + np.trace(sigma_0 + sigma_1 - 2 * sigma_010)
@@ -2144,7 +2169,7 @@ class scEGOT:
         M = np.zeros((K_0, K_1))
         for k in range(K_0):
             for l in range(K_1):
-                M[k, l] = self.gaussian_w(
+                M[k, l] = self.bures_wasserstein_distance(
                     mu_0[k, :], mu_1[l, :], S_0[k, :, :], S_1[l, :, :]
                 )
         with warnings.catch_warnings():
@@ -2244,7 +2269,7 @@ class scEGOT:
             solutions_normalized.append((solution.T / gmm_models[i].weights_).T)
         return solutions_normalized
 
-    def theoretical_density_2d(self, mu, sigma, alpha, x):
+    def gaussian_mixture_density(self, mu, sigma, alpha, x):
         K = mu.shape[0]
         alpha = alpha.reshape(1, K)
         y = 0
@@ -2266,16 +2291,16 @@ class scEGOT:
         for k in range(K_0):
             for l in range(K_1):
                 mut[k * K_1 + l, :] = (1 - t) * mu_0[k, :] + t * mu_1[l, :]
-                sigma_1demi = spl.sqrtm(S_1[l, :, :])
-                C = (
-                    sigma_1demi
-                    @ spl.inv(spl.sqrtm(sigma_1demi @ S_0[k, :, :] @ sigma_1demi))
-                    @ sigma_1demi
+                sigma_1 = spl.sqrtm(S_1[l, :, :])
+                B = (
+                    sigma_1
+                    @ spl.inv(spl.sqrtm(sigma_1 @ S_0[k, :, :] @ sigma_1))
+                    @ sigma_1
                 )
                 St[k * K_1 + l, :, :] = (
-                    ((1 - t) * np.eye(d) + t * C)
+                    ((1 - t) * np.eye(d) + t * B)
                     @ S_0[k, :, :]
-                    @ ((1 - t) * np.eye(d) + t * C)
+                    @ ((1 - t) * np.eye(d) + t * B)
                 )
 
         return mut, St

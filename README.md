@@ -2,7 +2,7 @@
 
 single cell trajectory inference framework based on Entropic Gaussian mixture Optimal Transport
 
-## Instalattion
+## Installation
 
 ```
 $ pip install scegot
@@ -19,4 +19,4 @@ $ pip install scegot
 
 ## Documentation
 
-ここにドキュメントへのリンクを貼る or 書く
+The tutorial notebook is available [here](scegot/tutorial.ipynb).
