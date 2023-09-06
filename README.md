@@ -19,4 +19,4 @@ $ pip install scegot
 
 ## Documentation
 
-The tutorial notebook is available [here](scegot/tutorial.ipynb).
+The tutorial is available [here](https://yachimura-lab.github.io/scEGOT/).
