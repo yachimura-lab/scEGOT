@@ -26,7 +26,7 @@ kaleido = "0.2.1"
 cellmap = "^1.0.2"
 tqdm = "^4.65.0"
 jupyterlab = "^4.0.4"
-screcode = "0.2.1"
+screcode = "0.2.2"
 llvmlite = "^0.40.1"
 pandas = "^2.0.3"
 
