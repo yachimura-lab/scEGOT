@@ -18,10 +18,10 @@ jobs:
           apt-get install -y pandoc
           pip install --upgrade pip
           pip install poetry sphinx sphinx_rtd_theme nbsphinx myst_parser
-      - name: make
-        run: |
           poetry export -f requirements.txt --output requirements.txt 
           pip install -r requirements.txt
+      - name: build
+        run: |
           sphinx-apidoc -f -o ./sphinx/source scegot
           sphinx-build ./sphinx/source ./docs
           cp -r docs ./public
