@@ -25,9 +25,9 @@ jobs:
           pip install -r requirements.txt 
           sphinx-apidoc -f -o ./sphinx/source scegot
           sphinx-build ./sphinx/source ./docs
-          cp -r docs ../public
+          cp -r docs ./public
           poetry build
-          mv dist/*.whl ../public/
+          mv dist/*.whl ./public/
       - name: pages
         uses: peaceiris/actions-gh-pages@v3
         with:
