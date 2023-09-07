@@ -8,6 +8,8 @@ on:
 jobs:
   sphinx:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     container:
       image: python:3.11
     steps:
