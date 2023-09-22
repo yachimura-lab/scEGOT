@@ -5,6 +5,7 @@ description = "single cell trajectory inference framework based on Entropic Gaus
 authors = ["Toshiaki Yachimura <toshiaki.yachimura.a4@tohoku.ac.jp>"]
 readme = "README.md"
 packages = [{include = "scegot/*.py"}]
+license = "MIT"
 
 [tool.poetry.dependencies]
 python = "<3.12,>=3.9"
