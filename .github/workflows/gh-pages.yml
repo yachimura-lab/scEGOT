@@ -20,7 +20,7 @@ jobs:
           apt-get install -y pandoc
           pip install --upgrade pip
           pip install poetry sphinx sphinx_rtd_theme nbsphinx myst_parser
-          poetry export -f requirements.txt --output requirements.txt 
+          poetry export -f requirements.txt --output requirements.txt --without-hashes
           pip install -r requirements.txt
       - name: build
         run: |
