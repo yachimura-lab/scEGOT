@@ -4,7 +4,7 @@ single cell trajectory inference framework based on Entropic Gaussian mixture Op
 
 ## Installation
 
-```
+```sh
 $ pip install scegot
 ```
 
