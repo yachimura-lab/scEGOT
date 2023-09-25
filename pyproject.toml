@@ -1,10 +1,14 @@
 [tool.poetry]
 name = "scegot"
-version = "0.1.0"
+version = "0.1.1"
 description = "single cell trajectory inference framework based on Entropic Gaussian mixture Optimal Transport"
 authors = ["Toshiaki Yachimura <toshiaki.yachimura.a4@tohoku.ac.jp>"]
 readme = "README.md"
 packages = [{include = "scegot/*.py"}]
+license = "MIT"
+homepage = "https://yachimura-lab.github.io/scEGOT/"
+repository = "https://github.com/yachimura-lab/scEGOT"
+documentation = "https://yachimura-lab.github.io/scEGOT/tutorial.html"
 
 [tool.poetry.dependencies]
 python = "<3.12,>=3.9"
