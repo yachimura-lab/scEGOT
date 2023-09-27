@@ -620,10 +620,10 @@ class scEGOT:
         node_weights = list(itertools.chain.from_iterable(node_weights))
         return node_weights
 
-    def _get_day_names_of_each_node(self):
+    def _get_day_order_of_each_node(self):
         day_names_of_each_node = []
         for i, gmm_n_components in enumerate(self.gmm_n_components_list):
-            day_names_of_each_node += [self.day_names[i]] * gmm_n_components
+            day_names_of_each_node += [i] * gmm_n_components
         return day_names_of_each_node
 
     def _get_nlargest_gene_indices(self, row, num=10):
@@ -702,7 +702,7 @@ class scEGOT:
         node_info["xpos"] = gmm_means_flattened.T[0]
         node_info["ypos"] = gmm_means_flattened.T[1]
         node_info["node_days"] = LabelEncoder().fit_transform(
-            self._get_day_names_of_each_node()
+            self._get_day_order_of_each_node()
         )
         if self.gmm_label_converter is None:
             node_info["cluster_gmm"] = list(
