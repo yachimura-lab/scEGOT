@@ -11,7 +11,6 @@ from scipy.stats import multivariate_normal, zscore
 from scipy.sparse import csc_matrix, linalg, lil_matrix, issparse
 from sklearn import linear_model
 from sklearn.utils import check_random_state
-from sklearn.preprocessing import LabelEncoder
 from sklearn.mixture import GaussianMixture
 from sklearn.neighbors import kneighbors_graph
 from sklearn.decomposition import PCA
@@ -701,9 +700,7 @@ class scEGOT:
         )
         node_info["xpos"] = gmm_means_flattened.T[0]
         node_info["ypos"] = gmm_means_flattened.T[1]
-        node_info["node_days"] = LabelEncoder().fit_transform(
-            self._get_day_order_of_each_node()
-        )
+        node_info["node_days"] = self._get_day_order_of_each_node()
         if self.gmm_label_converter is None:
             node_info["cluster_gmm"] = list(
                 itertools.chain.from_iterable(
