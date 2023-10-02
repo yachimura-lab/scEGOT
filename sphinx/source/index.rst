@@ -6,6 +6,10 @@
 .. meta::
    :google-site-verification: pO3A37QnrQxPiQykHmFrFdGG3xnsmZl7k7xznwRifZ0
 
+.. image:: https://github.com/yachimura-lab/scEGOT/assets/87163501/83a42b90-6cb4-402a-87d0-65815c44962c
+
+single cell trajectory inference framework based on Entropic Gaussian mixture Optimal Transport
+
 .. toctree::
    :maxdepth: 2
    :caption: README:
