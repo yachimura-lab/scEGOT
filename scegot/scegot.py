@@ -82,12 +82,12 @@ def _check_input_data(input_data, day_names, adata_day_key):
             )
 
         if day_names is None:
-            day_names = np.unique(input_data.obs[adata_day_key]).tolist()
+            day_names = pd.Series(input_data.obs[adata_day_key]).unique().tolist()
 
         X = []
         for c_ in day_names:
             X.append(X_concated[input_data.obs[adata_day_key] == c_])
-
+        
         return X, day_names
 
     else:
