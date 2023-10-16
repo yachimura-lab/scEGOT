@@ -10,6 +10,9 @@
 
 single cell trajectory inference framework based on Entropic Gaussian mixture Optimal Transport
 
+Github Project is here: `yachimura-lab/scEGOT <https://github.com/yachimura-lab/scEGOT>`_
+
+
 .. toctree::
    :maxdepth: 2
    :caption: README:
@@ -21,6 +24,8 @@ single cell trajectory inference framework based on Entropic Gaussian mixture Op
    :caption: Tutorials:
 
    tutorial
+
+
 
 Indices and tables
 ==================
