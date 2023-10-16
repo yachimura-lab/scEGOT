@@ -87,7 +87,7 @@ def _check_input_data(input_data, day_names, adata_day_key):
         X = []
         for c_ in day_names:
             X.append(X_concated[input_data.obs[adata_day_key] == c_])
-        
+
         return X, day_names
 
     else:
@@ -2358,7 +2358,7 @@ class scEGOT:
         gmm_labels_modified = []
         for i in range(len(self.gmm_labels)):
             gmm_labels_modified.append(
-                [converter[i][label] for label in self.gmm_labels[i]]
+                np.array([converter[i][label] for label in self.gmm_labels[i]])
             )
         self.gmm_labels_modified = gmm_labels_modified
         self.gmm_label_converter = converter
