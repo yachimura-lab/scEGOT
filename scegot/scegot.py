@@ -97,11 +97,11 @@ def _check_input_data(input_data, day_names, adata_day_key):
 class scEGOT:
     def __init__(
         self,
-        X,
-        day_names=None,
-        verbose=True,
-        adata_day_key=None,
-    ):
+        X: list[pd.DataFrame] | anndata.AnnData,
+        day_names: list[str] | None = None,
+        verbose: bool = True,
+        adata_day_key: str | None = None,
+    ) -> None:
         self.verbose = verbose
 
         X, day_names = _check_input_data(X, day_names, adata_day_key)
