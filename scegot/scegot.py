@@ -53,7 +53,9 @@ def is_notebook() -> bool:
         return False
 
 
-def _check_input_data(input_data, day_names, adata_day_key):
+def _check_input_data(
+    input_data, day_names, adata_day_key
+) -> tuple[list[pd.DataFrame], list]:
     if isinstance(input_data, list):
         if day_names is None:
             raise ValueError(
@@ -98,7 +100,7 @@ class scEGOT:
     def __init__(
         self,
         X: list[pd.DataFrame] | anndata.AnnData,
-        day_names: list[str] | None = None,
+        day_names: list | None = None,
         verbose: bool = True,
         adata_day_key: str | None = None,
     ) -> None:
@@ -106,24 +108,24 @@ class scEGOT:
 
         X, day_names = _check_input_data(X, day_names, adata_day_key)
 
-        self.X_raw = [df.copy() for df in X]
-        self.X_recode = None
-        self.X_normalized = None
-        self.X_pca = None
-        self.X_umap = None
+        self.X_raw: list[pd.DataFrame] = [df.copy() for df in X]
+        self.X_recode: list[pd.DataFrame] | None = None
+        self.X_normalized: list[pd.DataFrame] | None = None
+        self.X_pca: list[pd.DataFrame] | None = None
+        self.X_umap: list[pd.DataFrame] | None = None
 
-        self.pca_model = None
-        self.gmm_n_components_list = None
-        self.gmm_models = None
-        self.gmm_labels = None
-        self.gmm_labels_modified = None
-        self.gmm_label_converter = None
-        self.umap_model = None
+        self.pca_model: PCA | None = None
+        self.gmm_n_components_list: list[int] | None = None
+        self.gmm_models: list[GaussianMixture] | None = None
+        self.gmm_labels: list[np.array] | None = None
+        self.gmm_labels_modified: list[np.array] | None = None
+        self.gmm_label_converter: list | None = None
+        self.umap_model: umap.UMAP | None = None
 
-        self.day_names = day_names
-        self.gene_names = None
+        self.day_names: list = day_names
+        self.gene_names: list | None = None
 
-        self.solutions = None
+        self.solutions: list | None = None
 
     def _preprocess_recode(self, X_concated, recode_params={}):
         X_concated = pd.DataFrame(
