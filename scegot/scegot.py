@@ -321,13 +321,13 @@ class scEGOT:
 
     def fit_gmm(
         self,
-        n_components_list,
-        covariance_type="full",
-        max_iter=2000,
-        n_init=10,
-        random_state=None,
-        gmm_other_params={},
-    ):
+        n_components_list: list[int],
+        covariance_type: str = "full",
+        max_iter: int = 2000,
+        n_init: int = 10,
+        random_state: int | np.random.RandomState | None = None,
+        gmm_other_params: dict = {},
+    ) -> list[GaussianMixture]:
         gmm_models = []
 
         if self.verbose:
@@ -353,13 +353,13 @@ class scEGOT:
 
     def fit_predict_gmm(
         self,
-        n_components_list,
-        covariance_type="full",
-        max_iter=2000,
-        n_init=10,
-        random_state=None,
-        gmm_other_params={},
-    ):
+        n_components_list: list[int],
+        covariance_type: str = "full",
+        max_iter: int = 2000,
+        n_init: int = 10,
+        random_state: int | np.random.RandomState = None,
+        gmm_other_params: dict = {},
+    ) -> tuple[list[GaussianMixture], list[np.ndarray]]:
         if self.verbose:
             print(
                 "Fitting GMM models with each day's data and predicting labels for them..."
@@ -386,10 +386,14 @@ class scEGOT:
 
         return gmm_models, gmm_labels
 
-    def predict_gmm_label(self, X_item, gmm_model):
+    def predict_gmm_label(
+        self, X_item: pd.DataFrame, gmm_model: GaussianMixture
+    ) -> np.ndarray:
         return gmm_model.predict(X_item.values)
 
-    def predict_gmm_labels(self, X, gmm_models):
+    def predict_gmm_labels(
+        self, X: list[pd.DataFrame], gmm_models: list[GaussianMixture]
+    ) -> list[np.ndarray]:
         gmm_labels = [
             self.predict_gmm_label(X[i], gmm_models[i]) for i in range(len(X))
         ]
