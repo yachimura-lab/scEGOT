@@ -117,8 +117,8 @@ class scEGOT:
         self.pca_model: PCA | None = None
         self.gmm_n_components_list: list[int] | None = None
         self.gmm_models: list[GaussianMixture] | None = None
-        self.gmm_labels: list[np.array] | None = None
-        self.gmm_labels_modified: list[np.array] | None = None
+        self.gmm_labels: list[np.ndarray] | None = None
+        self.gmm_labels_modified: list[np.ndarray] | None = None
         self.gmm_label_converter: list | None = None
         self.umap_model: umap.UMAP | None = None
 
