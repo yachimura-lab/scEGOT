@@ -404,14 +404,14 @@ class scEGOT:
 
     def _plot_gmm_predictions(
         self,
-        X_item,
-        x_range,
-        y_range,
-        figure_labels=None,
-        gmm_label=None,
-        gmm_n_components=None,
-        cmap="plasma",
-    ):
+        X_item: pd.DataFrame,
+        x_range: tuple[float, float],
+        y_range: tuple[float, float],
+        figure_labels: list[str] | None = None,
+        gmm_label: np.ndarray | None = None,
+        gmm_n_components: int | None = None,
+        cmap: str = "plasma",
+    ) -> None:
         if gmm_label is None:
             plt.scatter(X_item.values[:, 0], X_item.values[:, 1], s=1.0, alpha=0.8)
         else:
@@ -434,17 +434,17 @@ class scEGOT:
 
     def plot_gmm_predictions(
         self,
-        mode="pca",
-        figure_labels=None,
-        x_range=None,
-        y_range=None,
-        figure_titles_without_gmm=None,
-        figure_titles_with_gmm=None,
-        plot_gmm_means=False,
-        cmap="plasma",
-        save=False,
-        save_paths=None,
-    ):
+        mode: str = "pca",
+        figure_labels: list[str] | None = None,
+        x_range: tuple[float, float] | None = None,
+        y_range: tuple[float, float] | None = None,
+        figure_titles_without_gmm: list[str] | None = None,
+        figure_titles_with_gmm: list[str] | None = None,
+        plot_gmm_means: bool = False,
+        cmap: str = "plasma",
+        save: bool = False,
+        save_paths: str | None = None,
+    ) -> None:
         if mode not in ["pca", "umap"]:
             raise ValueError("The parameter 'mode' should be 'pca' or 'umap'.")
 
