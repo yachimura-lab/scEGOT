@@ -127,7 +127,9 @@ class scEGOT:
 
         self.solutions: list | None = None
 
-    def _preprocess_recode(self, X_concated, recode_params={}):
+    def _preprocess_recode(
+        self, X_concated: pd.DataFrame, recode_params: dict = {}
+    ) -> pd.DataFrame:
         X_concated = pd.DataFrame(
             screcode.RECODE(
                 verbose=self.verbose,
@@ -139,8 +141,12 @@ class scEGOT:
         return X_concated
 
     def _preprocess_pca(
-        self, X_concated, n_components, random_state=None, pca_other_params={}
-    ):
+        self,
+        X_concated: pd.DataFrame,
+        n_components: int,
+        random_state: int | np.random.RandomState | None = None,
+        pca_other_params: dict = {},
+    ) -> tuple[pd.DataFrame, PCA]:
         pca_model = PCA(
             n_components=n_components,
             random_state=random_state,
@@ -153,11 +159,13 @@ class scEGOT:
         )
         return X_concated, pca_model
 
-    def _normalize_umi(self, X_concated, target_sum=1e4):
+    def _normalize_umi(
+        self, X_concated: pd.DataFrame, target_sum: int | float = 1e4
+    ) -> pd.DataFrame:
         X_concated = X_concated.div(X_concated.sum(axis=1), axis=0) * target_sum
         return X_concated
 
-    def _normalize_log1p(self, X_concated):
+    def _normalize_log1p(self, X_concated: pd.DataFrame) -> pd.DataFrame:
         X_concated = X_concated.where(X_concated > 0, 0)
         X_concated = pd.DataFrame(
             np.log1p(X_concated.values),
@@ -166,12 +174,16 @@ class scEGOT:
         )
         return X_concated
 
-    def _normalize_data(self, X_concated, target_sum=1e4):
+    def _normalize_data(
+        self, X_concated: pd.DataFrame, target_sum: int | float = 1e4
+    ) -> pd.DataFrame:
         X_concated = self._normalize_umi(X_concated, target_sum)
         X_concated = self._normalize_log1p(X_concated)
         return X_concated
 
-    def _select_highly_variable_genes(self, X_concated, n_select_genes=2000):
+    def _select_highly_variable_genes(
+        self, X_concated: pd.DataFrame, n_select_genes: int = 2000
+    ) -> pd.DataFrame:
         genes = pd.DataFrame(index=X_concated.columns)
         mean = X_concated.values.mean(axis=0)
         mean[mean == 0] = 1e-12
@@ -186,7 +198,9 @@ class scEGOT:
         highvar_genes = X_concated.loc[:, highvar_gene_names]
         return highvar_genes
 
-    def _split_dataframe_by_row(self, df, row_counts):
+    def _split_dataframe_by_row(
+        self, df: pd.DataFrame, row_counts: list[int]
+    ) -> list[pd.DataFrame]:
         split_indices = list(itertools.accumulate(row_counts))
         df_list = [
             df.iloc[split_indices[i - 1] if i > 0 else 0 : split_indices[i]]
