@@ -194,17 +194,17 @@ class scEGOT:
 
     def preprocess(
         self,
-        pca_n_components,
-        recode_params={},
-        umi_target_sum=1e4,
-        pca_random_state=None,
-        pca_other_params={},
-        apply_recode=True,
-        apply_normalization_log1p=True,
-        apply_normalization_umi=True,
-        select_genes=True,
-        n_select_genes=2000,
-    ):
+        pca_n_components: int,
+        recode_params: dict = {},
+        umi_target_sum: int | float = 1e4,
+        pca_random_state: int | np.random.RandomState | None = None,
+        pca_other_params: dict = {},
+        apply_recode: bool = True,
+        apply_normalization_log1p: bool = True,
+        apply_normalization_umi: bool = True,
+        select_genes: bool = True,
+        n_select_genes: int = 2000,
+    ) -> tuple[list[pd.DataFrame], PCA]:
         X_concated = pd.concat(self.X_raw)
 
         if apply_recode:
