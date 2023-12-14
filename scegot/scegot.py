@@ -17,6 +17,7 @@ from sklearn.decomposition import PCA
 import umap.umap_ as umap
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
+import matplotlib.cbook
 from matplotlib.colors import ListedColormap
 from matplotlib import patheffects
 import networkx as nx
@@ -517,8 +518,14 @@ class scEGOT:
             plt.show()
 
     def _interpolation_contour(
-        self, gmm_source, gmm_target, t, x_range, y_range, cmap="rainbow"
-    ):
+        self,
+        gmm_source: GaussianMixture,
+        gmm_target: GaussianMixture,
+        t: float,
+        x_range: tuple[float, float],
+        y_range: tuple[float, float],
+        cmap: str = "rainbow",
+    ) -> matplotlib.cbook.silent_list:
         K_0, K_1 = gmm_source.means_.shape[0], gmm_target.means_.shape[0]
 
         solution = self.calculate_solution(gmm_source, gmm_target)
@@ -539,13 +546,13 @@ class scEGOT:
 
     def animatie_interpolated_distribution(
         self,
-        x_range=None,
-        y_range=None,
-        interpolate_interval=11,
-        cmap="gnuplot2",
-        save=False,
-        save_path=None,
-    ):
+        x_range: tuple[float, float] | None = None,
+        y_range: tuple[float, float] | None = None,
+        interpolate_interval: int = 11,
+        cmap: str = "gnuplot2",
+        save: bool = False,
+        save_path: str | None = None,
+    ) -> None:
         if save and save_path is None:
             save_path = "./cell_state_video.gif"
 
