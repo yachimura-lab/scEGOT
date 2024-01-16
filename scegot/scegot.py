@@ -612,7 +612,9 @@ class scEGOT:
 
         plt.close()
 
-    def _get_cell_state_edge_list(self, cluster_names, thresh):
+    def _get_cell_state_edge_list(
+        self, cluster_names: list[str], thresh: float
+    ) -> pd.DataFrame:
         node_source_target_combinations, edge_colors_based_on_source = [], []
         for i in range(len(self.gmm_n_components_list) - 1):
             current_combinations = [
@@ -639,28 +641,32 @@ class scEGOT:
 
         return cell_state_edge_list
 
-    def _get_gmm_node_weights_flattened(self):
+    def _get_gmm_node_weights_flattened(self) -> list[float]:
         node_weights = [
             self.gmm_models[i].weights_ for i in range(len(self.gmm_models))
         ]
         node_weights = list(itertools.chain.from_iterable(node_weights))
         return node_weights
 
-    def _get_day_order_of_each_node(self):
+    def _get_day_order_of_each_node(self) -> list[float]:
         day_names_of_each_node = []
         for i, gmm_n_components in enumerate(self.gmm_n_components_list):
             day_names_of_each_node += [i] * gmm_n_components
         return day_names_of_each_node
 
-    def _get_nlargest_gene_indices(self, row, num=10):
+    def _get_nlargest_gene_indices(
+        self, row: pd.Series, num: int = 10
+    ) -> pd.core.indexes.base.Index:
         nlargest = row.nlargest(num)
         return nlargest.index
 
-    def _get_nsmallest_gene_indices(self, row, num=10):
+    def _get_nsmallest_gene_indices(
+        self, row: pd.Series, num: int = 10
+    ) -> pd.core.indexes.base.Index:
         nsmallest = row.nsmallest(num)
         return nsmallest.index
 
-    def _get_fold_change(self, gene_values, source, target):
+    def _get_fold_change(self, gene_values, source, target) -> pd.Series:
         fold_change = pd.Series(
             gene_values.T[target] - gene_values.T[source], index=gene_values.T.index
         )
