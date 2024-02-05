@@ -967,7 +967,32 @@ class scEGOT:
                     pos[node] = (G.nodes[node]["day"], -G.nodes[node]["cluster_weight"])
         fig, ax = plt.subplots(figsize=(12, 10))
         
-
+        # draw edge border
+        nx.draw(
+            G,
+            pos,
+            node_size=[node["weight"] * 4500 for node in G.nodes.values()],
+            node_color="white",
+            edge_color="black",
+            arrows=True,
+            arrowsize=30,
+            linewidths=2,
+            ax=ax,
+            width=6.0,
+        )
+        nx.draw(
+            G,
+            pos,
+            node_size=[node["weight"] * 5000 for node in G.nodes.values()],
+            node_color="white",
+            edge_color="white",
+            arrows=True,
+            arrowsize=30,
+            linewidths=2,
+            ax=ax,
+            width=5.0,
+        )
+        
         # draw edges
         node_cmap = (
             plt.cm.tab10(np.arange(10))
