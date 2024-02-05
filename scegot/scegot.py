@@ -966,6 +966,9 @@ class scEGOT:
                 else:
                     pos[node] = (G.nodes[node]["day"], -G.nodes[node]["cluster_weight"])
         fig, ax = plt.subplots(figsize=(12, 10))
+        
+
+        # draw edges
         node_cmap = (
             plt.cm.tab10(np.arange(10))
             if len(self.X_raw) <= 10
@@ -1002,7 +1005,8 @@ class scEGOT:
             text_.set_path_effects(
                 [patheffects.withStroke(linewidth=3, foreground="w")]
             )
-            texts = np.append(texts, text_)
+            texts.append(text_)
+            
         if layout == "normal":
             adjust_text(texts)
 
