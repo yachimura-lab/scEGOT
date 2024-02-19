@@ -107,8 +107,8 @@ class scEGOT:
         X, day_names = _check_input_data(X, day_names, adata_day_key)
 
         self.X_raw = [df.copy() for df in X]
-        self.X_recode = None
         self.X_normalized = None
+        self.X_selected = None
         self.X_pca = None
         self.X_umap = None
 
@@ -225,7 +225,7 @@ class scEGOT:
                 print("Applying log1p normalization...")
             X_concated = self._normalize_log1p(X_concated)
 
-        self.X_recode = self._split_dataframe_by_row(
+        self.X_normalized = self._split_dataframe_by_row(
             X_concated.copy(), [len(x) for x in self.X_raw]
         )
 
@@ -234,7 +234,7 @@ class scEGOT:
 
         self.gene_names = X_concated.columns
 
-        self.X_normalized = self._split_dataframe_by_row(
+        self.X_selected = self._split_dataframe_by_row(
             X_concated.copy(), [len(x) for x in self.X_raw]
         )
 
@@ -1491,7 +1491,7 @@ class scEGOT:
             raise ValueError("The parameter 'mode' should be 'pca' or 'umap'.")
 
         X = self.X_pca if mode == "pca" else self.X_umap
-        gene_expression_level = pd.concat(self.X_normalized)[target_gene_name]
+        gene_expression_level = pd.concat(self.X_selected)[target_gene_name]
 
         if x_range is None or y_range is None:
             X_concated = pd.concat(X)
@@ -2084,7 +2084,7 @@ class scEGOT:
         if gene_name is None:
             color = waddington_potential
         else:
-            color = pd.concat(self.X_normalized)[: len(waddington_potential)][gene_name]
+            color = pd.concat(self.X_selected)[: len(waddington_potential)][gene_name]
         plot_data = pd.DataFrame(index=X_concated.index)
         plot_data["x"] = X_concated.iloc[:, 0]
         plot_data["y"] = X_concated.iloc[:, 1]
