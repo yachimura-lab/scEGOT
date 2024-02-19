@@ -718,8 +718,9 @@ class scEGOT:
         node_sortby_weight = (
             node_info.reset_index()
             .groupby("node_days")
-            .apply(lambda x: x.sort_values("node_weights", ascending=False))
+            .apply(lambda x: x.sort_values("node_weights", ascending=False), include_groups=False)
         )
+        node_sortby_weight = node_sortby_weight.reset_index()
         node_info = pd.DataFrame(
             node_sortby_weight.values, columns=node_sortby_weight.columns
         )
