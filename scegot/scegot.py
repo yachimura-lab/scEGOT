@@ -361,7 +361,7 @@ class scEGOT:
         n_init: int = 10,
         random_state: int | np.random.RandomState | None = None,
         gmm_other_params: dict[str, Any] = {},
-    ) -> tuple[list[GaussianMixture], list[np.ndarray]]:
+    ) -> tuple[list[GaussianMixture], list[np.typing.NDArray[np.int64]]]:
         if self.verbose:
             print(
                 "Fitting GMM models with each day's data and predicting labels for them..."
@@ -390,12 +390,12 @@ class scEGOT:
 
     def predict_gmm_label(
         self, X_item: pd.DataFrame, gmm_model: GaussianMixture
-    ) -> np.ndarray:
+    ) -> np.typing.NDArray[np.int64]:
         return gmm_model.predict(X_item.values)
 
     def predict_gmm_labels(
         self, X: list[pd.DataFrame], gmm_models: list[GaussianMixture]
-    ) -> list[np.ndarray]:
+    ) -> list[np.typing.NDArray[np.int64]]:
         gmm_labels = [
             self.predict_gmm_label(X[i], gmm_models[i]) for i in range(len(X))
         ]
@@ -410,7 +410,7 @@ class scEGOT:
         x_range: tuple[float, float],
         y_range: tuple[float, float],
         figure_labels: list[str] | None = None,
-        gmm_label: np.ndarray | None = None,
+        gmm_label: np.typing.NDArray[np.int64] | None = None,
         gmm_n_components: int | None = None,
         cmap: str = "plasma",
     ) -> None:
