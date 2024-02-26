@@ -667,14 +667,18 @@ class scEGOT:
         nsmallest = row.nsmallest(num)
         return nsmallest.index
 
-    def _get_fold_change(self, gene_values, source, target) -> pd.Series:
+    def _get_fold_change(
+        self, gene_values: pd.DataFrame, source: str, target: str
+    ) -> pd.Series:
         fold_change = pd.Series(
             gene_values.T[target] - gene_values.T[source], index=gene_values.T.index
         )
         fold_change = fold_change.sort_values(ascending=False)
         return fold_change
 
-    def _get_up_regulated_genes(self, gene_values, G, num=10):
+    def _get_up_regulated_genes(
+        self, gene_values: pd.DataFrame, G: nx.classes.digraph.DiGraph, num: int = 10
+    ) -> pd.DataFrame:
         df_upgenes = pd.DataFrame([])
         for edge in G.edges():
             fold_change = self._get_fold_change(
@@ -689,7 +693,9 @@ class scEGOT:
             df_upgenes = pd.concat([df_upgenes, upgenes])
         return df_upgenes
 
-    def _get_down_regulated_genes(self, gene_values, G, num=10):
+    def _get_down_regulated_genes(
+        self, gene_values: pd.DataFrame, G: nx.classes.digraph.DiGraph, num: int = 10
+    ) -> pd.DataFrame:
         df_downgenes = pd.DataFrame([])
         for edge in G.edges():
             fold_change = self._get_fold_change(
@@ -706,10 +712,10 @@ class scEGOT:
 
     def make_cell_state_graph(
         self,
-        cluster_names,
-        mode="pca",
-        threshold=0.05,
-    ):
+        cluster_names: list[list[str]],
+        mode: str = "pca",
+        threshold: float = 0.05,
+    ) -> nx.classes.digraph.DiGraph:
         if mode not in ["pca", "umap"]:
             raise ValueError("The parameter 'mode' should be 'pca' or 'umap'.")
 
