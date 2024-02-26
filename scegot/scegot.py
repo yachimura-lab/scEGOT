@@ -787,14 +787,14 @@ class scEGOT:
 
     def _plot_cell_state_graph(
         self,
-        G,
-        nodes_up_gene,
-        nodes_down_gene,
-        edges_up_gene,
-        edges_down_gene,
-        save,
-        save_path,
-    ):
+        G: nx.classes.digraph.DiGraph,
+        nodes_up_gene: pd.DataFrame,
+        nodes_down_gene: pd.DataFrame,
+        edges_up_gene: pd.DataFrame,
+        edges_down_gene: pd.DataFrame,
+        save: bool,
+        save_path: str,
+    ) -> None:
         tail_list = []
         head_list = []
         color_list = []
@@ -924,13 +924,13 @@ class scEGOT:
 
     def plot_cell_state_graph(
         self,
-        G,
-        cluster_names,
-        tf_gene_names=None,
-        tf_gene_pick_num=5,
-        save=False,
-        save_path=None,
-    ):
+        G: nx.classes.digraph.DiGraph,
+        cluster_names: list[list[str]],
+        tf_gene_names: list[str] | None=None,
+        tf_gene_pick_num: int=5,
+        save: bool=False,
+        save_path: str | None=None,
+    ) -> None:
         if save and save_path is None:
             save_path = "./cell_state_graph.png"
 
