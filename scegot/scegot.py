@@ -359,7 +359,7 @@ class scEGOT:
         covariance_type: str = "full",
         max_iter: int = 2000,
         n_init: int = 10,
-        random_state: int | np.random.RandomState = None,
+        random_state: int | np.random.RandomState | None = None,
         gmm_other_params: dict[str, Any] = {},
     ) -> tuple[list[GaussianMixture], list[np.ndarray]]:
         if self.verbose:
