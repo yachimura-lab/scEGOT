@@ -101,7 +101,7 @@ class scEGOT:
     def __init__(
         self,
         X: list[pd.DataFrame] | anndata.AnnData,
-        day_names: list | None = None,
+        day_names: list[str] | None = None,
         verbose: bool = True,
         adata_day_key: str | None = None,
     ) -> None:
@@ -118,15 +118,15 @@ class scEGOT:
         self.pca_model: PCA | None = None
         self.gmm_n_components_list: list[int] | None = None
         self.gmm_models: list[GaussianMixture] | None = None
-        self.gmm_labels: list[np.ndarray] | None = None
-        self.gmm_labels_modified: list[np.ndarray] | None = None
-        self.gmm_label_converter: list | None = None
+        self.gmm_labels: list[np.typing.NDArray[np.int64]] | None = None
+        self.gmm_labels_modified: list[np.typing.NDArray[np.int64]] | None = None
+        self.gmm_label_converter: list[list[int]] | None = None
         self.umap_model: umap.UMAP | None = None
 
-        self.day_names: list = day_names
-        self.gene_names: list | None = None
+        self.day_names: list[str] = day_names
+        self.gene_names: list[str] | None = None
 
-        self.solutions: list | None = None
+        self.solutions: list[np.typing.NDArray[np.float64]] | None = None
 
     def _preprocess_recode(
         self, X_concated: pd.DataFrame, recode_params: dict = {}
@@ -1667,9 +1667,9 @@ class scEGOT:
 
             velocity = pd.DataFrame(
                 velocity,
-                columns=self.X_pca[0].columns
-                if mode == "pca"
-                else self.X_umap[0].columns,
+                columns=(
+                    self.X_pca[0].columns if mode == "pca" else self.X_umap[0].columns
+                ),
             )
             velocities = pd.concat([velocities, velocity])
 
@@ -1701,8 +1701,7 @@ class scEGOT:
         y_velocity = velocities.iloc[:, 1]
 
         speed = [
-            np.sqrt(x_vel**2 + y_vel**2)
-            for x_vel, y_vel in zip(x_velocity, y_velocity)
+            np.sqrt(x_vel**2 + y_vel**2) for x_vel, y_vel in zip(x_velocity, y_velocity)
         ]
 
         plt.figure(figsize=(10, 8))
