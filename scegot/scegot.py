@@ -1,4 +1,5 @@
 import itertools
+from typing import Any
 import ot
 import warnings
 import numpy as np
@@ -129,7 +130,7 @@ class scEGOT:
         self.solutions: list[np.typing.NDArray[np.float64]] | None = None
 
     def _preprocess_recode(
-        self, X_concated: pd.DataFrame, recode_params: dict = {}
+        self, X_concated: pd.DataFrame, recode_params: dict[str, Any] = {}
     ) -> pd.DataFrame:
         X_concated = pd.DataFrame(
             screcode.RECODE(
@@ -146,7 +147,7 @@ class scEGOT:
         X_concated: pd.DataFrame,
         n_components: int,
         random_state: int | np.random.RandomState | None = None,
-        pca_other_params: dict = {},
+        pca_other_params: dict[str, Any] = {},
     ) -> tuple[pd.DataFrame, PCA]:
         pca_model = PCA(
             n_components=n_components,
@@ -212,10 +213,10 @@ class scEGOT:
     def preprocess(
         self,
         pca_n_components: int,
-        recode_params: dict = {},
+        recode_params: dict[str, Any] = {},
         umi_target_sum: int | float = 1e4,
         pca_random_state: int | np.random.RandomState | None = None,
-        pca_other_params: dict = {},
+        pca_other_params: dict[str, Any] = {},
         apply_recode: bool = True,
         apply_normalization_log1p: bool = True,
         apply_normalization_umi: bool = True,
@@ -280,7 +281,7 @@ class scEGOT:
         n_components: int,
         random_state: int | np.random.RandomState | None = None,
         min_dist: float = 0.1,
-        umap_other_params: dict = {},
+        umap_other_params: dict[str, Any] = {},
     ) -> tuple[pd.DataFrame, umap.UMAP]:
         umap_model = umap.UMAP(
             n_components=n_components,
@@ -302,7 +303,7 @@ class scEGOT:
         n_components: int = 2,
         random_state: int | np.random.RandomState | None = None,
         min_dist: float = 0.1,
-        umap_other_params: dict = {},
+        umap_other_params: dict[str, Any] = {},
     ) -> tuple[list[pd.DataFrame], umap.UMAP]:
         X_concated = pd.concat(self.X_pca)
         X_concated, umap_model = self._apply_umap_to_concated_data(
@@ -327,7 +328,7 @@ class scEGOT:
         max_iter: int = 2000,
         n_init: int = 10,
         random_state: int | np.random.RandomState | None = None,
-        gmm_other_params: dict = {},
+        gmm_other_params: dict[str, Any] = {},
     ) -> list[GaussianMixture]:
         gmm_models = []
 
@@ -359,7 +360,7 @@ class scEGOT:
         max_iter: int = 2000,
         n_init: int = 10,
         random_state: int | np.random.RandomState = None,
-        gmm_other_params: dict = {},
+        gmm_other_params: dict[str, Any] = {},
     ) -> tuple[list[GaussianMixture], list[np.ndarray]]:
         if self.verbose:
             print(
