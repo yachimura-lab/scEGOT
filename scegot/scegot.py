@@ -649,7 +649,7 @@ class scEGOT:
         node_weights = list(itertools.chain.from_iterable(node_weights))
         return node_weights
 
-    def _get_day_order_of_each_node(self) -> list[float]:
+    def _get_day_order_of_each_node(self) -> list[int]:
         day_names_of_each_node = []
         for i, gmm_n_components in enumerate(self.gmm_n_components_list):
             day_names_of_each_node += [i] * gmm_n_components
