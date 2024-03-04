@@ -24,6 +24,7 @@ jobs:
           pip install -r requirements.txt
       - name: build
         run: |
+          cp ./scegot/tutorial.ipynb ./sphinx/source
           sphinx-apidoc -f -o ./sphinx/source ./scegot
           sphinx-build ./sphinx/source ./docs
           cp -r docs ./public
