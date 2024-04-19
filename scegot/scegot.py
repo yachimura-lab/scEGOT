@@ -1,35 +1,36 @@
 import itertools
-import ot
 import warnings
-import numpy as np
-import pandas as pd
+from io import BytesIO
+
 import anndata
 import cellmap
-from scipy import interpolate
-import scipy.linalg as spl
-from scipy.stats import multivariate_normal, zscore
-from scipy.sparse import csc_matrix, linalg, lil_matrix, issparse
-from sklearn import linear_model
-from sklearn.utils import check_random_state
-from sklearn.mixture import GaussianMixture
-from sklearn.neighbors import kneighbors_graph
-from sklearn.decomposition import PCA
-import umap.umap_ as umap
-import matplotlib.pyplot as plt
 import matplotlib.animation as animation
-from matplotlib.colors import ListedColormap
-from matplotlib import patheffects
+import matplotlib.pyplot as plt
 import networkx as nx
+import numpy as np
+import ot
+import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from IPython.display import Image, HTML, display
+import pydotplus
+import scipy.linalg as spl
 import screcode
 import seaborn as sns
-import pydotplus
-from tqdm import tqdm
-from io import BytesIO
-from PIL import Image as PILImage
+import umap.umap_ as umap
 from adjustText import adjust_text
+from IPython.display import HTML, Image, display
+from matplotlib import patheffects
+from matplotlib.colors import ListedColormap
+from PIL import Image as PILImage
+from scipy import interpolate
+from scipy.sparse import csc_matrix, issparse, lil_matrix, linalg
+from scipy.stats import multivariate_normal, zscore
+from sklearn import linear_model
+from sklearn.decomposition import PCA
+from sklearn.mixture import GaussianMixture
+from sklearn.neighbors import kneighbors_graph
+from sklearn.utils import check_random_state
+from tqdm import tqdm
 
 sns.set_style("whitegrid")
 
