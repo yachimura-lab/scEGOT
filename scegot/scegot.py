@@ -1265,6 +1265,15 @@ class scEGOT:
     def plot_pathway_single_gene_2d(
         self, gene_name, mode="pca", col=None, save=False, save_path=None
     ):
+        warnings.warn(
+            "scegot.plot_pathway_single_gene_2d() will be depricated. Use scegot.plot_gene_expression_2d() instead.",
+            FutureWarning,
+        )
+        self.plot_gene_expression_2d(gene_name, mode, col, save, save_path)
+
+    def plot_gene_expression_2d(
+        self, gene_name, mode="pca", col=None, save=False, save_path=None
+    ):
         if mode not in ["pca", "umap"]:
             raise ValueError("The parameter 'mode' should be 'pca' or 'umap'.")
 
@@ -1294,6 +1303,13 @@ class scEGOT:
     def plot_pathway_single_gene_3d(
         self, gene_name, col=None, save=False, save_path=None
     ):
+        warnings.warn(
+            "scegot.plot_pathway_single_gene_3d() will be depricated. Use scegot.plot_gene_expression_3d() instead.",
+            FutureWarning,
+        )
+        self.plot_gene_expression_3d(gene_name, col, save, save_path)
+
+    def plot_gene_expression_3d(self, gene_name, col=None, save=False, save_path=None):
         if save and save_path is None:
             save_path = "./pathway_single_gene_3d.html"
 
