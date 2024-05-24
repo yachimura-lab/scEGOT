@@ -1,35 +1,36 @@
 import itertools
-import ot
 import warnings
-import numpy as np
-import pandas as pd
+from io import BytesIO
+
 import anndata
 import cellmap
-from scipy import interpolate
-import scipy.linalg as spl
-from scipy.stats import multivariate_normal, zscore
-from scipy.sparse import csc_matrix, linalg, lil_matrix, issparse
-from sklearn import linear_model
-from sklearn.utils import check_random_state
-from sklearn.mixture import GaussianMixture
-from sklearn.neighbors import kneighbors_graph
-from sklearn.decomposition import PCA
-import umap.umap_ as umap
-import matplotlib.pyplot as plt
 import matplotlib.animation as animation
-from matplotlib.colors import ListedColormap
-from matplotlib import patheffects
+import matplotlib.pyplot as plt
 import networkx as nx
+import numpy as np
+import ot
+import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from IPython.display import Image, HTML, display
+import pydotplus
+import scipy.linalg as spl
 import screcode
 import seaborn as sns
-import pydotplus
-from tqdm import tqdm
-from io import BytesIO
-from PIL import Image as PILImage
+import umap.umap_ as umap
 from adjustText import adjust_text
+from IPython.display import HTML, Image, display
+from matplotlib import patheffects
+from matplotlib.colors import ListedColormap
+from PIL import Image as PILImage
+from scipy import interpolate
+from scipy.sparse import csc_matrix, issparse, lil_matrix, linalg
+from scipy.stats import multivariate_normal, zscore
+from sklearn import linear_model
+from sklearn.decomposition import PCA
+from sklearn.mixture import GaussianMixture
+from sklearn.neighbors import kneighbors_graph
+from sklearn.utils import check_random_state
+from tqdm import tqdm
 
 sns.set_style("whitegrid")
 
@@ -400,7 +401,7 @@ class scEGOT:
                 X_item.values[:, 1],
                 c=gmm_label,
                 alpha=0.5,
-                cmap=plt.cm.get_cmap(cmap, gmm_n_components),
+                cmap=plt.get_cmap(cmap, gmm_n_components),
             )
             plt.colorbar(ticks=range(gmm_n_components), label="cluster")
             plt.clim(-0.5, gmm_n_components - 0.5)
@@ -718,7 +719,10 @@ class scEGOT:
         node_sortby_weight = (
             node_info.reset_index()
             .groupby("node_days")
-            .apply(lambda x: x.sort_values("node_weights", ascending=False), include_groups=False)
+            .apply(
+                lambda x: x.sort_values("node_weights", ascending=False),
+                include_groups=False,
+            )
         )
         node_sortby_weight = node_sortby_weight.reset_index()
         node_info = pd.DataFrame(
@@ -967,7 +971,7 @@ class scEGOT:
                 else:
                     pos[node] = (G.nodes[node]["day"], -G.nodes[node]["cluster_weight"])
         fig, ax = plt.subplots(figsize=(12, 10))
-        
+
         # draw edge border
         nx.draw(
             G,
@@ -993,7 +997,7 @@ class scEGOT:
             ax=ax,
             width=5.0,
         )
-        
+
         # draw edges
         node_cmap = (
             plt.cm.tab10(np.arange(10))
@@ -1032,7 +1036,7 @@ class scEGOT:
                 [patheffects.withStroke(linewidth=3, foreground="w")]
             )
             texts.append(text_)
-            
+
         if layout == "normal":
             adjust_text(texts)
 
@@ -1261,6 +1265,15 @@ class scEGOT:
     def plot_pathway_single_gene_2d(
         self, gene_name, mode="pca", col=None, save=False, save_path=None
     ):
+        warnings.warn(
+            "scegot.plot_pathway_single_gene_2d() will be depricated. Use scegot.plot_gene_expression_2d() instead.",
+            FutureWarning,
+        )
+        self.plot_gene_expression_2d(gene_name, mode, col, save, save_path)
+
+    def plot_gene_expression_2d(
+        self, gene_name, mode="pca", col=None, save=False, save_path=None
+    ):
         if mode not in ["pca", "umap"]:
             raise ValueError("The parameter 'mode' should be 'pca' or 'umap'.")
 
@@ -1290,6 +1303,13 @@ class scEGOT:
     def plot_pathway_single_gene_3d(
         self, gene_name, col=None, save=False, save_path=None
     ):
+        warnings.warn(
+            "scegot.plot_pathway_single_gene_3d() will be depricated. Use scegot.plot_gene_expression_3d() instead.",
+            FutureWarning,
+        )
+        self.plot_gene_expression_3d(gene_name, col, save, save_path)
+
+    def plot_gene_expression_3d(self, gene_name, col=None, save=False, save_path=None):
         if save and save_path is None:
             save_path = "./pathway_single_gene_3d.html"
 
@@ -1468,10 +1488,10 @@ class scEGOT:
         plt.legend(loc=0)
         plt.title("true and interpolation distributions")
 
-        plt.show()
-
         if save:
             plt.savefig(save_path)
+
+        plt.show()
 
     def animate_gene_expression(
         self,
@@ -1664,9 +1684,9 @@ class scEGOT:
 
             velocity = pd.DataFrame(
                 velocity,
-                columns=self.X_pca[0].columns
-                if mode == "pca"
-                else self.X_umap[0].columns,
+                columns=(
+                    self.X_pca[0].columns if mode == "pca" else self.X_umap[0].columns
+                ),
             )
             velocities = pd.concat([velocities, velocity])
 
@@ -1698,8 +1718,7 @@ class scEGOT:
         y_velocity = velocities.iloc[:, 1]
 
         speed = [
-            np.sqrt(x_vel**2 + y_vel**2)
-            for x_vel, y_vel in zip(x_velocity, y_velocity)
+            np.sqrt(x_vel**2 + y_vel**2) for x_vel, y_vel in zip(x_velocity, y_velocity)
         ]
 
         plt.figure(figsize=(10, 8))
@@ -1807,7 +1826,7 @@ class scEGOT:
                 pd.concat(X).iloc[:, 0],
                 pd.concat(X).iloc[:, 1],
                 c=colors,
-                cmap=plt.cm.get_cmap(cmap, len(set(colors))),
+                cmap=plt.get_cmap(cmap, len(set(colors))),
                 s=20,
                 alpha=0.5,
             )
