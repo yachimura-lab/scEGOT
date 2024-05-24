@@ -401,7 +401,7 @@ class scEGOT:
                 X_item.values[:, 1],
                 c=gmm_label,
                 alpha=0.5,
-                cmap=plt.cm.get_cmap(cmap, gmm_n_components),
+                cmap=plt.get_cmap(cmap, gmm_n_components),
             )
             plt.colorbar(ticks=range(gmm_n_components), label="cluster")
             plt.clim(-0.5, gmm_n_components - 0.5)
@@ -1810,7 +1810,7 @@ class scEGOT:
                 pd.concat(X).iloc[:, 0],
                 pd.concat(X).iloc[:, 1],
                 c=colors,
-                cmap=plt.cm.get_cmap(cmap, len(set(colors))),
+                cmap=plt.get_cmap(cmap, len(set(colors))),
                 s=20,
                 alpha=0.5,
             )
