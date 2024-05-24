@@ -719,7 +719,10 @@ class scEGOT:
         node_sortby_weight = (
             node_info.reset_index()
             .groupby("node_days")
-            .apply(lambda x: x.sort_values("node_weights", ascending=False), include_groups=False)
+            .apply(
+                lambda x: x.sort_values("node_weights", ascending=False),
+                include_groups=False,
+            )
         )
         node_sortby_weight = node_sortby_weight.reset_index()
         node_info = pd.DataFrame(
@@ -968,7 +971,7 @@ class scEGOT:
                 else:
                     pos[node] = (G.nodes[node]["day"], -G.nodes[node]["cluster_weight"])
         fig, ax = plt.subplots(figsize=(12, 10))
-        
+
         # draw edge border
         nx.draw(
             G,
@@ -994,7 +997,7 @@ class scEGOT:
             ax=ax,
             width=5.0,
         )
-        
+
         # draw edges
         node_cmap = (
             plt.cm.tab10(np.arange(10))
@@ -1033,7 +1036,7 @@ class scEGOT:
                 [patheffects.withStroke(linewidth=3, foreground="w")]
             )
             texts.append(text_)
-            
+
         if layout == "normal":
             adjust_text(texts)
 
@@ -1469,10 +1472,10 @@ class scEGOT:
         plt.legend(loc=0)
         plt.title("true and interpolation distributions")
 
-        plt.show()
-
         if save:
             plt.savefig(save_path)
+
+        plt.show()
 
     def animate_gene_expression(
         self,
@@ -1665,9 +1668,9 @@ class scEGOT:
 
             velocity = pd.DataFrame(
                 velocity,
-                columns=self.X_pca[0].columns
-                if mode == "pca"
-                else self.X_umap[0].columns,
+                columns=(
+                    self.X_pca[0].columns if mode == "pca" else self.X_umap[0].columns
+                ),
             )
             velocities = pd.concat([velocities, velocity])
 
@@ -1699,8 +1702,7 @@ class scEGOT:
         y_velocity = velocities.iloc[:, 1]
 
         speed = [
-            np.sqrt(x_vel**2 + y_vel**2)
-            for x_vel, y_vel in zip(x_velocity, y_velocity)
+            np.sqrt(x_vel**2 + y_vel**2) for x_vel, y_vel in zip(x_velocity, y_velocity)
         ]
 
         plt.figure(figsize=(10, 8))
