@@ -1,5 +1,7 @@
 # scEGOT
 
+[![Downloads](https://static.pepy.tech/badge/scegot)](https://pepy.tech/project/scegot)
+
 single cell trajectory inference framework based on Entropic Gaussian mixture Optimal Transport
 
 ![Fig_scEGOT_abstract](https://github.com/yachimura-lab/scEGOT/assets/87163501/83a42b90-6cb4-402a-87d0-65815c44962c)
@@ -13,8 +15,6 @@ $ pip install scegot
 ## Requirements
 
 - Python3
-- pandas
-- anndata
 - GraphViz
 
   Click [here](https://graphviz.org/) to learn how to install GraphViz (official documentation).
