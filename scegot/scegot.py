@@ -1698,7 +1698,7 @@ class scEGOT:
         self,
         velocities,
         mode="pca",
-        cmap="gnuplot2",
+        size_pt=30,
         save=False,
         save_path=None,
     ):
@@ -1730,8 +1730,6 @@ class scEGOT:
         if mode == "umap":
             adata_cvel.obsm["X_umap"] = X_concated_umap
             
-        print(adata_cvel)
-
         neighbors(adata_cvel, use_rep="X_pca", n_neighbors=self.pca_model.n_components_)
         scv.tl.velocity_graph(adata_cvel)
         
@@ -1760,7 +1758,6 @@ class scEGOT:
             colorbar=False,
         )
 
-        size_pt = 30
         ax.scatter(
             X_concated_pca[:, 0] if mode == "pca" else X_concated_umap[:, 0],
             X_concated_pca[:, 1] if mode == "pca" else X_concated_umap[:, 1],
