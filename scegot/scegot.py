@@ -1729,6 +1729,7 @@ class scEGOT:
         scv.pl.velocity_embedding_stream(
             adata_cvel,
             basis=mode,
+            color="black",
             vkey="velocity",
             title="",
             density=2,
