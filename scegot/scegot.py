@@ -1654,12 +1654,10 @@ class scEGOT:
         velo = barycentric_projection_map.T - X_item.values
         return velo
 
-    def calculate_cell_velocities(self, mode="pca"):
-        if mode not in ["pca", "umap"]:
-            raise ValueError("The parameter 'mode' should be 'pca' or 'umap'.")
+    def calculate_cell_velocities(self):
 
         velocities = pd.DataFrame(
-            columns=self.X_pca[0].columns if mode == "pca" else self.X_umap[0].columns
+            columns=self.X_pca[0].columns
         )
 
         if self.solutions is None:
@@ -1678,16 +1676,11 @@ class scEGOT:
             velocity = self._calculate_cell_velocity(
                 gmm_source, gmm_target, self.X_pca[i], self.solutions[i]
             )
-            if mode == "umap":
-                velocity = (
-                    self.umap_model.transform(velocity + self.X_pca[i].values)
-                    - self.X_umap[i]
-                )
 
             velocity = pd.DataFrame(
                 velocity,
                 columns=(
-                    self.X_pca[0].columns if mode == "pca" else self.X_umap[0].columns
+                    self.X_pca[0].columns
                 ),
             )
             velocities = pd.concat([velocities, velocity])
