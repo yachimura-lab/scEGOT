@@ -1700,9 +1700,6 @@ class scEGOT:
 
         if save and save_path is None:
             save_path = "./cell_velocity.png"
-
-        # scale = 1 if mode == "pca" else 2.5
-        # margin = 5 if mode == "pca" else 1
         
         day_labels = []
         for i in range(len(self.day_names) - 1):
@@ -1733,7 +1730,6 @@ class scEGOT:
             adata_cvel,
             basis=mode,
             vkey="velocity",
-            # color=cluster_celltype_color,
             title="",
             density=2,
             alpha=0.0,
@@ -1761,33 +1757,6 @@ class scEGOT:
             alpha=0.5,
         )
         ax.axis("off")
-        # x_coordinate = X_concated.iloc[:, 0]
-        # y_coordinate = X_concated.iloc[:, 1]
-
-        # x_velocity = velocities.iloc[:, 0]
-        # y_velocity = velocities.iloc[:, 1]
-
-        # speed = [
-        #     np.sqrt(x_vel**2 + y_vel**2) for x_vel, y_vel in zip(x_velocity, y_velocity)
-        # ]
-
-        # plt.figure(figsize=(10, 8))
-        # plt.quiver(
-        #     x_coordinate,
-        #     y_coordinate,
-        #     x_velocity / speed,
-        #     y_velocity / speed,
-        #     speed,
-        #     cmap=cmap,
-        #     scale=scale,
-        #     scale_units="xy",
-        # )
-        # plt.xlim(np.min(x_coordinate) - margin, np.max(x_coordinate) + margin)
-        # plt.ylim(np.min(y_coordinate) - margin, np.max(y_coordinate) + margin)
-        # plt.xlabel(X_concated.columns[0])
-        # plt.ylabel(X_concated.columns[1])
-
-        # plt.colorbar()
 
         plt.show()
 
