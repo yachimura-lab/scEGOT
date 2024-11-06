@@ -22,6 +22,8 @@ from IPython.display import HTML, Image, display
 from matplotlib import patheffects
 from matplotlib.colors import ListedColormap
 from PIL import Image as PILImage
+import scvelo as scv
+from scanpy.pp import neighbors
 from scipy import interpolate
 from scipy.sparse import csc_matrix, issparse, lil_matrix, linalg
 from scipy.stats import multivariate_normal, zscore
@@ -1706,38 +1708,96 @@ class scEGOT:
         if save and save_path is None:
             save_path = "./cell_velocity.png"
 
-        scale = 1 if mode == "pca" else 2.5
-        margin = 5 if mode == "pca" else 1
+        # scale = 1 if mode == "pca" else 2.5
+        # margin = 5 if mode == "pca" else 1
+        
+        day_labels = []
+        for i in range(len(self.day_names) - 1):
+            day_labels += [i for _ in range(len(self.X_pca[i]))]
 
-        X_concated = pd.concat(self.X_pca[:-1] if mode == "pca" else self.X_umap[:-1])
-
-        x_coordinate = X_concated.iloc[:, 0]
-        y_coordinate = X_concated.iloc[:, 1]
-
-        x_velocity = velocities.iloc[:, 0]
-        y_velocity = velocities.iloc[:, 1]
-
-        speed = [
-            np.sqrt(x_vel**2 + y_vel**2) for x_vel, y_vel in zip(x_velocity, y_velocity)
-        ]
-
-        plt.figure(figsize=(10, 8))
-        plt.quiver(
-            x_coordinate,
-            y_coordinate,
-            x_velocity / speed,
-            y_velocity / speed,
-            speed,
-            cmap=cmap,
-            scale=scale,
-            scale_units="xy",
+        X_concated_pca = pd.concat(self.X_pca[:-1]).values[:, :2]
+        if mode == "umap":
+            X_concated_umap = pd.concat(self.X_umap[:-1]).values[:, :2]
+        adata_cvel = anndata.AnnData(
+            pd.concat(self.X_pca[:-1]),
+            obs=pd.DataFrame(day_labels, index=pd.concat(self.X_pca[:-1]).index, columns=["clusters"]),
+            obsm={"X_pca": X_concated_pca},
+            layers={
+                "velocity": velocities.values,
+                "spliced": pd.concat(self.X_pca[:-1]).values,
+            },
         )
-        plt.xlim(np.min(x_coordinate) - margin, np.max(x_coordinate) + margin)
-        plt.ylim(np.min(y_coordinate) - margin, np.max(y_coordinate) + margin)
-        plt.xlabel(X_concated.columns[0])
-        plt.ylabel(X_concated.columns[1])
+        if mode == "umap":
+            adata_cvel.obsm["X_umap"] = X_concated_umap
+            
+        print(adata_cvel)
 
-        plt.colorbar()
+        neighbors(adata_cvel, use_rep="X_pca", n_neighbors=self.pca_model.n_components_)
+        scv.tl.velocity_graph(adata_cvel)
+        
+        figsize = (8, 6)
+        sns.set_style("white")
+        fig, ax = plt.subplots(figsize=figsize, tight_layout=True)
+        scv.pl.velocity_embedding_stream(
+            adata_cvel,
+            basis=mode,
+            vkey="velocity",
+            # color=cluster_celltype_color,
+            title="",
+            density=2,
+            alpha=0.0,
+            fontsize=14,
+            legend_fontsize=0,
+            legend_loc=None,
+            arrow_size=1,
+            linewidth=1.5,
+            ax=ax,
+            show=False,
+            X_grid=None,
+            V_grid=None,
+            sort_order=True,
+            size=50,
+            colorbar=False,
+        )
+
+        size_pt = 30
+        ax.scatter(
+            X_concated_pca[:, 0] if mode == "pca" else X_concated_umap[:, 0],
+            X_concated_pca[:, 1] if mode == "pca" else X_concated_umap[:, 1],
+            color="gray",
+            edgecolors="w",
+            linewidth=0.5,
+            s=size_pt,
+            alpha=0.5,
+        )
+        ax.axis("off")
+        # x_coordinate = X_concated.iloc[:, 0]
+        # y_coordinate = X_concated.iloc[:, 1]
+
+        # x_velocity = velocities.iloc[:, 0]
+        # y_velocity = velocities.iloc[:, 1]
+
+        # speed = [
+        #     np.sqrt(x_vel**2 + y_vel**2) for x_vel, y_vel in zip(x_velocity, y_velocity)
+        # ]
+
+        # plt.figure(figsize=(10, 8))
+        # plt.quiver(
+        #     x_coordinate,
+        #     y_coordinate,
+        #     x_velocity / speed,
+        #     y_velocity / speed,
+        #     speed,
+        #     cmap=cmap,
+        #     scale=scale,
+        #     scale_units="xy",
+        # )
+        # plt.xlim(np.min(x_coordinate) - margin, np.max(x_coordinate) + margin)
+        # plt.ylim(np.min(y_coordinate) - margin, np.max(y_coordinate) + margin)
+        # plt.xlabel(X_concated.columns[0])
+        # plt.ylabel(X_concated.columns[1])
+
+        # plt.colorbar()
 
         plt.show()
 
