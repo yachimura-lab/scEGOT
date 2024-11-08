@@ -1691,7 +1691,7 @@ class scEGOT:
         self,
         velocities,
         mode="pca",
-        size_pt=30,
+        size_points=30,
         save=False,
         save_path=None,
     ):
@@ -1754,7 +1754,7 @@ class scEGOT:
             color="gray",
             edgecolors="w",
             linewidth=0.5,
-            s=size_pt,
+            s=size_points,
             alpha=0.5,
         )
         ax.axis("off")
