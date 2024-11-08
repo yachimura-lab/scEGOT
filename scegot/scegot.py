@@ -1856,9 +1856,14 @@ class scEGOT:
                 linspace_num,
             ),
         )
-
-        x_velocity = velocities.iloc[:, 0]
-        y_velocity = velocities.iloc[:, 1]
+        
+        if mode == "umap":
+            velocities = self.umap_model.transform(velocities.values + pd.concat(self.X_pca[:-1]).values) - pd.concat(self.X_umap[:-1]).values
+            x_velocity = velocities[:, 0]
+            y_velocity = velocities[:, 1]
+        else:
+            x_velocity = velocities.iloc[:, 0]
+            y_velocity = velocities.iloc[:, 1]
 
         points = np.transpose(
             np.vstack((pd.concat(X[:-1]).iloc[:, 0], pd.concat(X[:-1]).iloc[:, 1]))
