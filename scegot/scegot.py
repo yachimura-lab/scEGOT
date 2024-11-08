@@ -22,6 +22,8 @@ from IPython.display import HTML, Image, display
 from matplotlib import patheffects
 from matplotlib.colors import ListedColormap
 from PIL import Image as PILImage
+import scvelo as scv
+from scanpy.pp import neighbors
 from scipy import interpolate
 from scipy.sparse import csc_matrix, issparse, lil_matrix, linalg
 from scipy.stats import multivariate_normal, zscore
@@ -1652,12 +1654,10 @@ class scEGOT:
         velo = barycentric_projection_map.T - X_item.values
         return velo
 
-    def calculate_cell_velocities(self, mode="pca"):
-        if mode not in ["pca", "umap"]:
-            raise ValueError("The parameter 'mode' should be 'pca' or 'umap'.")
+    def calculate_cell_velocities(self):
 
         velocities = pd.DataFrame(
-            columns=self.X_pca[0].columns if mode == "pca" else self.X_umap[0].columns
+            columns=self.X_pca[0].columns
         )
 
         if self.solutions is None:
@@ -1676,16 +1676,11 @@ class scEGOT:
             velocity = self._calculate_cell_velocity(
                 gmm_source, gmm_target, self.X_pca[i], self.solutions[i]
             )
-            if mode == "umap":
-                velocity = (
-                    self.umap_model.transform(velocity + self.X_pca[i].values)
-                    - self.X_umap[i]
-                )
 
             velocity = pd.DataFrame(
                 velocity,
                 columns=(
-                    self.X_pca[0].columns if mode == "pca" else self.X_umap[0].columns
+                    self.X_pca[0].columns
                 ),
             )
             velocities = pd.concat([velocities, velocity])
@@ -1696,48 +1691,111 @@ class scEGOT:
         self,
         velocities,
         mode="pca",
-        cmap="gnuplot2",
+        color_points="gmm",
+        size_points=30,
+        cmap="tab20",
+        cluster_names=None,
         save=False,
         save_path=None,
     ):
+        """
+        color_points = "gmm", "day", or None
+        """
         if mode not in ["pca", "umap"]:
             raise ValueError("The parameter 'mode' should be 'pca' or 'umap'.")
 
+        if color_points not in ["gmm", "day"]:
+            raise ValueError(
+                "The parameter 'color_points' should be None, 'gmm', or 'day'."
+            )
+            
+        if color_points == "gmm" and cluster_names is None:
+            raise ValueError("The parameter 'cluster_names' should be specified when 'color_points' is 'gmm'.")
+            
         if save and save_path is None:
             save_path = "./cell_velocity.png"
 
-        scale = 1 if mode == "pca" else 2.5
-        margin = 5 if mode == "pca" else 1
+        day_labels = []
+        for i in range(len(self.day_names) - 1):
+            day_labels += [i for _ in range(len(self.X_pca[i]))]
 
-        X_concated = pd.concat(self.X_pca[:-1] if mode == "pca" else self.X_umap[:-1])
-
-        x_coordinate = X_concated.iloc[:, 0]
-        y_coordinate = X_concated.iloc[:, 1]
-
-        x_velocity = velocities.iloc[:, 0]
-        y_velocity = velocities.iloc[:, 1]
-
-        speed = [
-            np.sqrt(x_vel**2 + y_vel**2) for x_vel, y_vel in zip(x_velocity, y_velocity)
-        ]
-
-        plt.figure(figsize=(10, 8))
-        plt.quiver(
-            x_coordinate,
-            y_coordinate,
-            x_velocity / speed,
-            y_velocity / speed,
-            speed,
-            cmap=cmap,
-            scale=scale,
-            scale_units="xy",
+        adata_cvel = anndata.AnnData(
+            pd.concat(self.X_pca[:-1]).values,
+            obs=pd.DataFrame(day_labels, index=pd.concat(self.X_pca[:-1]).index, columns=["clusters"]),
+            obsm={"X_pca": pd.concat(self.X_pca[:-1]).values},
+            layers={
+                "velocity": velocities.values,
+                "spliced": pd.concat(self.X_pca[:-1]).values,
+            },
         )
-        plt.xlim(np.min(x_coordinate) - margin, np.max(x_coordinate) + margin)
-        plt.ylim(np.min(y_coordinate) - margin, np.max(y_coordinate) + margin)
-        plt.xlabel(X_concated.columns[0])
-        plt.ylabel(X_concated.columns[1])
+        if mode == "umap":
+            adata_cvel.obsm["X_umap"] = pd.concat(self.X_umap[:-1]).values
+            
+        neighbors(adata_cvel, use_rep="X_pca", n_neighbors=self.pca_model.n_components_)
+        scv.tl.velocity_graph(adata_cvel)
+        
+        figsize = (8, 6)
+        sns.set_style("white")
+        fig, ax = plt.subplots(figsize=figsize, tight_layout=True)
+        scv.pl.velocity_embedding_stream(
+            adata_cvel,
+            basis=mode,
+            color="black",
+            vkey="velocity",
+            title="",
+            density=2,
+            alpha=0.0,
+            fontsize=14,
+            legend_fontsize=0,
+            legend_loc=None,
+            arrow_size=1,
+            linewidth=1.5,
+            ax=ax,
+            show=False,
+            X_grid=None,
+            V_grid=None,
+            sort_order=True,
+            size=50,
+            colorbar=False,
+        )
 
-        plt.colorbar()
+        X = self.X_pca if mode == "pca" else self.X_umap
+        colors = []
+        if color_points == "gmm":
+            label_sum = 0
+            for i in range(len(self.gmm_labels)):
+                colors += [label + label_sum for label in self.gmm_labels_modified[i]]
+                label_sum += self.gmm_n_components_list[i]
+        elif color_points == "day":
+            for i in range(len(X)):
+                colors += [i] * len(X[i])
+
+        scatter = plt.scatter(
+            pd.concat(X).iloc[:, 0],
+            pd.concat(X).iloc[:, 1],
+            cmap=plt.get_cmap(cmap, len(set(colors))),
+            c=colors,
+            edgecolors="w",
+            linewidth=0.5,
+            s=size_points,
+            alpha=0.5,
+        )
+        if color_points == "gmm" and cluster_names is not None:
+            handles = scatter.legend_elements(num=list(range(len(cluster_names))))[
+                0
+            ]
+            labels = cluster_names
+        else:
+            handles = scatter.legend_elements(num=list(range(len(self.day_names))))[
+                0
+            ]
+            labels = self.day_names
+        plt.legend(
+            handles=handles,
+            labels=labels,
+        )
+
+        ax.axis("off")
 
         plt.show()
 
@@ -1767,7 +1825,9 @@ class scEGOT:
             raise ValueError(
                 "The parameter 'color_points' should be None, 'gmm', or 'day'."
             )
-
+        if color_points == "gmm" and cluster_names is None:
+            raise ValueError("The parameter 'cluster_names' should be specified when 'color_points' is 'gmm'.")
+        
         if save and save_path is None:
             save_path = "./interpolation_of_cell_velocity_gmm_clusters.png"
 
@@ -1796,9 +1856,14 @@ class scEGOT:
                 linspace_num,
             ),
         )
-
-        x_velocity = velocities.iloc[:, 0]
-        y_velocity = velocities.iloc[:, 1]
+        
+        if mode == "umap":
+            velocities = self.umap_model.transform(velocities.values + pd.concat(self.X_pca[:-1]).values) - pd.concat(self.X_umap[:-1]).values
+            x_velocity = velocities[:, 0]
+            y_velocity = velocities[:, 1]
+        else:
+            x_velocity = velocities.iloc[:, 0]
+            y_velocity = velocities.iloc[:, 1]
 
         points = np.transpose(
             np.vstack((pd.concat(X[:-1]).iloc[:, 0], pd.concat(X[:-1]).iloc[:, 1]))
