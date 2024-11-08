@@ -1691,34 +1691,42 @@ class scEGOT:
         self,
         velocities,
         mode="pca",
+        color_points="gmm",
         size_points=30,
+        cmap="tab20",
+        cluster_names=None,
         save=False,
         save_path=None,
     ):
+        """
+        color_points = "gmm", "day", or None
+        """
         if mode not in ["pca", "umap"]:
             raise ValueError("The parameter 'mode' should be 'pca' or 'umap'.")
 
+        if color_points not in ["gmm", "day"]:
+            raise ValueError(
+                "The parameter 'color_points' should be None, 'gmm', or 'day'."
+            )
+            
         if save and save_path is None:
             save_path = "./cell_velocity.png"
-        
+
         day_labels = []
         for i in range(len(self.day_names) - 1):
             day_labels += [i for _ in range(len(self.X_pca[i]))]
 
-        X_concated_pca = pd.concat(self.X_pca[:-1]).values[:, :2]
-        if mode == "umap":
-            X_concated_umap = pd.concat(self.X_umap[:-1]).values[:, :2]
         adata_cvel = anndata.AnnData(
-            pd.concat(self.X_pca[:-1]),
+            pd.concat(self.X_pca[:-1]).values,
             obs=pd.DataFrame(day_labels, index=pd.concat(self.X_pca[:-1]).index, columns=["clusters"]),
-            obsm={"X_pca": X_concated_pca},
+            obsm={"X_pca": pd.concat(self.X_pca[:-1]).values},
             layers={
                 "velocity": velocities.values,
                 "spliced": pd.concat(self.X_pca[:-1]).values,
             },
         )
         if mode == "umap":
-            adata_cvel.obsm["X_umap"] = X_concated_umap
+            adata_cvel.obsm["X_umap"] = pd.concat(self.X_umap[:-1]).values
             
         neighbors(adata_cvel, use_rep="X_pca", n_neighbors=self.pca_model.n_components_)
         scv.tl.velocity_graph(adata_cvel)
@@ -1748,15 +1756,42 @@ class scEGOT:
             colorbar=False,
         )
 
-        ax.scatter(
-            X_concated_pca[:, 0] if mode == "pca" else X_concated_umap[:, 0],
-            X_concated_pca[:, 1] if mode == "pca" else X_concated_umap[:, 1],
-            color="gray",
+        X = self.X_pca if mode == "pca" else self.X_umap
+        colors = []
+        if color_points == "gmm":
+            label_sum = 0
+            for i in range(len(self.gmm_labels)):
+                colors += [label + label_sum for label in self.gmm_labels_modified[i]]
+                label_sum += self.gmm_n_components_list[i]
+        elif color_points == "day":
+            for i in range(len(X)):
+                colors += [i] * len(X[i])
+
+        scatter = plt.scatter(
+            pd.concat(X).iloc[:, 0],
+            pd.concat(X).iloc[:, 1],
+            cmap=plt.get_cmap(cmap, len(set(colors))),
+            c=colors,
             edgecolors="w",
             linewidth=0.5,
             s=size_points,
             alpha=0.5,
         )
+        if color_points == "gmm" and cluster_names is not None:
+            handles = scatter.legend_elements(num=list(range(len(cluster_names))))[
+                0
+            ]
+            labels = cluster_names
+        else:
+            handles = scatter.legend_elements(num=list(range(len(self.day_names))))[
+                0
+            ]
+            labels = self.day_names
+        plt.legend(
+            handles=handles,
+            labels=labels,
+        )
+
         ax.axis("off")
 
         plt.show()
