@@ -1709,6 +1709,9 @@ class scEGOT:
                 "The parameter 'color_points' should be None, 'gmm', or 'day'."
             )
             
+        if color_points == "gmm" and cluster_names is None:
+            raise ValueError("The parameter 'cluster_names' should be specified when 'color_points' is 'gmm'.")
+            
         if save and save_path is None:
             save_path = "./cell_velocity.png"
 
@@ -1822,7 +1825,9 @@ class scEGOT:
             raise ValueError(
                 "The parameter 'color_points' should be None, 'gmm', or 'day'."
             )
-
+        if color_points == "gmm" and cluster_names is None:
+            raise ValueError("The parameter 'cluster_names' should be specified when 'color_points' is 'gmm'.")
+        
         if save and save_path is None:
             save_path = "./interpolation_of_cell_velocity_gmm_clusters.png"
 
