@@ -1800,7 +1800,7 @@ class scEGOT:
         plt.show()
 
         if save:
-            plt.savefig(save_path)
+            fig.savefig(save_path)
 
     def plot_interpolation_of_cell_velocity(
         self,
