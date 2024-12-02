@@ -30,7 +30,7 @@ jobs:
           sphinx-build ./sphinx/source ./docs
           cp -r docs ./public
       - name: pages
-        uses: actions/upload-pages-artifact@v1
+        uses: actions/upload-pages-artifact@v4
         with:
           path: public
   deploy:
