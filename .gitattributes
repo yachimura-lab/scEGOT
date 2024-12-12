@@ -1,3 +1,2 @@
 scegot/figure_code/scEGOT_Figures.ipynb filter=lfs diff=lfs merge=lfs -text
 scegot/figure_code/scEGOT_Figures_ATAC.ipynb filter=lfs diff=lfs merge=lfs -text
-sphinx/docs/.doctrees/environment.pickle filter=lfs diff=lfs merge=lfs -text
