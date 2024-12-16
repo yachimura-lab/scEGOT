@@ -11,7 +11,7 @@ repository = "https://github.com/yachimura-lab/scEGOT"
 documentation = "https://yachimura-lab.github.io/scEGOT/tutorial.html"
 
 [tool.poetry.dependencies]
-python = "<3.12,>=3.9"
+python = ">=3.9"
 scipy = "<1.14,>=1.11.4"
 scikit-learn = "^1.3.2"
 matplotlib = "^3.8.0"
