@@ -38,6 +38,11 @@ sns.set_style("whitegrid")
 
 
 def is_notebook() -> bool:
+    """Check if the code is running in a Jupyter notebook or not.
+
+    Returns:
+        bool: True if the code is running in a Jupyter notebook, False otherwise.
+    """
     try:
         from IPython import get_ipython
 
