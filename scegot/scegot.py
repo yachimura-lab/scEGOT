@@ -37,7 +37,7 @@ from tqdm import tqdm
 sns.set_style("whitegrid")
 
 
-def is_notebook() -> bool:
+def is_notebook():
     """
     Check if the code is running in a Jupyter notebook or not.
 
