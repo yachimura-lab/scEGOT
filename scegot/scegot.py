@@ -147,42 +147,80 @@ class scEGOT:
             Input data.
         day_names : list of str, optional
             List of day names. Defaults to None.
+            Should be specified when 'X' is an array of DataFrame.
+            The order of the day names should be the same as the order of the data.
         verbose : bool, optional
             If False, all running messages are not displayed. Defaults to True.
         adata_day_key : str, optional
             AnnData observation key for day names. Defaults to None.
+            Should be specified when 'X' is AnnData.
+            Day names are extracted from the specified key.
+            The order of the day names will be the same as the order of appearance in the data.
 
         Attributes
         ----------
-        X_raw : list of pd.DataFrame
+        X_raw : list of pd.DataFrame of shape (n_samples, n_genes)
             Raw input data.
-        X_normalized : list of pd.DataFrame
+            Arranged in the order of the day names.
+
+        X_normalized : list of pd.DataFrame of shape (n_samples, n_genes) or None
             Normalized input data.
-        X_selected : list of pd.DataFrame
+            This attribute is None before the 'preprocess' method is called.
+
+        X_selected : list of pd.DataFrame of shape (n_samples, n_highly_variable_genes) or None
             Filtered input data with highly variable genes after normalization.
-        X_pca : list of pd.DataFrame
-            PCA-transformed input data after filtering.
-        X_umap : list of pd.DataFrame
-            UMAP-transformed input data after filtering.
-        pca_model : PCA
+            If 'select_genes' is False in the 'preprocess' method, this will be the same as 'X_normalized'.
+            This attribute is None before the 'preprocess' method is called.
+
+        X_pca : list of pd.DataFrame of shape (n_samples, n_components of PCA) or None
+            PCA-transformed input data.
+            PCA is applied to the X_selected data.
+            This attribute is None before the 'preprocess' method is called.
+        
+        X_umap : list of pd.DataFrame of shape (n_samples, n_components of UMAP) or None
+            UMAP-transformed input data.
+            UMAP is applied to the X_pca data.
+            This attribute is None before the 'apply_umap' method is called.
+
+        pca_model : PCA or None
             PCA model.
-        gmm_n_components_list : list of int
+            This attribute is None before the 'preprocess' method is called.
+
+        gmm_n_components_list : list of int or None
             List of the number of components for GMM.
-        gmm_models : list of GaussianMixture
+            Each element corresponds to the number of components of the GMM model for each day.
+            This attribute is None before the 'fit_gmm' or 'fit_predict_gmm' method is called.
+
+        gmm_models : list of GaussianMixture or None
             List of GMM models.
-        gmm_labels : list of np.ndarray
+            This attribute is None before the 'fit_gmm' or 'fit_predict_gmm' method is called.
+
+        gmm_labels : list of np.ndarray or None
             List of GMM labels.
-        gmm_labels_modified : list of np.ndarray
+            This attribute is None before the 'fit_predict_gmm' method is called.
+    
+        gmm_labels_modified : list of np.ndarray or None
             List of modified GMM labels.
-        gmm_label_converter : list of np.ndarray
+            This attribute is None before the 'fit_predict_gmm' method is called.
+
+        gmm_label_converter : list of np.ndarray or None
             List of GMM label converters.
+            This attribute is None before the 'replace_gmm_labels' method is called.
+
         umap_model : UMAP
             UMAP model.
+            This attribute is None before the 'apply_umap' method is called.
+
         day_names : list of str
             List of day names.
+
         gene_names : pd.Index
             Gene names.
-        solutions : list of np.ndarray
+            If you call the 'preprocess' method with 'select_genes' set to True, 
+            this attribute will be the highly variable gene names.
+            Otherwise, this attribute will be the gene names of the input data.
+
+        solutions : list of np.ndarray # TODO: add shape
             List of solutions.
         """
 
