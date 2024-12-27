@@ -26,4 +26,4 @@ The tutorial is available [here](https://yachimura-lab.github.io/scEGOT/).
 ## Paper
 
 Please see the following paper:
-[Yachimura, T., Wang, H., Imoto, Y. et al. scEGOT: single-cell trajectory inference framework based on entropic Gaussian mixture optimal transport. BMC Bioinformatics 25, 388 (2024).](https://doi.org/10.1186/s12859-024-05988-z)
+[Yachimura, T. et al. scEGOT: single-cell trajectory inference framework based on entropic Gaussian mixture optimal transport. BMC Bioinformatics 25, 388 (2024).](https://doi.org/10.1186/s12859-024-05988-z)
