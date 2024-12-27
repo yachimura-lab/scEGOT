@@ -38,10 +38,13 @@ sns.set_style("whitegrid")
 
 
 def is_notebook() -> bool:
-    """Check if the code is running in a Jupyter notebook or not.
+    """
+    Check if the code is running in a Jupyter notebook or not.
 
-    Returns:
-        bool: True if the code is running in a Jupyter notebook, False otherwise.
+    Returns
+    -------
+    bool
+        True if the code is running in a Jupyter notebook, False otherwise.
     """
     try:
         from IPython import get_ipython
@@ -62,20 +65,30 @@ def is_notebook() -> bool:
 
 
 def _check_input_data(input_data, day_names, adata_day_key):
-    """Check the input data and return the processed data.
+    """
+    Check the input data and return the processed data.
 
-    Args:
-        input_data (any): input data
-        day_names (list(str)): list of day names
-        adata_day_key (str): AnnData observation key for day names
+    Parameters
+    ----------
+    input_data : any
+        Input data.
+    day_names : list of str
+        List of day names.
+    adata_day_key : str
+        AnnData observation key for day names.
 
-    Raises:
-        ValueError: When 'X' is an array of DataFrame and 'day_names' is not specified
-            or 'X' is AnnData and 'adata_day_key' is not specified
-        TypeError: When 'X' is not an array of DataFrame or AnnData
+    Raises
+    ------
+    ValueError
+        When 'X' is an array of DataFrame and 'day_names' is not specified
+        or 'X' is AnnData and 'adata_day_key' is not specified.
+    TypeError
+        When 'X' is not an array of DataFrame or AnnData.
 
-    Returns:
-        list(pd.DataFrame: list of DataFrames
+    Returns
+    -------
+    list of pd.DataFrame
+        List of DataFrames.
     """
     if isinstance(input_data, list):
         if day_names is None:
@@ -125,31 +138,54 @@ class scEGOT:
         verbose=True,
         adata_day_key=None,
     ):
-        """Initialize the scEGOT object.
-
-        Args:
-            X (list[pd.DataFrame] or AnnData): input data
-            day_names (list[str], optional): list of day names. Defaults to None.
-            verbose (bool, optional): If False, all running messages are not displayed. Defaults to True.
-            adata_day_key (str, optional): AnnData observation key for day names. Defaults to None.
-            
-        Attributes:
-            X_raw (list[pd.DataFrame]): raw input data
-            X_normalized (list[pd.DataFrame]): normalized input data
-            X_selected (list[pd.DataFrame]): filtered input data with highly variable genes after normalization
-            X_pca (list[pd.DataFrame]): PCA-transformed input data after filtering
-            X_umap (list[pd.DataFrame]): UMAP-transformed input data after filtering
-            pca_model (PCA): PCA model
-            gmm_n_components_list (list[int]): list of the number of components for GMM
-            gmm_models (list[GaussianMixture]): list of GMM models
-            gmm_labels (list[np.ndarray]): list of GMM labels
-            gmm_labels_modified (list[np.ndarray]): list of modified GMM labels
-            gmm_label_converter (list[np.ndarray]): list of GMM label converters
-            umap_model (UMAP): UMAP model
-            day_names (list[str]): list of day names
-            gene_names (pd.Index): gene names
-            solutions (list[np.ndarray]): list of solutions
         """
+        Initialize the scEGOT object.
+
+        Parameters
+        ----------
+        X : list of pd.DataFrame or AnnData
+            Input data.
+        day_names : list of str, optional
+            List of day names. Defaults to None.
+        verbose : bool, optional
+            If False, all running messages are not displayed. Defaults to True.
+        adata_day_key : str, optional
+            AnnData observation key for day names. Defaults to None.
+
+        Attributes
+        ----------
+        X_raw : list of pd.DataFrame
+            Raw input data.
+        X_normalized : list of pd.DataFrame
+            Normalized input data.
+        X_selected : list of pd.DataFrame
+            Filtered input data with highly variable genes after normalization.
+        X_pca : list of pd.DataFrame
+            PCA-transformed input data after filtering.
+        X_umap : list of pd.DataFrame
+            UMAP-transformed input data after filtering.
+        pca_model : PCA
+            PCA model.
+        gmm_n_components_list : list of int
+            List of the number of components for GMM.
+        gmm_models : list of GaussianMixture
+            List of GMM models.
+        gmm_labels : list of np.ndarray
+            List of GMM labels.
+        gmm_labels_modified : list of np.ndarray
+            List of modified GMM labels.
+        gmm_label_converter : list of np.ndarray
+            List of GMM label converters.
+        umap_model : UMAP
+            UMAP model.
+        day_names : list of str
+            List of day names.
+        gene_names : pd.Index
+            Gene names.
+        solutions : list of np.ndarray
+            List of solutions.
+        """
+
         self.verbose = verbose
 
         X, day_names = _check_input_data(X, day_names, adata_day_key)
