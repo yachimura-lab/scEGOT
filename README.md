@@ -23,7 +23,7 @@ $ pip install scegot
 
 The tutorial is available [here](https://yachimura-lab.github.io/scEGOT/).
 
-## Preprint
+## Paper
 
 Please see the following paper:
-[T. Yachimura et al. scEGOT: Single-cell trajectory inference framework based on entropic Gaussian mixture optimal transport. bioRxiv](https://doi.org/10.1101/2023.09.11.557102)
+[Yachimura, T., Wang, H., Imoto, Y. et al. scEGOT: single-cell trajectory inference framework based on entropic Gaussian mixture optimal transport. BMC Bioinformatics 25, 388 (2024).](https://doi.org/10.1186/s12859-024-05988-z)
