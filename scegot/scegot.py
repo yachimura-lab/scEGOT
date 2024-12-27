@@ -125,6 +125,31 @@ class scEGOT:
         verbose=True,
         adata_day_key=None,
     ):
+        """Initialize the scEGOT object.
+
+        Args:
+            X (list[pd.DataFrame] or AnnData): input data
+            day_names (list[str], optional): list of day names. Defaults to None.
+            verbose (bool, optional): If False, all running messages are not displayed. Defaults to True.
+            adata_day_key (str, optional): AnnData observation key for day names. Defaults to None.
+            
+        Attributes:
+            X_raw (list[pd.DataFrame]): raw input data
+            X_normalized (list[pd.DataFrame]): normalized input data
+            X_selected (list[pd.DataFrame]): filtered input data with highly variable genes after normalization
+            X_pca (list[pd.DataFrame]): PCA-transformed input data after filtering
+            X_umap (list[pd.DataFrame]): UMAP-transformed input data after filtering
+            pca_model (PCA): PCA model
+            gmm_n_components_list (list[int]): list of the number of components for GMM
+            gmm_models (list[GaussianMixture]): list of GMM models
+            gmm_labels (list[np.ndarray]): list of GMM labels
+            gmm_labels_modified (list[np.ndarray]): list of modified GMM labels
+            gmm_label_converter (list[np.ndarray]): list of GMM label converters
+            umap_model (UMAP): UMAP model
+            day_names (list[str]): list of day names
+            gene_names (pd.Index): gene names
+            solutions (list[np.ndarray]): list of solutions
+        """
         self.verbose = verbose
 
         X, day_names = _check_input_data(X, day_names, adata_day_key)
