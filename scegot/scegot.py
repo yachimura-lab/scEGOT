@@ -62,6 +62,21 @@ def is_notebook() -> bool:
 
 
 def _check_input_data(input_data, day_names, adata_day_key):
+    """Check the input data and return the processed data.
+
+    Args:
+        input_data (any): input data
+        day_names (list(str)): list of day names
+        adata_day_key (str): AnnData observation key for day names
+
+    Raises:
+        ValueError: When 'X' is an array of DataFrame and 'day_names' is not specified
+            or 'X' is AnnData and 'adata_day_key' is not specified
+        TypeError: When 'X' is not an array of DataFrame or AnnData
+
+    Returns:
+        list(pd.DataFrame: list of DataFrames
+    """
     if isinstance(input_data, list):
         if day_names is None:
             raise ValueError(
