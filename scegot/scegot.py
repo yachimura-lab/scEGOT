@@ -72,8 +72,10 @@ def _check_input_data(input_data, day_names, adata_day_key):
     ----------
     input_data : any
         Input data.
+        
     day_names : list of str
         List of day names.
+        
     adata_day_key : str
         AnnData observation key for day names.
 
@@ -82,6 +84,7 @@ def _check_input_data(input_data, day_names, adata_day_key):
     ValueError
         When 'X' is an array of DataFrame and 'day_names' is not specified
         or 'X' is AnnData and 'adata_day_key' is not specified.
+        
     TypeError
         When 'X' is not an array of DataFrame or AnnData.
 
@@ -336,23 +339,32 @@ class scEGOT:
         pca_n_components : int
             Number of components to keep in PCA.
             Passed to the 'n_components' parameter of the PCA class.
+            
         recode_params : dict, optional
             Parameters for scRECODE, by default {}
+            
         umi_target_sum : int or float, optional
             Target sum for UMI normalization, by default 1e4
+            
         pca_random_state : int, RandomState instance or None, optional
             Pass an int for reproducible results, by default None
             Passed to the 'random_state' parameter of the PCA class.
+            
         pca_other_params : dict, optional
             Parameters other than 'n_components' and 'random_state' for PCA, by default {}
+            
         apply_recode : bool, optional
             If True, apply scRECODE, by default True
+            
         apply_normalization_log1p : bool, optional
             If True, apply log1p normalization, by default True
+            
         apply_normalization_umi : bool, optional
             If True, apply UMI normalization, by default True
+            
         select_genes : bool, optional
             If True, filter genes and select highly variable genes, by default True
+            
         n_select_genes : int, optional
             Number of highly variable genes to select, by default 2000
             Used only when 'select_genes' is True.
@@ -361,6 +373,7 @@ class scEGOT:
         -------
         list of pd.DataFrame of shape (n_samples, n_components of PCA)
             Normalized, filtered, and PCA-transformed data.
+            
         sklearn.decomposition.PCA
             PCA instance fitted to the input data.
         """        
@@ -455,15 +468,19 @@ class scEGOT:
         n_neighbors : float
             The size of local neighborhood used for manifold approximation.
             Passed to the 'n_neighbors' parameter of the UMAP class.
+            
         n_components : int, optional
             The dimension of the space to embed into, by default 2
             Passed to the 'n_components' parameter of the UMAP class.
+            
         random_state : int, RandomState instance or None, optional
             Fix the random seed for reproducibility, by default None
             Passed to the 'random_state' parameter of the UMAP class.
+            
         min_dist : float, optional
             The effective minimum distance between embedded points, by default 0.1
             Passed to the 'min_dist' parameter of the UMAP class.
+            
         umap_other_params : dict, optional
             Other parameters for UMAP, by default {}
 
@@ -471,6 +488,7 @@ class scEGOT:
         -------
         list of pd.DataFrame of shape (n_samples, n_components of UMAP)
             UMAP-transformed data.
+            
         umap.umap_.UMAP
             UMAP instance fitted to the input data.
         """
@@ -538,18 +556,23 @@ class scEGOT:
         n_components_list : list of int
             Each element corresponds to the number of components of the GMM model for each day.
             Passed to the 'n_components' parameter of the GaussianMixture class.
+            
         covariance_type : {'full', 'tied', 'diag', 'spherical'}, optional
             String describing the type of covariances parameters to use, by default "full"
             Passed to the 'covariance_type' parameter of the GaussianMixture class.
+            
         max_iter : int, optional
             The number of EM iterations to perform, by default 2000
             Passed to the 'max_iter' parameter of the GaussianMixture class.
+            
         n_init : int, optional
             The number of initializations to perform, by default 10
             Passed to the 'n_init' parameter of the GaussianMixture class.
+            
         random_state : int, RandomState instance or None, optional
             Controls the random seed given at each GMM model initialization, by default None
             Passed to the 'random_state' parameter of the GaussianMixture class.
+            
         gmm_other_params : dict, optional
             Other parameters for GMM, by default {}
 
@@ -558,6 +581,7 @@ class scEGOT:
         list of GaussianMixture instances
             The length of the list is the same as the number of days.
             Each element is a GMM instance fitted to the corresponding day's data.
+            
         list of np.ndarray
             List of GMM labels.
             Each element is the predicted labels for the corresponding day's data.
