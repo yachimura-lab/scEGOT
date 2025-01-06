@@ -526,6 +526,37 @@ class scEGOT:
         random_state=None,
         gmm_other_params={},
     ):
+        """Fit GMM models with each day's data and predict labels for them.
+
+        Parameters
+        ----------
+        n_components_list : list of int
+            Each element corresponds to the number of components of the GMM model for each day.
+            This parameter is passed to the 'n_components' parameter of the GaussianMixture class.
+        covariance_type : {'full', 'tied', 'diag', 'spherical'}, optional
+            String describing the type of covariances parameters to use, by default "full"
+            This parameter is passed to the 'covariance_type' parameter of the GaussianMixture class.
+        max_iter : int, optional
+            The number of EM iterations to perform, by default 2000
+            This parameter is passed to the 'max_iter' parameter of the GaussianMixture class.
+        n_init : int, optional
+            The number of initializations to perform, by default 10
+            This parameter is passed to the 'n_init' parameter of the GaussianMixture class.
+        random_state : int, RandomState instance or None, optional
+            Controls the random seed given at each GMM model initialization, by default None
+            This parameter is passed to the 'random_state' parameter of the GaussianMixture class.
+        gmm_other_params : dict, optional
+            Other parameters for GMM, by default {}
+
+        Returns
+        -------
+        list of GaussianMixture instances
+            The length of the list is the same as the number of days.
+            Each element is a GMM instance fitted to the corresponding day's data.
+        list of np.ndarray
+            List of GMM labels.
+            Each element is the predicted labels for the corresponding day's data.
+        """
         if self.verbose:
             print(
                 "Fitting GMM models with each day's data and predicting labels for them..."
