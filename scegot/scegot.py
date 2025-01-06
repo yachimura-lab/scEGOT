@@ -358,9 +358,8 @@ class scEGOT:
 
         Returns
         -------
-        list of pd.DataFrame of shape (n_samples, n_highly_variable_genes)
-            Normalized and filtered input data.
-            If 'select_genes' is False, the number of genes will be the same as the input data.
+        list of pd.DataFrame of shape (n_samples, n_components of PCA)
+            Normalized, filtered, and PCA-transformed data.
         sklearn.decomposition.PCA
             PCA instance fitted to the input data.
         """        
