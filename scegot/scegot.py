@@ -454,12 +454,16 @@ class scEGOT:
         ----------
         n_neighbors : float
             The size of local neighborhood used for manifold approximation.
+            This parameter is passed to the 'n_neighbors' parameter of the UMAP class.
         n_components : int, optional
             The dimension of the space to embed into, by default 2
+            This parameter is passed to the 'n_components' parameter of the UMAP class.
         random_state : int, RandomState instance or None, optional
-            random_state for UMAP, by default None
+            Fix the random seed for reproducibility, by default None
+            This parameter is passed to the 'random_state' parameter of the UMAP class.
         min_dist : float, optional
             The effective minimum distance between embedded points, by default 0.1
+            This parameter is passed to the 'min_dist' parameter of the UMAP class.
         umap_other_params : dict, optional
             Other parameters for UMAP, by default {}
 
