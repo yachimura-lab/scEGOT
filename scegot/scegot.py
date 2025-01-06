@@ -667,6 +667,52 @@ class scEGOT:
         save=False,
         save_paths=None,
     ):
+        """Plot GMM predictions.
+        Output images for the number of days.
+        Each image contains two subplots: left one is in one color and right one is 
+        colored by GMM labels.
+
+        Parameters
+        ----------
+        mode : {'pca', 'umap'}, optional
+            The space to plot the GMM predictions, by default "pca"
+        
+        figure_labels : list or tuple of str of shape (2,), optional
+            X and Y axis labels, by default None
+            If None, the first two columns of the input data will be used.
+
+        x_range : list or tuple of int of shape (2,), optional
+            Restrict the X axis range, by default None
+            If None, the range will be automatically determined to include all data points.
+
+        y_range : list or tuple of int of shape (2,), optional
+            Restrict the Y axis range, by default None
+            If None, the range will be automatically determined to include all data points.
+            
+        figure_titles_without_gmm : list or tuple of str of shape (n_days,), optional
+            List of figure titles of left subplots, by default None
+    
+        figure_titles_with_gmm : list or tuple of str of shape (n_days,), optional
+            List of figure titles of right subplots, by default None
+
+        plot_gmm_means : bool, optional
+            If True, plot GMM mean points on the right subplots, by default False
+
+        cmap : str, optional
+            String of matplolib colormap name, by default "plasma"
+
+        save : bool, optional
+            If True, save the output images, by default False
+
+        save_paths : list or tuple of str of shape (n_days), optional
+            List of paths to save the output images, by default None
+            If None, the images will be saved as './GMM_preds_{i + 1}.png'.
+
+        Raises
+        ------
+        ValueError
+            When 'mode' is not 'pca' or 'umap'.
+        """
         if mode not in ["pca", "umap"]:
             raise ValueError("The parameter 'mode' should be 'pca' or 'umap'.")
 
@@ -768,6 +814,32 @@ class scEGOT:
         save=False,
         save_path=None,
     ):
+        """Export an animation of the interpolated distribution between GMM models.
+
+        Parameters
+        ----------
+        x_range : list or tuple of int of shape (2,), optional
+            Restrict the X axis range, by default None
+
+        y_range : list or tuple of int of shape (2,), optional
+            Restrict the Y axis range, by default None
+
+        interpolate_interval : int, optional
+            The number of frames to interpolate between two timepoints, by default 11
+            This is the total number of frames at both timepoints and the number of frames
+            between these.
+            Note that both ends are included.
+
+        cmap : str, optional
+            String of matplolib colormap name, by default "gnuplot2"
+
+        save : bool, optional
+            If True, save the output animation, by default False
+
+        save_path : _type_, optional
+            Path to save the output animation, by default None
+            If None, the animation will be saved as './cell_state_video.gif'
+        """
         if save and save_path is None:
             save_path = "./cell_state_video.gif"
 
