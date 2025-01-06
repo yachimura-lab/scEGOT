@@ -335,13 +335,14 @@ class scEGOT:
         ----------
         pca_n_components : int
             Number of components to keep in PCA.
+            This parameter is passed to the 'n_components' parameter of the PCA class.
         recode_params : dict, optional
             Parameters for scRECODE, by default {}
         umi_target_sum : int or float, optional
             Target sum for UMI normalization, by default 1e4
         pca_random_state : int, RandomState instance or None, optional
-            random_state for PCA, by default None
-            Pass an int for reproducible results
+            Pass an int for reproducible results, by default None
+            This parameter is passed to the 'random_state' parameter of the PCA class.
         pca_other_params : dict, optional
             Parameters other than 'n_components' and 'random_state' for PCA, by default {}
         apply_recode : bool, optional
