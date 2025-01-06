@@ -327,11 +327,50 @@ class scEGOT:
         select_genes=True,
         n_select_genes=2000,
     ):
+        """Preprocess the input data. 
+        
+        Apply scRECODE, normalize, select highly variable genes, and apply PCA.
+
+        Parameters
+        ----------
+        pca_n_components : int
+            Number of components to keep in PCA.
+        recode_params : dict, optional
+            Parameters for scRECODE, by default {}
+        umi_target_sum : int or float, optional
+            Target sum for UMI normalization, by default 1e4
+        pca_random_state : int, RandomState instance or None, optional
+            random_state for PCA, by default None
+            Pass an int for reproducible results
+        pca_other_params : dict, optional
+            Parameters other than 'n_components' and 'random_state' for PCA, by default {}
+        apply_recode : bool, optional
+            If True, apply scRECODE, by default True
+        apply_normalization_log1p : bool, optional
+            If True, apply log1p normalization, by default True
+        apply_normalization_umi : bool, optional
+            If True, apply UMI normalization, by default True
+        select_genes : bool, optional
+            If True, filter genes and select highly variable genes, by default True
+        n_select_genes : int, optional
+            Number of highly variable genes to select, by default 2000
+            Used only when 'select_genes' is True.
+
+        Returns
+        -------
+        list of pd.DataFrame of shape (n_samples, n_highly_variable_genes)
+            Normalized and filtered input data.
+            If 'select_genes' is False, the number of genes will be the same as the input data.
+        sklearn.decomposition.PCA
+            PCA instance fitted to the input data.
+        """        
+        
         X_concated = pd.concat(self.X_raw)
 
         if apply_recode:
             if self.verbose:
                 print("Applying RECODE...")
+            # TODO: add random_state parameter for RECODE
             X_concated = self._preprocess_recode(
                 X_concated,
                 recode_params,
