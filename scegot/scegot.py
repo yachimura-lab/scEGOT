@@ -448,6 +448,28 @@ class scEGOT:
         min_dist=0.1,
         umap_other_params={},
     ):
+        """Fit self.X_pca to UMAP and return the transformed data.
+
+        Parameters
+        ----------
+        n_neighbors : float
+            The size of local neighborhood used for manifold approximation.
+        n_components : int, optional
+            The dimension of the space to embed into, by default 2
+        random_state : int, RandomState instance or None, optional
+            random_state for UMAP, by default None
+        min_dist : float, optional
+            The effective minimum distance between embedded points, by default 0.1
+        umap_other_params : dict, optional
+            Other parameters for UMAP, by default {}
+
+        Returns
+        -------
+        list of pd.DataFrame of shape (n_samples, n_components of UMAP)
+            UMAP-transformed data.
+        umap.umap_.UMAP
+            UMAP instance fitted to the input data.
+        """
         X_concated = pd.concat(self.X_pca)
         X_concated, umap_model = self._apply_umap_to_concated_data(
             X_concated,
