@@ -335,14 +335,14 @@ class scEGOT:
         ----------
         pca_n_components : int
             Number of components to keep in PCA.
-            This parameter is passed to the 'n_components' parameter of the PCA class.
+            Passed to the 'n_components' parameter of the PCA class.
         recode_params : dict, optional
             Parameters for scRECODE, by default {}
         umi_target_sum : int or float, optional
             Target sum for UMI normalization, by default 1e4
         pca_random_state : int, RandomState instance or None, optional
             Pass an int for reproducible results, by default None
-            This parameter is passed to the 'random_state' parameter of the PCA class.
+            Passed to the 'random_state' parameter of the PCA class.
         pca_other_params : dict, optional
             Parameters other than 'n_components' and 'random_state' for PCA, by default {}
         apply_recode : bool, optional
@@ -454,16 +454,16 @@ class scEGOT:
         ----------
         n_neighbors : float
             The size of local neighborhood used for manifold approximation.
-            This parameter is passed to the 'n_neighbors' parameter of the UMAP class.
+            Passed to the 'n_neighbors' parameter of the UMAP class.
         n_components : int, optional
             The dimension of the space to embed into, by default 2
-            This parameter is passed to the 'n_components' parameter of the UMAP class.
+            Passed to the 'n_components' parameter of the UMAP class.
         random_state : int, RandomState instance or None, optional
             Fix the random seed for reproducibility, by default None
-            This parameter is passed to the 'random_state' parameter of the UMAP class.
+            Passed to the 'random_state' parameter of the UMAP class.
         min_dist : float, optional
             The effective minimum distance between embedded points, by default 0.1
-            This parameter is passed to the 'min_dist' parameter of the UMAP class.
+            Passed to the 'min_dist' parameter of the UMAP class.
         umap_other_params : dict, optional
             Other parameters for UMAP, by default {}
 
@@ -537,19 +537,19 @@ class scEGOT:
         ----------
         n_components_list : list of int
             Each element corresponds to the number of components of the GMM model for each day.
-            This parameter is passed to the 'n_components' parameter of the GaussianMixture class.
+            Passed to the 'n_components' parameter of the GaussianMixture class.
         covariance_type : {'full', 'tied', 'diag', 'spherical'}, optional
             String describing the type of covariances parameters to use, by default "full"
-            This parameter is passed to the 'covariance_type' parameter of the GaussianMixture class.
+            Passed to the 'covariance_type' parameter of the GaussianMixture class.
         max_iter : int, optional
             The number of EM iterations to perform, by default 2000
-            This parameter is passed to the 'max_iter' parameter of the GaussianMixture class.
+            Passed to the 'max_iter' parameter of the GaussianMixture class.
         n_init : int, optional
             The number of initializations to perform, by default 10
-            This parameter is passed to the 'n_init' parameter of the GaussianMixture class.
+            Passed to the 'n_init' parameter of the GaussianMixture class.
         random_state : int, RandomState instance or None, optional
             Controls the random seed given at each GMM model initialization, by default None
-            This parameter is passed to the 'random_state' parameter of the GaussianMixture class.
+            Passed to the 'random_state' parameter of the GaussianMixture class.
         gmm_other_params : dict, optional
             Other parameters for GMM, by default {}
 
