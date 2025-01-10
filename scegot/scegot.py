@@ -1866,6 +1866,38 @@ class scEGOT:
     def make_interpolation_data(
         self, gmm_source, gmm_target, t, columns=None, n_samples=2000, seed=0
     ):
+        """Make interpolation data between two timepoints.
+
+        Parameters
+        ----------
+        gmm_source : GaussianMixture
+            GMM model of the source timepoint.
+
+        gmm_target : GaussianMixture
+            GMM model of the target timepoint.
+
+        t : float
+            Interpolation ratio.
+            0 <= t <= 1.
+            0 is the source timepoint, 1 is the target timepoint.
+            If you specify 0.5, the data will be interpolated halfway between the source and target timepoints.
+
+        columns : list of str, optional
+            Columns names of the output data, by default None
+            # TODO: add default value
+
+        n_samples : int, optional
+            Number of samples to generate, by default 2000
+
+        seed : int, optional
+            Random seed, by default 0
+
+        Returns
+        -------
+        pd.DataFrame
+            Interpolated data between two timepoints.
+        """
+        
         d = gmm_source.means_.shape[1]
         K_0, K_1 = gmm_source.means_.shape[0], gmm_target.means_.shape[0]
 
