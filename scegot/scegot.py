@@ -1448,6 +1448,39 @@ class scEGOT:
         save=False,
         save_path=None,
     ):
+        """Plot fold change between two clusters.
+
+        Parameters
+        ----------
+        cluster_names : list of list of str
+            1st dimension is the number of days, 2nd dimension is the number of gmm components
+            in each day.
+            Can be generaged by 'generate_cluster_names' method.
+
+        cluster1 : str
+            Cluster name of denominator.
+            
+        cluster2 : str
+            Cluster name of numerator.
+
+        tf_gene_names : list of str, optional
+            List of transcription factor gene names to use, by default None
+            If None, all gene names (self.gene_names) will be used.
+            You can pass on any list of gene names you want to use, not limited to TF genes.
+            # TODO: change parameter name to 'gene_names' because it's not limited to TF genes.
+
+        threshold : float, optional
+            Threshold to filter labels, by default 1.0
+            Only genes with fold change greater than this threshold will be plotted its label.
+
+        save : bool, optional
+            If True, save the output image, by default False
+
+        save_path : str, optional
+            Path to save the output image, by default None
+            If None, the image will be saved as './fold_change.png'
+        """
+        
         if save and save_path is None:
             save_path = "./fold_change.png"
 
