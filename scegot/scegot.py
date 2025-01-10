@@ -1951,6 +1951,58 @@ class scEGOT:
         save=False,
         save_path=None,
     ):
+        """Compare the true and interpolation distributions by plotting them.
+
+        Parameters
+        ----------
+        interpolate_index : int
+            Index of the timepoint to interpolate.
+            1 <= interpolate_index <= n_days - 2
+
+        mode : {'pca', 'umap'}, optional
+            The space to plot gene expression levels, by default "pca"
+
+        n_samples : int, optional
+            Number of samples to generate, by default 2000
+
+        t : float, optional
+            Interpolation ratio, by default 0.5
+            If you want to interpolate halfway between the source and target timepoints, specify 0.5.
+            Source timepoint is interpolate_index - 1, target timepoint is interpolate_index + 1.
+
+        plot_source_and_target : bool, optional
+            If True, plot the source and target timepoints, by default True
+
+        alpha_true : float, optional
+            Transparency of the true data, by default 0.5
+
+        x_col_name : str, optional
+            Label of the x-axis, by default None
+
+        y_col_name : _type_, optional
+            Label of the y-axis, by default None
+            # TODO: merge 'x_col_name' and 'y_col_name' into 'axis_labels'
+
+        x_range : list or tuple of float of shape (2,), optional
+            Range of the x-axis, by default None
+            If None, the range will be automatically determined based on the data.
+
+        y_range : list or tuple of float of shape (2,), optional
+            Range of the y-axis, by default None
+            If None, the range will be automatically determined based on the data.
+
+        save : bool, optional
+            If True, save the output image, by default False
+
+        save_path : _type_, optional
+            Path to save the output image, by default None
+
+        Raises
+        ------
+        ValueError
+            When 'mode' is not 'pca' or 'umap'.
+        """
+        
         if mode not in ["pca", "umap"]:
             raise ValueError("The parameter 'mode' should be 'pca' or 'umap'.")
 
