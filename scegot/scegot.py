@@ -1311,10 +1311,37 @@ class scEGOT:
     def plot_simple_cell_state_graph(
         self, G, layout="normal", order=None, save=False, save_path=None
     ):
+        """Plot the cell state graph with the given graph object in a simple way.
+
+        Parameters
+        ----------
+        G : nx.classes.digraph.DiGraph
+            Networkx graph object of the cell state graph.
+
+        layout : {'normal', 'hierarchy'}, optional
+            The layout of the graph, by default "normal"
+            When 'normal', the graph is plotted the same layout as the self.plot_cell_state_graph method.
+            When 'hierarchy', the graph is plotted with the day on the x-axis and the cluster on the y-axis.
+
+        order : {'weight', None}, optional
+            Order of nodes along the y-axis, by default None
+            This parameter is only used when 'layout' is 'hierarchy'.
+            When 'weight', the nodes are ordered by the size of the nodes.
+            When None, the nodes are ordered by the cluster number.
+
+        save : bool, optional
+            If True, save the output image, by default False
+
+        save_path : str, optional
+            Path to save the output image, by default None
+            If None, the image will be saved as './simple_cell_state_graph.png'
+
+        Raises
+        ------
+        ValueError
+            When 'layout' is not 'normal' or 'hierarchy', or 'order' is not None or 'weight'.
         """
-        layout = "normal" or "hierarchy"
-        order = None or "weight"
-        """
+        
         if layout not in ["normal", "hierarchy"]:
             raise ValueError("The parameter 'layout' should be 'normal or 'hierarchy'.")
         if order is not None and order != "weight":
