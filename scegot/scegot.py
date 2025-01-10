@@ -1676,23 +1676,17 @@ class scEGOT:
         cluster_names,
         pathway_names,
         selected_genes,
-        tf_gene_names=None,
         save=False,
         save_path=None,
     ):
+
         if save and save_path is None:
             save_path = "./pathway_gene_expressions.png"
-
-        if tf_gene_names is None:
-            gene_names_to_use = self.gene_names
-        else:
-            gene_names_to_use = tf_gene_names
 
         genes = self.get_positive_gmm_mean_gene_values_per_cluster(
             self.get_gmm_means(),
             cluster_names=list(itertools.chain.from_iterable(cluster_names)),
         )
-        genes = genes.loc[:, genes.columns.isin(gene_names_to_use)]
 
         pathway_selected_genes = genes.loc[pathway_names].loc[:, selected_genes]
         fig = go.Figure()
