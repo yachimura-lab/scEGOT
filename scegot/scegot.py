@@ -1679,6 +1679,30 @@ class scEGOT:
         save=False,
         save_path=None,
     ):
+        """Plot gene expression levels within a pathway.
+
+        Parameters
+        ----------
+        cluster_names : list of list of str
+            1st dimension is the number of days, 2nd dimension is the number of gmm components
+            in each day.
+            Can be generaged by 'generate_cluster_names' method.
+
+        pathway_names : list of str of shape (n_days,)
+            List of cluster names included in the pathway.
+            Specify like ['day0's cluster name', 'day1's cluster name', ..., 'dayN's cluster name'].
+
+        selected_genes : list of str
+            List of gene names whose gene expression changes you want to track.
+            Recommend using about 5 genes.
+
+        save : bool, optional
+            If True, save the output image, by default False
+
+        save_path : _type_, optional
+            Path to save the output image, by default None
+            If None, the image will be saved as './pathway_gene_expressions.png'
+        """
 
         if save and save_path is None:
             save_path = "./pathway_gene_expressions.png"
