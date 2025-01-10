@@ -1235,6 +1235,33 @@ class scEGOT:
         save=False,
         save_path=None,
     ):
+        """Plot the cell state graph with the given graph object.
+
+        Parameters
+        ----------
+        G : nx.classes.digraph.DiGraph
+            Networkx graph object of the cell state graph.
+
+        cluster_names : list of list of str
+            1st dimension is the number of days, 2nd dimension is the number of gmm components
+
+        tf_gene_names : list of str, optional
+            List of transcription factor gene names to use, by default None
+            If None, all gene names (self.gene_names) will be used.
+            You can pass on any list of gene names you want to use, not limited to TF genes.
+
+        tf_gene_pick_num : int, optional
+            The number of genes to show in each node and edge, by default 5
+            # TODO: change parameter name to 'gene_pick_num' because it's not limited to TF genes.
+
+        save : bool, optional
+            If True, save the output image, by default False
+
+        save_path : _type_, optional
+            Path to save the output image, by default None
+            If None, the image will be saved as './cell_state_graph.png'
+        """
+        
         if save and save_path is None:
             save_path = "./cell_state_graph.png"
 
