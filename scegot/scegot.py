@@ -1565,6 +1565,36 @@ class scEGOT:
         save=False,
         save_path=None,
     ):
+        """Plot mean and variance of gene expression levels within a pathway.
+
+        Parameters
+        ----------
+        cluster_names : list of list of str
+            1st dimension is the number of days, 2nd dimension is the number of gmm components
+            in each day.
+            Can be generaged by 'generate_cluster_names' method.
+        
+        pathway_names : list of str of shape (n_days,)
+            List of cluster names included in the pathway.
+            Specify like ['day0's cluster name', 'day1's cluster name', ..., 'dayN's cluster name'].
+            
+        tf_gene_names : list of str, optional
+            List of transcription factor gene names to use, by default None
+            If None, all gene names (self.gene_names) will be used.
+            You can pass on any list of gene names you want to use, not limited to TF genes.
+
+        threshold : float, optional
+            Threshold to filter labels, by default 1.0
+            Only genes with variance greater than this threshold will be plotted its label.
+
+        save : bool, optional
+            If True, save the output image, by default False
+
+        save_path : _type_, optional
+            Path to save the output image, by default None
+            If None, the image will be saved as './pathway_mean_var.png'
+        """
+
         if save and save_path is None:
             save_path = "./pathway_mean_var.png"
 
