@@ -990,6 +990,32 @@ class scEGOT:
         mode="pca",
         threshold=0.05,
     ):
+        """Compute cell state graph and build a networkx graph object.
+
+        Parameters
+        ----------
+        cluster_names : 2D list of str
+            1st dimension is the number of days, 2nd dimension is the number of gmm components
+            in each day.
+            Can be generaged by 'generate_cluster_names' method.
+
+        mode : {'pca', 'umap'}, optional
+            The space to build the cell state graph, by default "pca"
+            
+        threshold : float, optional
+            Threshold to filter edges, by default 0.05
+            Only edges with edge_weights greater than this threshold will be included.
+
+        Returns
+        -------
+        nx.classes.digraph.DiGraph
+            Networkx graph object of the cell state graph
+
+        Raises
+        ------
+        ValueError
+            When 'mode' is not 'pca' or 'umap'.
+        """
         if mode not in ["pca", "umap"]:
             raise ValueError("The parameter 'mode' should be 'pca' or 'umap'.")
 
