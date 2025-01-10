@@ -1244,6 +1244,8 @@ class scEGOT:
 
         cluster_names : list of list of str
             1st dimension is the number of days, 2nd dimension is the number of gmm components
+            of each day.
+            Can be generaged by 'generate_cluster_names' method.
 
         tf_gene_names : list of str, optional
             List of transcription factor gene names to use, by default None
