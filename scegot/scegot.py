@@ -680,6 +680,7 @@ class scEGOT:
         figure_labels : list or tuple of str of shape (2,), optional
             X and Y axis labels, by default None
             If None, the first two columns of the input data will be used.
+            # TODO: change parameter name to 'axis_labels'
 
         x_range : list or tuple of int of shape (2,), optional
             Restrict the X axis range, by default None
@@ -1750,6 +1751,34 @@ class scEGOT:
     def plot_gene_expression_2d(
         self, gene_name, mode="pca", col=None, save=False, save_path=None
     ):
+        """Plot gene expression levels in 2D space.
+
+        Parameters
+        ----------
+        gene_name : str
+            Gene name to plot expression level.
+
+        mode : {'pca', 'umap'}, optional
+            The space to plot gene expression levels, by default "pca"
+
+        col : list or tuple of str of shape (2,), optional
+            X and Y axis labels, by default None
+            If None, the first two columns of the input data will be used.
+            # TODO: change parameter name to 'axis_labels'
+
+        save : bool, optional
+            If True, save the output image, by default False
+
+        save_path : str, optional
+            Path to save the output image, by default None
+            If None, the image will be saved as './pathway_single_gene_2d.png'
+
+        Raises
+        ------
+        ValueError
+            When 'mode' is not 'pca' or 'umap'.
+        """
+        
         if mode not in ["pca", "umap"]:
             raise ValueError("The parameter 'mode' should be 'pca' or 'umap'.")
 
