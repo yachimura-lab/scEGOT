@@ -1815,6 +1815,25 @@ class scEGOT:
         self.plot_gene_expression_3d(gene_name, col, save, save_path)
 
     def plot_gene_expression_3d(self, gene_name, col=None, save=False, save_path=None):
+        """Plot gene expression levels in 3D space.
+
+        Parameters
+        ----------
+        gene_name : str
+            Gene name to plot expression level.
+
+        col : list or tuple of str of shape (2,), optional
+            X, Y, and Z axis labels, by default None
+            If None, the first three columns of the input data will be used.
+            # TODO: change parameter name to 'axis_labels'
+            
+        save : bool, optional
+            If True, save the output image, by default False
+
+        save_path : _type_, optional
+            Path to save the output image, by default None
+            If None, the image will be saved as './pathway_single_gene_3d.html'
+        """
         if save and save_path is None:
             save_path = "./pathway_single_gene_3d.html"
 
