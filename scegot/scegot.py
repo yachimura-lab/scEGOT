@@ -2316,7 +2316,8 @@ class scEGOT:
         pd.DataFrame
             Cell velocities between each day.
             The rows are ordered as follows:
-            [day0cell0 -> day0cell1 -> ... -> day0cellN -> day1cell0 -> ... -> dayNcellN]
+            when the number of days is N and the number of cells in each day is M_1, M_2, ..., M_N,
+            [day1_cell1 -> day1_cell2 -> ... -> day1_cellM_1 -> day2cell1 -> ... -> day(N-1)cellM_N]
         """
 
         velocities = pd.DataFrame(
