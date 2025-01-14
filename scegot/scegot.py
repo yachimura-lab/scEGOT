@@ -2309,6 +2309,15 @@ class scEGOT:
         return velo
 
     def calculate_cell_velocities(self):
+        """Calculate cell velocities between each day.
+
+        Returns
+        -------
+        pd.DataFrame
+            Cell velocities between each day.
+            The rows are ordered as follows:
+            [day0cell0 -> day0cell1 -> ... -> day0cellN -> day1cell0 -> ... -> dayNcellN]
+        """
 
         velocities = pd.DataFrame(
             columns=self.X_pca[0].columns
