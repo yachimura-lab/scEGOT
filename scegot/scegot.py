@@ -2116,6 +2116,54 @@ class scEGOT:
         save=False,
         save_path=None,
     ):
+        """Calculate interpolation between all timepoints and create animation colored by gene expression level. 
+
+        Parameters
+        ----------
+        target_gene_name : str
+            Gene name to plot expression level.
+        mode : {'pca', 'umap'}, optional
+            The space to plot gene expression levels, by default "pca"
+        interpolate_interval : int, optional
+            Number of frames to interpolate between two timepoints, by default 11
+            This is the total number of frames at both timepoints and the number of frames
+            between these.
+            Note that both ends are included.
+            
+        n_samples : int, optional
+            Number of samples to generate, by default 5000
+
+        x_range : list or tuple of float of shape (2,), optional
+            Range of the x-axis, by default None
+
+        y_range : list or tuple of float of shape (2,), optional
+            Range of the y-axis, by default None
+
+        c_range : list or tuple of float of shape (2,), optional
+            Range of the color bar, by default None
+
+        x_label : str, optional
+            Label of the x-axis, by default None
+
+        y_label : str, optional
+            Label of the y-axis, by default None
+            # TODO: merge 'x_label' and 'y_label' into 'axis_labels'
+
+        cmap : str, optional
+            String of the colormap, by default "gnuplot2"
+
+        save : bool, optional
+            If True, save the output image, by default False
+
+        save_path : _type_, optional
+            Path to save the output image, by default None
+            If None, the image will be saved as './interpolate_video.gif'
+
+        Raises
+        ------
+        ValueError
+            When 'mode' is not 'pca' or 'umap'.
+        """
         if mode not in ["pca", "umap"]:
             raise ValueError("The parameter 'mode' should be 'pca' or 'umap'.")
 
