@@ -3063,6 +3063,25 @@ class scEGOT:
         save=False,
         save_path=None,
     ):
+        """Plot Waddington's landscape in 3D space by using cellmap.
+
+        Parameters
+        ----------
+        waddington_potential : np.ndarray
+            Waddington potential of each sample.
+            This array should be calculated by 'calculate_waddington_potential' method
+            
+        mode : {'pca', 'umap'}, optional
+            The space to plot Waddington potential, by default "pca"    
+
+        save : bool, optional
+            If True, save the output image, by default False
+
+        save_path : str, optional
+            Path to save the output image, by default None
+            If None, the image will be saved as './wadding_potential_surface.html'
+        """
+        
         if save and save_path is None:
             save_path = "./wadding_potential_surface"
         if save_path is not None and save_path.split(".")[-1] == "html":
