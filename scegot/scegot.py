@@ -37,7 +37,15 @@ from tqdm import tqdm
 sns.set_style("whitegrid")
 
 
-def is_notebook() -> bool:
+def is_notebook():
+    """
+    Check if the code is running in a Jupyter notebook or not.
+
+    Returns
+    -------
+    bool
+        True if the code is running in a Jupyter notebook, False otherwise.
+    """
     try:
         from IPython import get_ipython
 
@@ -57,6 +65,34 @@ def is_notebook() -> bool:
 
 
 def _check_input_data(input_data, day_names, adata_day_key):
+    """
+    Check the input data and return the processed data.
+
+    Parameters
+    ----------
+    input_data : any
+        Input data.
+        
+    day_names : list of str
+        List of day names.
+        
+    adata_day_key : str
+        AnnData observation key for day names.
+
+    Raises
+    ------
+    ValueError
+        When 'X' is an array of DataFrame and 'day_names' is not specified
+        or 'X' is AnnData and 'adata_day_key' is not specified.
+        
+    TypeError
+        When 'X' is not an array of DataFrame or AnnData.
+
+    Returns
+    -------
+    list of pd.DataFrame
+        List of DataFrames.
+    """
     if isinstance(input_data, list):
         if day_names is None:
             raise ValueError(
@@ -105,6 +141,92 @@ class scEGOT:
         verbose=True,
         adata_day_key=None,
     ):
+        """
+        Initialize the scEGOT object.
+
+        Parameters
+        ----------
+        X : list of pd.DataFrame or AnnData
+            Input data.
+        day_names : list of str, optional
+            List of day names. Defaults to None.
+            Should be specified when 'X' is an array of DataFrame.
+            The order of the day names should be the same as the order of the data.
+        verbose : bool, optional
+            If False, all running messages are not displayed. Defaults to True.
+        adata_day_key : str, optional
+            AnnData observation key for day names. Defaults to None.
+            Should be specified when 'X' is AnnData.
+            Day names are extracted from the specified key.
+            The order of the day names will be the same as the order of appearance in the data.
+
+        Attributes
+        ----------
+        X_raw : list of pd.DataFrame of shape (n_samples, n_genes)
+            Raw input data.
+            Arranged in the order of the day names.
+
+        X_normalized : list of pd.DataFrame of shape (n_samples, n_genes) or None
+            Normalized input data.
+            This attribute is None before the 'preprocess' method is called.
+
+        X_selected : list of pd.DataFrame of shape (n_samples, n_highly_variable_genes) or None
+            Filtered input data with highly variable genes after normalization.
+            If 'select_genes' is False in the 'preprocess' method, this will be the same as 'X_normalized'.
+            This attribute is None before the 'preprocess' method is called.
+
+        X_pca : list of pd.DataFrame of shape (n_samples, n_components of PCA) or None
+            PCA-transformed input data.
+            PCA is applied to the X_selected data.
+            This attribute is None before the 'preprocess' method is called.
+        
+        X_umap : list of pd.DataFrame of shape (n_samples, n_components of UMAP) or None
+            UMAP-transformed input data.
+            UMAP is applied to the X_pca data.
+            This attribute is None before the 'apply_umap' method is called.
+
+        pca_model : PCA or None
+            PCA model.
+            This attribute is None before the 'preprocess' method is called.
+
+        gmm_n_components_list : list of int or None
+            List of the number of components for GMM.
+            Each element corresponds to the number of components of the GMM model for each day.
+            This attribute is None before the 'fit_gmm' or 'fit_predict_gmm' method is called.
+
+        gmm_models : list of GaussianMixture or None
+            List of GMM models.
+            This attribute is None before the 'fit_gmm' or 'fit_predict_gmm' method is called.
+
+        gmm_labels : list of np.ndarray or None
+            List of GMM labels.
+            This attribute is None before the 'fit_predict_gmm' method is called.
+    
+        gmm_labels_modified : list of np.ndarray or None
+            List of modified GMM labels.
+            This attribute is None before the 'fit_predict_gmm' method is called.
+
+        gmm_label_converter : list of np.ndarray or None
+            List of GMM label converters.
+            This attribute is None before the 'replace_gmm_labels' method is called.
+
+        umap_model : UMAP
+            UMAP model.
+            This attribute is None before the 'apply_umap' method is called.
+
+        day_names : list of str
+            List of day names.
+
+        gene_names : pd.Index
+            Gene names.
+            If you call the 'preprocess' method with 'select_genes' set to True, 
+            this attribute will be the highly variable gene names.
+            Otherwise, this attribute will be the gene names of the input data.
+
+        solutions : list of np.ndarray # TODO: add shape
+            List of solutions.
+        """
+
         self.verbose = verbose
 
         X, day_names = _check_input_data(X, day_names, adata_day_key)
@@ -208,11 +330,60 @@ class scEGOT:
         select_genes=True,
         n_select_genes=2000,
     ):
+        """Preprocess the input data. 
+        
+        Apply scRECODE, normalize, select highly variable genes, and apply PCA.
+
+        Parameters
+        ----------
+        pca_n_components : int
+            Number of components to keep in PCA.
+            Passed to the 'n_components' parameter of the PCA class.
+            
+        recode_params : dict, optional
+            Parameters for scRECODE, by default {}
+            
+        umi_target_sum : int or float, optional
+            Target sum for UMI normalization, by default 1e4
+            
+        pca_random_state : int, RandomState instance or None, optional
+            Pass an int for reproducible results, by default None
+            Passed to the 'random_state' parameter of the PCA class.
+            
+        pca_other_params : dict, optional
+            Parameters other than 'n_components' and 'random_state' for PCA, by default {}
+            
+        apply_recode : bool, optional
+            If True, apply scRECODE, by default True
+            
+        apply_normalization_log1p : bool, optional
+            If True, apply log1p normalization, by default True
+            
+        apply_normalization_umi : bool, optional
+            If True, apply UMI normalization, by default True
+            
+        select_genes : bool, optional
+            If True, filter genes and select highly variable genes, by default True
+            
+        n_select_genes : int, optional
+            Number of highly variable genes to select, by default 2000
+            Used only when 'select_genes' is True.
+
+        Returns
+        -------
+        list of pd.DataFrame of shape (n_samples, n_components of PCA)
+            Normalized, filtered, and PCA-transformed data.
+            
+        sklearn.decomposition.PCA
+            PCA instance fitted to the input data.
+        """        
+        
         X_concated = pd.concat(self.X_raw)
 
         if apply_recode:
             if self.verbose:
                 print("Applying RECODE...")
+            # TODO: add random_state parameter for RECODE
             X_concated = self._preprocess_recode(
                 X_concated,
                 recode_params,
@@ -290,6 +461,37 @@ class scEGOT:
         min_dist=0.1,
         umap_other_params={},
     ):
+        """Fit self.X_pca to UMAP and return the transformed data.
+
+        Parameters
+        ----------
+        n_neighbors : float
+            The size of local neighborhood used for manifold approximation.
+            Passed to the 'n_neighbors' parameter of the UMAP class.
+            
+        n_components : int, optional
+            The dimension of the space to embed into, by default 2
+            Passed to the 'n_components' parameter of the UMAP class.
+            
+        random_state : int, RandomState instance or None, optional
+            Fix the random seed for reproducibility, by default None
+            Passed to the 'random_state' parameter of the UMAP class.
+            
+        min_dist : float, optional
+            The effective minimum distance between embedded points, by default 0.1
+            Passed to the 'min_dist' parameter of the UMAP class.
+            
+        umap_other_params : dict, optional
+            Other parameters for UMAP, by default {}
+
+        Returns
+        -------
+        list of pd.DataFrame of shape (n_samples, n_components of UMAP)
+            UMAP-transformed data.
+            
+        umap.umap_.UMAP
+            UMAP instance fitted to the input data.
+        """
         X_concated = pd.concat(self.X_pca)
         X_concated, umap_model = self._apply_umap_to_concated_data(
             X_concated,
@@ -347,6 +549,43 @@ class scEGOT:
         random_state=None,
         gmm_other_params={},
     ):
+        """Fit GMM models with each day's data and predict labels for them.
+
+        Parameters
+        ----------
+        n_components_list : list of int
+            Each element corresponds to the number of components of the GMM model for each day.
+            Passed to the 'n_components' parameter of the GaussianMixture class.
+            
+        covariance_type : {'full', 'tied', 'diag', 'spherical'}, optional
+            String describing the type of covariances parameters to use, by default "full"
+            Passed to the 'covariance_type' parameter of the GaussianMixture class.
+            
+        max_iter : int, optional
+            The number of EM iterations to perform, by default 2000
+            Passed to the 'max_iter' parameter of the GaussianMixture class.
+            
+        n_init : int, optional
+            The number of initializations to perform, by default 10
+            Passed to the 'n_init' parameter of the GaussianMixture class.
+            
+        random_state : int, RandomState instance or None, optional
+            Controls the random seed given at each GMM model initialization, by default None
+            Passed to the 'random_state' parameter of the GaussianMixture class.
+            
+        gmm_other_params : dict, optional
+            Other parameters for GMM, by default {}
+
+        Returns
+        -------
+        list of GaussianMixture instances
+            The length of the list is the same as the number of days.
+            Each element is a GMM instance fitted to the corresponding day's data.
+            
+        list of np.ndarray
+            List of GMM labels.
+            Each element is the predicted labels for the corresponding day's data.
+        """
         if self.verbose:
             print(
                 "Fitting GMM models with each day's data and predicting labels for them..."
@@ -428,6 +667,53 @@ class scEGOT:
         save=False,
         save_paths=None,
     ):
+        """Plot GMM predictions.
+        Output images for the number of days.
+        Each image contains two subplots: left one is in one color and right one is 
+        colored by GMM labels.
+
+        Parameters
+        ----------
+        mode : {'pca', 'umap'}, optional
+            The space to plot the GMM predictions, by default "pca"
+        
+        figure_labels : list or tuple of str of shape (2,), optional
+            X and Y axis labels, by default None
+            If None, the first two columns of the input data will be used.
+            # TODO: change parameter name to 'axis_labels'
+
+        x_range : list or tuple of float of shape (2,), optional
+            Restrict the X axis range, by default None
+            If None, the range will be automatically determined to include all data points.
+
+        y_range : list or tuple of float of shape (2,), optional
+            Restrict the Y axis range, by default None
+            If None, the range will be automatically determined to include all data points.
+            
+        figure_titles_without_gmm : list or tuple of str of shape (n_days,), optional
+            List of figure titles of left subplots, by default None
+    
+        figure_titles_with_gmm : list or tuple of str of shape (n_days,), optional
+            List of figure titles of right subplots, by default None
+
+        plot_gmm_means : bool, optional
+            If True, plot GMM mean points on the right subplots, by default False
+
+        cmap : str, optional
+            String of matplolib colormap name, by default "plasma"
+
+        save : bool, optional
+            If True, save the output images, by default False
+
+        save_paths : list or tuple of str of shape (n_days), optional
+            List of paths to save the output images, by default None
+            If None, the images will be saved as './GMM_preds_{i + 1}.png'.
+
+        Raises
+        ------
+        ValueError
+            When 'mode' is not 'pca' or 'umap'.
+        """
         if mode not in ["pca", "umap"]:
             raise ValueError("The parameter 'mode' should be 'pca' or 'umap'.")
 
@@ -529,6 +815,32 @@ class scEGOT:
         save=False,
         save_path=None,
     ):
+        """Export an animation of the interpolated distribution between GMM models.
+
+        Parameters
+        ----------
+        x_range : list or tuple of float of shape (2,), optional
+            Restrict the X axis range, by default None
+
+        y_range : list or tuple of float of shape (2,), optional
+            Restrict the Y axis range, by default None
+
+        interpolate_interval : int, optional
+            The number of frames to interpolate between two timepoints, by default 11
+            This is the total number of frames at both timepoints and the number of frames
+            between these.
+            Note that both ends are included.
+
+        cmap : str, optional
+            String of matplolib colormap name, by default "gnuplot2"
+
+        save : bool, optional
+            If True, save the output animation, by default False
+
+        save_path : _type_, optional
+            Path to save the output animation, by default None
+            If None, the animation will be saved as './cell_state_video.gif'
+        """
         if save and save_path is None:
             save_path = "./cell_state_video.gif"
 
@@ -679,6 +991,32 @@ class scEGOT:
         mode="pca",
         threshold=0.05,
     ):
+        """Compute cell state graph and build a networkx graph object.
+
+        Parameters
+        ----------
+        cluster_names : 2D list of str
+            1st dimension is the number of days, 2nd dimension is the number of gmm components
+            in each day.
+            Can be generaged by 'generate_cluster_names' method.
+
+        mode : {'pca', 'umap'}, optional
+            The space to build the cell state graph, by default "pca"
+            
+        threshold : float, optional
+            Threshold to filter edges, by default 0.05
+            Only edges with edge_weights greater than this threshold will be included.
+
+        Returns
+        -------
+        nx.classes.digraph.DiGraph
+            Networkx graph object of the cell state graph
+
+        Raises
+        ------
+        ValueError
+            When 'mode' is not 'pca' or 'umap'.
+        """
         if mode not in ["pca", "umap"]:
             raise ValueError("The parameter 'mode' should be 'pca' or 'umap'.")
 
@@ -898,6 +1236,35 @@ class scEGOT:
         save=False,
         save_path=None,
     ):
+        """Plot the cell state graph with the given graph object.
+
+        Parameters
+        ----------
+        G : nx.classes.digraph.DiGraph
+            Networkx graph object of the cell state graph.
+
+        cluster_names : list of list of str
+            1st dimension is the number of days, 2nd dimension is the number of gmm components
+            of each day.
+            Can be generaged by 'generate_cluster_names' method.
+
+        tf_gene_names : list of str, optional
+            List of transcription factor gene names to use, by default None
+            If None, all gene names (self.gene_names) will be used.
+            You can pass on any list of gene names you want to use, not limited to TF genes.
+
+        tf_gene_pick_num : int, optional
+            The number of genes to show in each node and edge, by default 5
+            # TODO: change parameter name to 'gene_pick_num' because it's not limited to TF genes.
+
+        save : bool, optional
+            If True, save the output image, by default False
+
+        save_path : _type_, optional
+            Path to save the output image, by default None
+            If None, the image will be saved as './cell_state_graph.png'
+        """
+        
         if save and save_path is None:
             save_path = "./cell_state_graph.png"
 
@@ -947,10 +1314,37 @@ class scEGOT:
     def plot_simple_cell_state_graph(
         self, G, layout="normal", order=None, save=False, save_path=None
     ):
+        """Plot the cell state graph with the given graph object in a simple way.
+
+        Parameters
+        ----------
+        G : nx.classes.digraph.DiGraph
+            Networkx graph object of the cell state graph.
+
+        layout : {'normal', 'hierarchy'}, optional
+            The layout of the graph, by default "normal"
+            When 'normal', the graph is plotted the same layout as the self.plot_cell_state_graph method.
+            When 'hierarchy', the graph is plotted with the day on the x-axis and the cluster on the y-axis.
+
+        order : {'weight', None}, optional
+            Order of nodes along the y-axis, by default None
+            This parameter is only used when 'layout' is 'hierarchy'.
+            When 'weight', the nodes are ordered by the size of the nodes.
+            When None, the nodes are ordered by the cluster number.
+
+        save : bool, optional
+            If True, save the output image, by default False
+
+        save_path : str, optional
+            Path to save the output image, by default None
+            If None, the image will be saved as './simple_cell_state_graph.png'
+
+        Raises
+        ------
+        ValueError
+            When 'layout' is not 'normal' or 'hierarchy', or 'order' is not None or 'weight'.
         """
-        layout = "normal" or "hierarchy"
-        order = None or "weight"
-        """
+        
         if layout not in ["normal", "hierarchy"]:
             raise ValueError("The parameter 'layout' should be 'normal or 'hierarchy'.")
         if order is not None and order != "weight":
@@ -1057,6 +1451,39 @@ class scEGOT:
         save=False,
         save_path=None,
     ):
+        """Plot fold change between two clusters.
+
+        Parameters
+        ----------
+        cluster_names : list of list of str
+            1st dimension is the number of days, 2nd dimension is the number of gmm components
+            in each day.
+            Can be generaged by 'generate_cluster_names' method.
+
+        cluster1 : str
+            Cluster name of denominator.
+            
+        cluster2 : str
+            Cluster name of numerator.
+
+        tf_gene_names : list of str, optional
+            List of transcription factor gene names to use, by default None
+            If None, all gene names (self.gene_names) will be used.
+            You can pass on any list of gene names you want to use, not limited to TF genes.
+            # TODO: change parameter name to 'gene_names' because it's not limited to TF genes.
+
+        threshold : float, optional
+            Threshold to filter labels, by default 1.0
+            Only genes with fold change greater than this threshold will be plotted its label.
+
+        save : bool, optional
+            If True, save the output image, by default False
+
+        save_path : str, optional
+            Path to save the output image, by default None
+            If None, the image will be saved as './fold_change.png'
+        """
+        
         if save and save_path is None:
             save_path = "./fold_change.png"
 
@@ -1139,6 +1566,36 @@ class scEGOT:
         save=False,
         save_path=None,
     ):
+        """Plot mean and variance of gene expression levels within a pathway.
+
+        Parameters
+        ----------
+        cluster_names : list of list of str
+            1st dimension is the number of days, 2nd dimension is the number of gmm components
+            in each day.
+            Can be generaged by 'generate_cluster_names' method.
+        
+        pathway_names : list of str of shape (n_days,)
+            List of cluster names included in the pathway.
+            Specify like ['day0's cluster name', 'day1's cluster name', ..., 'dayN's cluster name'].
+            
+        tf_gene_names : list of str, optional
+            List of transcription factor gene names to use, by default None
+            If None, all gene names (self.gene_names) will be used.
+            You can pass on any list of gene names you want to use, not limited to TF genes.
+
+        threshold : float, optional
+            Threshold to filter labels, by default 1.0
+            Only genes with variance greater than this threshold will be plotted its label.
+
+        save : bool, optional
+            If True, save the output image, by default False
+
+        save_path : _type_, optional
+            Path to save the output image, by default None
+            If None, the image will be saved as './pathway_mean_var.png'
+        """
+
         if save and save_path is None:
             save_path = "./pathway_mean_var.png"
 
@@ -1220,23 +1677,41 @@ class scEGOT:
         cluster_names,
         pathway_names,
         selected_genes,
-        tf_gene_names=None,
         save=False,
         save_path=None,
     ):
+        """Plot gene expression levels within a pathway.
+
+        Parameters
+        ----------
+        cluster_names : list of list of str
+            1st dimension is the number of days, 2nd dimension is the number of gmm components
+            in each day.
+            Can be generaged by 'generate_cluster_names' method.
+
+        pathway_names : list of str of shape (n_days,)
+            List of cluster names included in the pathway.
+            Specify like ['day0's cluster name', 'day1's cluster name', ..., 'dayN's cluster name'].
+
+        selected_genes : list of str
+            List of gene names whose gene expression changes you want to track.
+            Recommend using about 5 genes.
+
+        save : bool, optional
+            If True, save the output image, by default False
+
+        save_path : _type_, optional
+            Path to save the output image, by default None
+            If None, the image will be saved as './pathway_gene_expressions.png'
+        """
+
         if save and save_path is None:
             save_path = "./pathway_gene_expressions.png"
-
-        if tf_gene_names is None:
-            gene_names_to_use = self.gene_names
-        else:
-            gene_names_to_use = tf_gene_names
 
         genes = self.get_positive_gmm_mean_gene_values_per_cluster(
             self.get_gmm_means(),
             cluster_names=list(itertools.chain.from_iterable(cluster_names)),
         )
-        genes = genes.loc[:, genes.columns.isin(gene_names_to_use)]
 
         pathway_selected_genes = genes.loc[pathway_names].loc[:, selected_genes]
         fig = go.Figure()
@@ -1276,6 +1751,34 @@ class scEGOT:
     def plot_gene_expression_2d(
         self, gene_name, mode="pca", col=None, save=False, save_path=None
     ):
+        """Plot gene expression levels in 2D space.
+
+        Parameters
+        ----------
+        gene_name : str
+            Gene name to plot expression level.
+
+        mode : {'pca', 'umap'}, optional
+            The space to plot gene expression levels, by default "pca"
+
+        col : list or tuple of str of shape (2,), optional
+            X and Y axis labels, by default None
+            If None, the first two columns of the input data will be used.
+            # TODO: change parameter name to 'axis_labels'
+
+        save : bool, optional
+            If True, save the output image, by default False
+
+        save_path : str, optional
+            Path to save the output image, by default None
+            If None, the image will be saved as './pathway_single_gene_2d.png'
+
+        Raises
+        ------
+        ValueError
+            When 'mode' is not 'pca' or 'umap'.
+        """
+        
         if mode not in ["pca", "umap"]:
             raise ValueError("The parameter 'mode' should be 'pca' or 'umap'.")
 
@@ -1312,6 +1815,25 @@ class scEGOT:
         self.plot_gene_expression_3d(gene_name, col, save, save_path)
 
     def plot_gene_expression_3d(self, gene_name, col=None, save=False, save_path=None):
+        """Plot gene expression levels in 3D space.
+
+        Parameters
+        ----------
+        gene_name : str
+            Gene name to plot expression level.
+
+        col : list or tuple of str of shape (2,), optional
+            X, Y, and Z axis labels, by default None
+            If None, the first three columns of the input data will be used.
+            # TODO: change parameter name to 'axis_labels'
+            
+        save : bool, optional
+            If True, save the output image, by default False
+
+        save_path : _type_, optional
+            Path to save the output image, by default None
+            If None, the image will be saved as './pathway_single_gene_3d.html'
+        """
         if save and save_path is None:
             save_path = "./pathway_single_gene_3d.html"
 
@@ -1344,6 +1866,38 @@ class scEGOT:
     def make_interpolation_data(
         self, gmm_source, gmm_target, t, columns=None, n_samples=2000, seed=0
     ):
+        """Make interpolation data between two timepoints.
+
+        Parameters
+        ----------
+        gmm_source : GaussianMixture
+            GMM model of the source timepoint.
+
+        gmm_target : GaussianMixture
+            GMM model of the target timepoint.
+
+        t : float
+            Interpolation ratio.
+            0 <= t <= 1.
+            0 is the source timepoint, 1 is the target timepoint.
+            If you specify 0.5, the data will be interpolated halfway between the source and target timepoints.
+
+        columns : list of str, optional
+            Columns names of the output data, by default None
+            # TODO: add default value
+
+        n_samples : int, optional
+            Number of samples to generate, by default 2000
+
+        seed : int, optional
+            Random seed, by default 0
+
+        Returns
+        -------
+        pd.DataFrame
+            Interpolated data between two timepoints.
+        """
+        
         d = gmm_source.means_.shape[1]
         K_0, K_1 = gmm_source.means_.shape[0], gmm_target.means_.shape[0]
 
@@ -1397,6 +1951,58 @@ class scEGOT:
         save=False,
         save_path=None,
     ):
+        """Compare the true and interpolation distributions by plotting them.
+
+        Parameters
+        ----------
+        interpolate_index : int
+            Index of the timepoint to interpolate.
+            1 <= interpolate_index <= n_days - 2
+
+        mode : {'pca', 'umap'}, optional
+            The space to plot gene expression levels, by default "pca"
+
+        n_samples : int, optional
+            Number of samples to generate, by default 2000
+
+        t : float, optional
+            Interpolation ratio, by default 0.5
+            If you want to interpolate halfway between the source and target timepoints, specify 0.5.
+            Source timepoint is interpolate_index - 1, target timepoint is interpolate_index + 1.
+
+        plot_source_and_target : bool, optional
+            If True, plot the source and target timepoints, by default True
+
+        alpha_true : float, optional
+            Transparency of the true data, by default 0.5
+
+        x_col_name : str, optional
+            Label of the x-axis, by default None
+
+        y_col_name : _type_, optional
+            Label of the y-axis, by default None
+            # TODO: merge 'x_col_name' and 'y_col_name' into 'axis_labels'
+
+        x_range : list or tuple of float of shape (2,), optional
+            Range of the x-axis, by default None
+            If None, the range will be automatically determined based on the data.
+
+        y_range : list or tuple of float of shape (2,), optional
+            Range of the y-axis, by default None
+            If None, the range will be automatically determined based on the data.
+
+        save : bool, optional
+            If True, save the output image, by default False
+
+        save_path : _type_, optional
+            Path to save the output image, by default None
+
+        Raises
+        ------
+        ValueError
+            When 'mode' is not 'pca' or 'umap'.
+        """
+        
         if mode not in ["pca", "umap"]:
             raise ValueError("The parameter 'mode' should be 'pca' or 'umap'.")
 
@@ -1510,6 +2116,54 @@ class scEGOT:
         save=False,
         save_path=None,
     ):
+        """Calculate interpolation between all timepoints and create animation colored by gene expression level. 
+
+        Parameters
+        ----------
+        target_gene_name : str
+            Gene name to plot expression level.
+        mode : {'pca', 'umap'}, optional
+            The space to plot gene expression levels, by default "pca"
+        interpolate_interval : int, optional
+            Number of frames to interpolate between two timepoints, by default 11
+            This is the total number of frames at both timepoints and the number of frames
+            between these.
+            Note that both ends are included.
+            
+        n_samples : int, optional
+            Number of samples to generate, by default 5000
+
+        x_range : list or tuple of float of shape (2,), optional
+            Range of the x-axis, by default None
+
+        y_range : list or tuple of float of shape (2,), optional
+            Range of the y-axis, by default None
+
+        c_range : list or tuple of float of shape (2,), optional
+            Range of the color bar, by default None
+
+        x_label : str, optional
+            Label of the x-axis, by default None
+
+        y_label : str, optional
+            Label of the y-axis, by default None
+            # TODO: merge 'x_label' and 'y_label' into 'axis_labels'
+
+        cmap : str, optional
+            String of the colormap, by default "gnuplot2"
+
+        save : bool, optional
+            If True, save the output image, by default False
+
+        save_path : _type_, optional
+            Path to save the output image, by default None
+            If None, the image will be saved as './interpolate_video.gif'
+
+        Raises
+        ------
+        ValueError
+            When 'mode' is not 'pca' or 'umap'.
+        """
         if mode not in ["pca", "umap"]:
             raise ValueError("The parameter 'mode' should be 'pca' or 'umap'.")
 
@@ -1655,6 +2309,16 @@ class scEGOT:
         return velo
 
     def calculate_cell_velocities(self):
+        """Calculate cell velocities between each day.
+
+        Returns
+        -------
+        pd.DataFrame
+            Cell velocities between each day.
+            The rows are ordered as follows:
+            when the number of days is N and the number of cells in each day is M_1, M_2, ..., M_N,
+            [day1_cell1 -> day1_cell2 -> ... -> day1_cellM_1 -> day2cell1 -> ... -> day(N-1)cellM_N]
+        """
 
         velocities = pd.DataFrame(
             columns=self.X_pca[0].columns
@@ -1698,9 +2362,47 @@ class scEGOT:
         save=False,
         save_path=None,
     ):
+        """Plot cell velocities in 2D space.
+
+        Parameters
+        ----------
+        velocities : pd.DataFrame
+            Cell velocities calculated by 'calculate_cell_velocities' method.
+
+        mode : {'pca' or 'umap'}, optional
+            The space to plot cell velocities, by default "pca"
+
+        color_points : {'gmm' or 'day'}, optional
+            Color points by GMM clusters or days, by default "gmm"
+
+        size_points : int, optional
+            Size of points, by default 30
+
+        cmap : str, optional
+            String of matplolib colormap name, by default "tab20"
+
+        cluster_names : list of str of shape (sum of gmm components), optional
+            List of gmm cluster names, by default None
+            Used when 'color_points' is 'gmm'.
+            You need to flatten the list of lists of gmm cluster names before passing it.
+            # TODO: enable to directly pass the list of lists of gmm cluster names
+
+        save : bool, optional
+            If True, save the output image, by default False
+
+        save_path : str, optional
+            Path to save the output image, by default None
+            If None, the image will be saved as './cell_velocity.png'
+
+        Raises
+        ------
+        ValueError
+            This error is raised in the following cases:
+            - When 'mode' is not 'pca' or 'umap'.
+            - When 'color_points' is not 'gmm' or 'day'.
+            - When 'color_points' is 'gmm' and 'cluster_names' is None.
         """
-        color_points = "gmm", "day", or None
-        """
+
         if mode not in ["pca", "umap"]:
             raise ValueError("The parameter 'mode' should be 'pca' or 'umap'.")
 
@@ -1816,9 +2518,58 @@ class scEGOT:
         save=False,
         save_path=None,
     ):
+        """Plot the interpolation of cell velocities. This mefhod could be depricated in the future
+        because 'plot_cell_velocity' method now supports plotting streamlines.
+
+        Parameters
+        ----------
+        velocities : pd.DataFrame
+            Cell velocities calculated by 'calculate_cell_velocities' method.
+
+        mode : {'pca', 'umap'}, optional
+            The space to plot cell velocities, by default "pca"
+
+        color_streams : bool, optional
+            If True, color the streamlines by the speed of the cell velocities, by default False
+
+        color_points : {'gmm' or 'day'}, optional
+            Color points by GMM clusters or days, by default "gmm"
+
+        cluster_names : list of str of shape (sum of gmm n_components), optional
+            List of gmm cluster names, by default None
+            Used when 'color_points' is 'gmm'.
+            You need to flatten the list of lists of gmm cluster names before passing it.   
+            # TODO: enable to directly pass the list of lists of gmm cluster names
+
+        x_range : tuple or list of float of shape (2,), optional
+            Limit of the x-axis, by default None
+
+        y_range : tuple or list of float of shape (2,), optional
+            Limit of the y-axis, by default None
+
+        cmap : str, optional
+            String of matplolib colormap name, by default "gnuplot2"
+
+        linspace_num : int, optional
+            Number of points on each axis to interpolate, by default 300
+            linspace_num * linspace_num points will be interpolated.
+
+        save : bool, optional
+            If True, save the output image, by default False
+
+        save_path : str, optional
+            Path to save the output image, by default None
+            If None, the image will be saved as './interpolation_of_cell_velocity_gmm_clusters.png'
+            
+        Raises
+        ------
+        ValueError
+            This error is raised in the following cases:
+            - When 'mode' is not 'pca' or 'umap'.
+            - When 'color_points' is not 'gmm' or 'day'.
+            - When 'color_points' is 'gmm' and 'cluster_names' is None.
         """
-        color_points = "gmm", "day", or None
-        """
+
         if mode not in ["pca", "umap"]:
             raise ValueError("The parameter 'mode' should be 'pca' or 'umap'.")
         if color_points is not None and color_points not in ["gmm", "day"]:
@@ -1942,6 +2693,43 @@ class scEGOT:
         ridge_cv_fit_intercept=False,
         ridge_fit_intercept=False,
     ):
+        """Calculate gene regulatory networks (GRNs) between each day.
+
+        Parameters
+        ----------
+        selected_clusters : list of list of int of shape (n_days, 2), optional
+            Specify the clusters to calculate GRNs, by default None
+            If None, all clusters will be used.
+            The list should be like 
+            [[day1's index, selected cluster number], [day2's index, selected cluster number], ...].
+            # TODO: change the shape to [day1's cluster number, day2's cluster number, ...]
+
+        alpha_range : tuple or list of float of shape (2,), optional
+            Range of alpha values for Ridge regression, by default (-2, 2)
+
+        cv : int, optional
+            Number of cross-validation folds, by default 3
+            This parameter is passed to RidgeCV's 'cv' parameter.
+
+        ridge_cv_fit_intercept : bool, optional
+            Whether to calculate the intercept in RidgeCV, by default False
+            This parameter is passed to RidgeCV's 'fit_intercept' parameter.
+
+        ridge_fit_intercept : bool, optional
+            Whether to calculate the intercept in Ridge, by default False
+            This parameter is passed to Ridge's 'fit_intercept' parameter.
+
+        Returns
+        -------
+        list of pd.DataFrame
+            Gene regulatory networks between each day.
+            The rows and columns are gene names.
+            Each element of the list corresponds to the GRN between day i and day i + 1.
+        
+        list of RidgeCV objects
+            RidgeCV objects used to calculate GRNs.
+            Each element of the list corresponds to the RidgeCV object between day i and day i + 1.
+        """
         grns, ridge_cvs = [], []
 
         if self.solutions is None:
@@ -2025,6 +2813,34 @@ class scEGOT:
         save_paths=None,
         save_format="png",
     ):
+        """Plot gene regulatory networks (GRNs) between each day.
+
+        Parameters
+        ----------
+        grns : list of pd.DataFrame
+            Gene regulatory networks between each day.
+            The rows and columns are gene names.
+
+        ridge_cvs : list of RidgeCV objects
+            RidgeCV objects used to calculate GRNs.
+
+        selected_genes : list of str
+            Gene names to plot GRNs.
+
+        threshold : float, optional
+            Threshold to plot edges, by default 0.01
+            If the absolute value of the edge weight is less than this value, the edge will not be plotted.
+
+        save : bool, optional
+            If True, save the output image, by default False
+
+        save_paths : str, optional
+            Paths to save the output images, by default None
+
+        save_format : str, optional
+            Format of the output images, by default "png"
+        """
+        
         if save and save_paths is None:
             save_paths = [f"./grn_graph_{i + 1}.png" for i in range(len(grns))]
         for i, grn in enumerate(grns):
@@ -2046,6 +2862,23 @@ class scEGOT:
         n_neighbors=100,
         knn_other_params={},
     ):
+        """Calculate Waddington potential of each sample.
+        
+        Parameters
+        ----------
+        n_neighbors : int, optional
+            Number of neighbors for rach sample, by default 100
+            This parameter is passed to 'kneighbors_graph' function.
+            
+        knn_other_params : dict, optional
+            Other parameters for 'kneighbors_graph' function, by default {}
+
+        Returns
+        -------
+        np.ndarray of shape (sum of n_samples of each day - n_samples of the last day,)
+            Waddington potential of each sample.
+        """
+        
         if self.solutions is None:
             self.solutions = self.calculate_solutions(self.gmm_models)
 
@@ -2162,6 +2995,30 @@ class scEGOT:
         save=False,
         save_path=None,
     ):
+        """Plot Waddington potential in 3D space.
+
+        Parameters
+        ----------
+        waddington_potential : np.ndarray
+            Waddington potential of each sample.
+            This array should be calculated by 'calculate_waddington_potential' method.
+
+        mode : {'pca', 'umap'}, optional
+            The space to plot Waddington potential, by default "pca"
+
+        gene_name : str, optional
+            Gene name to color the points, by default None
+            If None, the points will be colored by Waddington potential.
+            If specified, the points will be colored by the expression of the specified gene.
+
+        save : bool, optional
+            If True, save the output image, by default False
+
+        save_path : str, optional
+            Path to save the output image, by default None
+            If None, the image will be saved as './waddington_potential.html'
+        """
+        
         if save and save_path is None:
             save_path = "./waddington_potential.html"
 
@@ -2206,6 +3063,25 @@ class scEGOT:
         save=False,
         save_path=None,
     ):
+        """Plot Waddington's landscape in 3D space by using cellmap.
+
+        Parameters
+        ----------
+        waddington_potential : np.ndarray
+            Waddington potential of each sample.
+            This array should be calculated by 'calculate_waddington_potential' method
+            
+        mode : {'pca', 'umap'}, optional
+            The space to plot Waddington potential, by default "pca"    
+
+        save : bool, optional
+            If True, save the output image, by default False
+
+        save_path : str, optional
+            Path to save the output image, by default None
+            If None, the image will be saved as './wadding_potential_surface.html'
+        """
+        
         if save and save_path is None:
             save_path = "./wadding_potential_surface"
         if save_path is not None and save_path.split(".")[-1] == "html":
