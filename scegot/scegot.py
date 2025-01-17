@@ -2362,9 +2362,46 @@ class scEGOT:
         save=False,
         save_path=None,
     ):
+        """Plot cell velocities in 2D space.
+
+        Parameters
+        ----------
+        velocities : pd.DataFrame
+            Cell velocities calculated by 'calculate_cell_velocities' method.
+
+        mode : {'pca' or 'umap'}, optional
+            The space to plot cell velocities, by default "pca"
+
+        color_points : {'gmm' or 'day'}, optional
+            Color points by GMM clusters or days, by default "gmm"
+
+        size_points : int, optional
+            Size of points, by default 30
+
+        cmap : str, optional
+            String of matplolib colormap name, by default "tab20"
+
+        cluster_names : list of str of shape (sum of gmm components), optional
+            List of gmm cluster names, by default None
+            Used when 'color_points' is 'gmm'.
+            You need to flatten the list of lists of gmm cluster names before passing it.
+
+        save : bool, optional
+            If True, save the output image, by default False
+
+        save_path : str, optional
+            Path to save the output image, by default None
+            If None, the image will be saved as './cell_velocity.png'
+
+        Raises
+        ------
+        ValueError
+            This error is raised in the following cases:
+            - When 'mode' is not 'pca' or 'umap'.
+            - When 'color_points' is not 'gmm' or 'day'.
+            - When 'color_points' is 'gmm' and 'cluster_names' is None.
         """
-        color_points = "gmm", "day", or None
-        """
+
         if mode not in ["pca", "umap"]:
             raise ValueError("The parameter 'mode' should be 'pca' or 'umap'.")
 
