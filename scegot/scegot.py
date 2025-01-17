@@ -2995,6 +2995,30 @@ class scEGOT:
         save=False,
         save_path=None,
     ):
+        """Plot Waddington potential in 3D space.
+
+        Parameters
+        ----------
+        waddington_potential : np.ndarray
+            Waddington potential of each sample.
+            This array should be calculated by 'calculate_waddington_potential' method.
+
+        mode : {'pca', 'umap'}, optional
+            The space to plot Waddington potential, by default "pca"
+
+        gene_name : str, optional
+            Gene name to color the points, by default None
+            If None, the points will be colored by Waddington potential.
+            If specified, the points will be colored by the expression of the specified gene.
+
+        save : bool, optional
+            If True, save the output image, by default False
+
+        save_path : str, optional
+            Path to save the output image, by default None
+            If None, the image will be saved as './waddington_potential.html'
+        """
+        
         if save and save_path is None:
             save_path = "./waddington_potential.html"
 
