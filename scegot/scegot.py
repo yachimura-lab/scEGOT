@@ -2862,6 +2862,23 @@ class scEGOT:
         n_neighbors=100,
         knn_other_params={},
     ):
+        """Calculate Waddington potential of each sample.
+        
+        Parameters
+        ----------
+        n_neighbors : int, optional
+            Number of neighbors for rach sample, by default 100
+            This parameter is passed to 'kneighbors_graph' function.
+            
+        knn_other_params : dict, optional
+            Other parameters for 'kneighbors_graph' function, by default {}
+
+        Returns
+        -------
+        np.ndarray of shape (sum of n_samples of each day - n_samples of the last day,)
+            Waddington potential of each sample.
+        """
+        
         if self.solutions is None:
             self.solutions = self.calculate_solutions(self.gmm_models)
 
