@@ -2693,6 +2693,43 @@ class scEGOT:
         ridge_cv_fit_intercept=False,
         ridge_fit_intercept=False,
     ):
+        """Calculate gene regulatory networks (GRNs) between each day.
+
+        Parameters
+        ----------
+        selected_clusters : list of list of int of shape (n_days, 2), optional
+            Specify the clusters to calculate GRNs, by default None
+            If None, all clusters will be used.
+            The list should be like 
+            [[day1's index, selected cluster number], [day2's index, selected cluster number], ...].
+            # TODO: change the shape to [day1's cluster number, day2's cluster number, ...]
+
+        alpha_range : tuple or list of float of shape (2,), optional
+            Range of alpha values for Ridge regression, by default (-2, 2)
+
+        cv : int, optional
+            Number of cross-validation folds, by default 3
+            This parameter is passed to RidgeCV's 'cv' parameter.
+
+        ridge_cv_fit_intercept : bool, optional
+            Whether to calculate the intercept in RidgeCV, by default False
+            This parameter is passed to RidgeCV's 'fit_intercept' parameter.
+
+        ridge_fit_intercept : bool, optional
+            Whether to calculate the intercept in Ridge, by default False
+            This parameter is passed to Ridge's 'fit_intercept' parameter.
+
+        Returns
+        -------
+        list of pd.DataFrame
+            Gene regulatory networks between each day.
+            The rows and columns are gene names.
+            Each element of the list corresponds to the GRN between day i and day i + 1.
+        
+        list of RidgeCV objects
+            RidgeCV objects used to calculate GRNs.
+            Each element of the list corresponds to the RidgeCV object between day i and day i + 1.
+        """
         grns, ridge_cvs = [], []
 
         if self.solutions is None:
