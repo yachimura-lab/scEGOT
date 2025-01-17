@@ -2813,6 +2813,34 @@ class scEGOT:
         save_paths=None,
         save_format="png",
     ):
+        """Plot gene regulatory networks (GRNs) between each day.
+
+        Parameters
+        ----------
+        grns : list of pd.DataFrame
+            Gene regulatory networks between each day.
+            The rows and columns are gene names.
+
+        ridge_cvs : list of RidgeCV objects
+            RidgeCV objects used to calculate GRNs.
+
+        selected_genes : list of str
+            Gene names to plot GRNs.
+
+        threshold : float, optional
+            Threshold to plot edges, by default 0.01
+            If the absolute value of the edge weight is less than this value, the edge will not be plotted.
+
+        save : bool, optional
+            If True, save the output image, by default False
+
+        save_paths : str, optional
+            Paths to save the output images, by default None
+
+        save_format : str, optional
+            Format of the output images, by default "png"
+        """
+        
         if save and save_paths is None:
             save_paths = [f"./grn_graph_{i + 1}.png" for i in range(len(grns))]
         for i, grn in enumerate(grns):
