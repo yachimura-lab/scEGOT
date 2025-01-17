@@ -682,11 +682,11 @@ class scEGOT:
             If None, the first two columns of the input data will be used.
             # TODO: change parameter name to 'axis_labels'
 
-        x_range : list or tuple of int of shape (2,), optional
+        x_range : list or tuple of float of shape (2,), optional
             Restrict the X axis range, by default None
             If None, the range will be automatically determined to include all data points.
 
-        y_range : list or tuple of int of shape (2,), optional
+        y_range : list or tuple of float of shape (2,), optional
             Restrict the Y axis range, by default None
             If None, the range will be automatically determined to include all data points.
             
@@ -819,10 +819,10 @@ class scEGOT:
 
         Parameters
         ----------
-        x_range : list or tuple of int of shape (2,), optional
+        x_range : list or tuple of float of shape (2,), optional
             Restrict the X axis range, by default None
 
-        y_range : list or tuple of int of shape (2,), optional
+        y_range : list or tuple of float of shape (2,), optional
             Restrict the Y axis range, by default None
 
         interpolate_interval : int, optional
