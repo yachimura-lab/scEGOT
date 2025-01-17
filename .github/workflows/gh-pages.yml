@@ -20,6 +20,7 @@ jobs:
           apt-get install -y pandoc
           pip install --upgrade pip
           pip install poetry ipython
+          poetry self add poetry-plugin-export
           poetry export -f requirements.txt --output requirements.txt --without-hashes --with=ghpages
           pip install -r requirements.txt
       - name: build
