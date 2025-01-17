@@ -2385,6 +2385,7 @@ class scEGOT:
             List of gmm cluster names, by default None
             Used when 'color_points' is 'gmm'.
             You need to flatten the list of lists of gmm cluster names before passing it.
+            # TODO: enable to directly pass the list of lists of gmm cluster names
 
         save : bool, optional
             If True, save the output image, by default False
@@ -2538,6 +2539,7 @@ class scEGOT:
             List of gmm cluster names, by default None
             Used when 'color_points' is 'gmm'.
             You need to flatten the list of lists of gmm cluster names before passing it.   
+            # TODO: enable to directly pass the list of lists of gmm cluster names
 
         x_range : tuple or list of float of shape (2,), optional
             Limit of the x-axis, by default None
