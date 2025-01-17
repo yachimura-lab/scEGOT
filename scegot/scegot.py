@@ -2517,9 +2517,57 @@ class scEGOT:
         save=False,
         save_path=None,
     ):
+        """Plot the interpolation of cell velocities. This mefhod could be depricated in the future
+        because 'plot_cell_velocity' method now supports plotting streamlines.
+
+        Parameters
+        ----------
+        velocities : pd.DataFrame
+            Cell velocities calculated by 'calculate_cell_velocities' method.
+
+        mode : {'pca', 'umap'}, optional
+            The space to plot cell velocities, by default "pca"
+
+        color_streams : bool, optional
+            If True, color the streamlines by the speed of the cell velocities, by default False
+
+        color_points : {'gmm' or 'day'}, optional
+            Color points by GMM clusters or days, by default "gmm"
+
+        cluster_names : list of str of shape (sum of gmm n_components), optional
+            List of gmm cluster names, by default None
+            Used when 'color_points' is 'gmm'.
+            You need to flatten the list of lists of gmm cluster names before passing it.   
+
+        x_range : tuple or list of float of shape (2,), optional
+            Limit of the x-axis, by default None
+
+        y_range : tuple or list of float of shape (2,), optional
+            Limit of the y-axis, by default None
+
+        cmap : str, optional
+            String of matplolib colormap name, by default "gnuplot2"
+
+        linspace_num : int, optional
+            Number of points on each axis to interpolate, by default 300
+            linspace_num * linspace_num points will be interpolated.
+
+        save : bool, optional
+            If True, save the output image, by default False
+
+        save_path : str, optional
+            Path to save the output image, by default None
+            If None, the image will be saved as './interpolation_of_cell_velocity_gmm_clusters.png'
+            
+        Raises
+        ------
+        ValueError
+            This error is raised in the following cases:
+            - When 'mode' is not 'pca' or 'umap'.
+            - When 'color_points' is not 'gmm' or 'day'.
+            - When 'color_points' is 'gmm' and 'cluster_names' is None.
         """
-        color_points = "gmm", "day", or None
-        """
+
         if mode not in ["pca", "umap"]:
             raise ValueError("The parameter 'mode' should be 'pca' or 'umap'.")
         if color_points is not None and color_points not in ["gmm", "day"]:
