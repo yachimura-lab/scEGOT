@@ -223,7 +223,7 @@ class scEGOT:
             this attribute will be the highly variable gene names.
             Otherwise, this attribute will be the gene names of the input data.
 
-        solutions : list of np.ndarray # TODO: add shape
+        solutions : list of np.ndarray
             List of solutions.
         """
 
@@ -383,7 +383,6 @@ class scEGOT:
         if apply_recode:
             if self.verbose:
                 print("Applying RECODE...")
-            # TODO: add random_state parameter for RECODE
             X_concated = self._preprocess_recode(
                 X_concated,
                 recode_params,
@@ -680,7 +679,6 @@ class scEGOT:
         figure_labels : list or tuple of str of shape (2,), optional
             X and Y axis labels, by default None
             If None, the first two columns of the input data will be used.
-            # TODO: change parameter name to 'axis_labels'
 
         x_range : list or tuple of float of shape (2,), optional
             Restrict the X axis range, by default None
@@ -1255,7 +1253,6 @@ class scEGOT:
 
         tf_gene_pick_num : int, optional
             The number of genes to show in each node and edge, by default 5
-            # TODO: change parameter name to 'gene_pick_num' because it's not limited to TF genes.
 
         save : bool, optional
             If True, save the output image, by default False
@@ -1470,7 +1467,6 @@ class scEGOT:
             List of transcription factor gene names to use, by default None
             If None, all gene names (self.gene_names) will be used.
             You can pass on any list of gene names you want to use, not limited to TF genes.
-            # TODO: change parameter name to 'gene_names' because it's not limited to TF genes.
 
         threshold : float, optional
             Threshold to filter labels, by default 1.0
@@ -1764,7 +1760,6 @@ class scEGOT:
         col : list or tuple of str of shape (2,), optional
             X and Y axis labels, by default None
             If None, the first two columns of the input data will be used.
-            # TODO: change parameter name to 'axis_labels'
 
         save : bool, optional
             If True, save the output image, by default False
@@ -1825,7 +1820,6 @@ class scEGOT:
         col : list or tuple of str of shape (2,), optional
             X, Y, and Z axis labels, by default None
             If None, the first three columns of the input data will be used.
-            # TODO: change parameter name to 'axis_labels'
             
         save : bool, optional
             If True, save the output image, by default False
@@ -1884,7 +1878,6 @@ class scEGOT:
 
         columns : list of str, optional
             Columns names of the output data, by default None
-            # TODO: add default value
 
         n_samples : int, optional
             Number of samples to generate, by default 2000
@@ -1981,7 +1974,6 @@ class scEGOT:
 
         y_col_name : _type_, optional
             Label of the y-axis, by default None
-            # TODO: merge 'x_col_name' and 'y_col_name' into 'axis_labels'
 
         x_range : list or tuple of float of shape (2,), optional
             Range of the x-axis, by default None
@@ -2147,7 +2139,6 @@ class scEGOT:
 
         y_label : str, optional
             Label of the y-axis, by default None
-            # TODO: merge 'x_label' and 'y_label' into 'axis_labels'
 
         cmap : str, optional
             String of the colormap, by default "gnuplot2"
@@ -2385,7 +2376,6 @@ class scEGOT:
             List of gmm cluster names, by default None
             Used when 'color_points' is 'gmm'.
             You need to flatten the list of lists of gmm cluster names before passing it.
-            # TODO: enable to directly pass the list of lists of gmm cluster names
 
         save : bool, optional
             If True, save the output image, by default False
@@ -2539,7 +2529,6 @@ class scEGOT:
             List of gmm cluster names, by default None
             Used when 'color_points' is 'gmm'.
             You need to flatten the list of lists of gmm cluster names before passing it.   
-            # TODO: enable to directly pass the list of lists of gmm cluster names
 
         x_range : tuple or list of float of shape (2,), optional
             Limit of the x-axis, by default None
@@ -2702,7 +2691,6 @@ class scEGOT:
             If None, all clusters will be used.
             The list should be like 
             [[day1's index, selected cluster number], [day2's index, selected cluster number], ...].
-            # TODO: change the shape to [day1's cluster number, day2's cluster number, ...]
 
         alpha_range : tuple or list of float of shape (2,), optional
             Range of alpha values for Ridge regression, by default (-2, 2)
