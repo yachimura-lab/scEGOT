@@ -5,7 +5,7 @@ from io import BytesIO
 import anndata
 import cellmap
 import matplotlib.animation as animation
-import matplotlib.collections as collection
+import matplotlib.collections as collect
 import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
@@ -814,18 +814,18 @@ class scEGOT:
         lss = img.get_linestyle()
 
         for i, path in enumerate(img.get_paths()):
-            pc = collection.PathCollection(
-                        [path] if len(path.vertices) else [],
-                        alpha=img.get_alpha(),
-                        antialiaseds=img.get_antialiased(),
-                        transform=img.get_transform(),
-                        zorder=img.get_zorder(),
-                        label="_nolegend_",
-                        facecolor=fcs[i] if len(fcs) else "none",
-                        edgecolor=ecs[i] if len(ecs) else "none",
-                        linewidths=[lws[i]],
-                        linestyles=[lss[i]],
-                    )
+            pc = collect.PathCollection(
+                    [path] if len(path.vertices) else [],
+                    alpha=img.get_alpha(),
+                    antialiaseds=img.get_antialiased(),
+                    transform=img.get_transform(),
+                    zorder=img.get_zorder(),
+                    label="_nolegend_",
+                    facecolor=fcs[i] if len(fcs) else "none",
+                    edgecolor=ecs[i] if len(ecs) else "none",
+                    linewidths=[lws[i]],
+                    linestyles=[lss[i]],
+                )
             collections.append(pc)
 
         for collection in collections:
