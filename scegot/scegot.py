@@ -5,6 +5,7 @@ from io import BytesIO
 import anndata
 import cellmap
 import matplotlib.animation as animation
+import matplotlib.collections as collect
 import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
@@ -802,7 +803,35 @@ class scEGOT:
         max_z = np.max(z)
         min_z = np.min(z)
         img = plt.contour(x, y, z, np.linspace(min_z - 1e-9, max_z, 20), cmap=cmap)
-        return img.collections
+
+        collections = []
+
+        img.set_visible(False)
+
+        fcs = img.get_facecolor()
+        ecs = img.get_edgecolor()
+        lws = img.get_linewidth()
+        lss = img.get_linestyle()
+
+        for i, path in enumerate(img.get_paths()):
+            pc = collect.PathCollection(
+                    [path] if len(path.vertices) else [],
+                    alpha=img.get_alpha(),
+                    antialiaseds=img.get_antialiased(),
+                    transform=img.get_transform(),
+                    zorder=img.get_zorder(),
+                    label="_nolegend_",
+                    facecolor=fcs[i] if len(fcs) else "none",
+                    edgecolor=ecs[i] if len(ecs) else "none",
+                    linewidths=[lws[i]],
+                    linestyles=[lss[i]],
+                )
+            collections.append(pc)
+
+        for collection in collections:
+            img.axes.add_collection(collection)
+
+        return(collections)
 
     def animatie_interpolated_distribution(
         self,
