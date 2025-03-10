@@ -164,7 +164,8 @@ cython_debug/
 scegot/.DS_Store
 
 # scECOT's folder and file in development environment
-scegot/dataset/
+scegot/dataset/*
+!scegot/dataset/TFgenes_name.csv
 scegot/output/
 
 # VSCode
