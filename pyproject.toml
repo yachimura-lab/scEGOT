@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "scegot"
-version = "0.2.5"
+version = "0.2.6"
 description = "single cell trajectory inference framework based on Entropic Gaussian mixture Optimal Transport"
 authors = ["Toshiaki Yachimura <toshiaki.yachimura.a4@tohoku.ac.jp>"]
 readme = "README.md"
