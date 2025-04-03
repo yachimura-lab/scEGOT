@@ -489,7 +489,7 @@ class scEGOT:
         list of pd.DataFrame of shape (n_samples, n_components of UMAP)
             UMAP-transformed data.
             
-        umap.umap_.UMAP
+        umap.umap\_.UMAP
             UMAP instance fitted to the input data.
         """
         X_concated = pd.concat(self.X_pca)
