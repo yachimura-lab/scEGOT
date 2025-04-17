@@ -1261,7 +1261,6 @@ class scEGOT:
 
         if save:
             fig.write_image(save_path)
-        fig.write_html("merged_plot.html", full_html=True, include_plotlyjs=True)
 
     def plot_cell_state_graph(
         self,
