@@ -935,19 +935,19 @@ class scEGOT:
             ]
             node_source_target_combinations += current_combinations
             edge_colors_based_on_source += [i for _ in range(len(current_combinations))]
-        cell_state_edge_list = pd.DataFrame(
+        duplicated_cell_state_edge_list = pd.DataFrame(
             node_source_target_combinations, columns=["source", "target"]
         )
-        cell_state_edge_list["edge_colors"] = edge_colors_based_on_source
-        cell_state_edge_list["edge_weights"] = list(
+        duplicated_cell_state_edge_list["edge_colors"] = edge_colors_based_on_source
+        duplicated_cell_state_edge_list["edge_weights"] = list(
             itertools.chain.from_iterable(
-                list(
-                    itertools.chain.from_iterable(
-                        self.calculate_normalized_solutions(self.gmm_models)
-                    )
+                itertools.chain.from_iterable(
+                    self.calculate_normalized_solutions(self.gmm_models)
                 )
             )
         )
+        cell_state_edge_list = duplicated_cell_state_edge_list.groupby(["source", "target"], as_index=False).agg({"edge_colors": "min", "edge_weights": "sum"})
+        
         cell_state_edge_list = cell_state_edge_list[
             cell_state_edge_list["edge_weights"] > thresh
         ]
@@ -1104,7 +1104,15 @@ class scEGOT:
             )
         )
         node_info.set_index("index", inplace=True)
-
+        node_info = node_info.groupby(level=0).agg({
+            "node_days": "min",
+            "level_1": "min",
+            "node_weights": "sum",
+            "xpos": "mean",
+            "ypos": "mean",
+            "cluster_gmm": "min",
+            "cluster_weight": "min"
+        })
         for row in node_info.itertuples():
             G.add_node(
                 row.Index,
@@ -1253,6 +1261,7 @@ class scEGOT:
 
         if save:
             fig.write_image(save_path)
+        fig.write_html("merged_plot.html", full_html=True, include_plotlyjs=True)
 
     def plot_cell_state_graph(
         self,
@@ -1262,6 +1271,7 @@ class scEGOT:
         tf_gene_pick_num=5,
         save=False,
         save_path=None,
+        merge=False
     ):
         """Plot the cell state graph with the given graph object.
 
@@ -1303,6 +1313,7 @@ class scEGOT:
             self.get_positive_gmm_mean_gene_values_per_cluster(
                 self.get_gmm_means(),
                 list(itertools.chain.from_iterable(cluster_names)),
+                merge=merge
             )
         )
         mean_tf_gene_values_per_cluster = mean_gene_values_per_cluster.loc[
@@ -3351,11 +3362,13 @@ class scEGOT:
         return gmm_mean_gene_values_per_cluster
 
     def get_positive_gmm_mean_gene_values_per_cluster(
-        self, gmm_means, cluster_names=None
+        self, gmm_means, cluster_names=None, merge=False
     ):
         gmm_mean_gene_values_per_cluster = self._get_gmm_mean_gene_values_per_cluster(
             gmm_means, cluster_names
         )
+        if merge:
+            gmm_mean_gene_values_per_cluster = gmm_mean_gene_values_per_cluster.groupby(level=0).sum()
         gmm_mean_gene_values_per_cluster = gmm_mean_gene_values_per_cluster.where(
             gmm_mean_gene_values_per_cluster > 0, 0
         )
