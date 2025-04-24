@@ -1011,12 +1011,28 @@ class scEGOT:
             ).T
             df_downgenes = pd.concat([df_downgenes, downgenes])
         return df_downgenes
+    
+    def _merge_nodes(node_info_df):
+        xpos = node_info_df["xpos"]
+        ypos = node_info_df["ypos"]
+        weights = node_info_df["node_weights"]
+        merged_df = node_info_df.groupby(level=0).agg({
+            "node_days": "min",
+            "level_1": "min",
+            "node_weights": "sum",
+            "cluster_gmm": "min",
+            "cluster_weight": "min"
+        })
+        merged_df["xpos"] = (xpos * weights).groupby(level=0).sum() / weights.groupby(level=0).count()
+        merged_df["ypos"] = (ypos * weights).groupby(level=0).sum() / weights.groupby(level=0).count()
+        return merged_df
 
     def make_cell_state_graph(
         self,
         cluster_names,
         mode="pca",
         threshold=0.05,
+        merge=False
     ):
         """Compute cell state graph and build a networkx graph object.
 
@@ -1104,16 +1120,13 @@ class scEGOT:
             )
         )
         node_info.set_index("index", inplace=True)
-        node_info = node_info.groupby(level=0).agg({
-            "node_days": "min",
-            "level_1": "min",
-            "node_weights": "sum",
-            "xpos": "mean",
-            "ypos": "mean",
-            "cluster_gmm": "min",
-            "cluster_weight": "min"
-        })
-        for row in node_info.itertuples():
+
+        if merge:
+            merged_node_info = self._merge_nodes(node_info)
+        else:
+            merged_node_info = node_info
+
+        for row in merged_node_info.itertuples():
             G.add_node(
                 row.Index,
                 weight=row.node_weights,
