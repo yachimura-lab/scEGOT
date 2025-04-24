@@ -1012,7 +1012,7 @@ class scEGOT:
             df_downgenes = pd.concat([df_downgenes, downgenes])
         return df_downgenes
     
-    def _merge_nodes(node_info_df):
+    def _merge_nodes(self, node_info_df):
         xpos = node_info_df["xpos"]
         ypos = node_info_df["ypos"]
         weights = node_info_df["node_weights"]
@@ -1023,8 +1023,8 @@ class scEGOT:
             "cluster_gmm": "min",
             "cluster_weight": "min"
         })
-        merged_df["xpos"] = (xpos * weights).groupby(level=0).sum() / weights.groupby(level=0).count()
-        merged_df["ypos"] = (ypos * weights).groupby(level=0).sum() / weights.groupby(level=0).count()
+        merged_df["xpos"] = (xpos * weights).groupby(level=0).sum() / weights.groupby(level=0).sum()
+        merged_df["ypos"] = (ypos * weights).groupby(level=0).sum() / weights.groupby(level=0).sum()
         return merged_df
 
     def make_cell_state_graph(
