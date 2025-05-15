@@ -1012,7 +1012,7 @@ class scEGOT:
             df_downgenes = pd.concat([df_downgenes, downgenes])
         return df_downgenes
     
-    def _merge_nodes(node_info_df):
+    def _merge_same_clusters(node_info_df):
         xpos = node_info_df["xpos"]
         ypos = node_info_df["ypos"]
         weights = node_info_df["node_weights"]
@@ -1032,7 +1032,7 @@ class scEGOT:
         cluster_names,
         mode="pca",
         threshold=0.05,
-        merge=False
+        merge_same_clusters=False
     ):
         """Compute cell state graph and build a networkx graph object.
 
@@ -1121,8 +1121,8 @@ class scEGOT:
         )
         node_info.set_index("index", inplace=True)
 
-        if merge:
-            merged_node_info = self._merge_nodes(node_info)
+        if merge_same_clusters:
+            merged_node_info = self._merge_same_clusters(node_info)
         else:
             merged_node_info = node_info
 
@@ -1283,7 +1283,7 @@ class scEGOT:
         tf_gene_pick_num=5,
         save=False,
         save_path=None,
-        merge=False
+        merge_same_clusters=False
     ):
         """Plot the cell state graph with the given graph object.
 
@@ -1325,7 +1325,7 @@ class scEGOT:
             self.get_positive_gmm_mean_gene_values_per_cluster(
                 self.get_gmm_means(),
                 list(itertools.chain.from_iterable(cluster_names)),
-                merge=merge
+                merge_same_clusters=merge_same_clusters
             )
         )
         mean_tf_gene_values_per_cluster = mean_gene_values_per_cluster.loc[
@@ -3374,12 +3374,12 @@ class scEGOT:
         return gmm_mean_gene_values_per_cluster
 
     def get_positive_gmm_mean_gene_values_per_cluster(
-        self, gmm_means, cluster_names=None, merge=False
+        self, gmm_means, cluster_names=None, merge_same_clusters=False
     ):
         gmm_mean_gene_values_per_cluster = self._get_gmm_mean_gene_values_per_cluster(
             gmm_means, cluster_names
         )
-        if merge:
+        if merge_same_clusters:
             gmm_mean_gene_values_per_cluster = gmm_mean_gene_values_per_cluster.groupby(level=0).sum()
         gmm_mean_gene_values_per_cluster = gmm_mean_gene_values_per_cluster.where(
             gmm_mean_gene_values_per_cluster > 0, 0
