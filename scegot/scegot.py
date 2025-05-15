@@ -1023,8 +1023,8 @@ class scEGOT:
             "cluster_gmm": "min",
             "cluster_weight": "min"
         })
-        merged_df["xpos"] = (xpos * weights).groupby(level=0).sum() / weights.groupby(level=0).count()
-        merged_df["ypos"] = (ypos * weights).groupby(level=0).sum() / weights.groupby(level=0).count()
+        merged_df["xpos"] = (xpos * weights).groupby(level=0).sum() / weights.groupby(level=0).sum()
+        merged_df["ypos"] = (ypos * weights).groupby(level=0).sum() / weights.groupby(level=0).sum()
         return merged_df
 
     def make_cell_state_graph(
