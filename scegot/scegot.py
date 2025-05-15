@@ -1012,7 +1012,7 @@ class scEGOT:
             df_downgenes = pd.concat([df_downgenes, downgenes])
         return df_downgenes
     
-    def _merge_same_clusters(node_info_df):
+    def _merge_same_clusters(self, node_info_df):
         xpos = node_info_df["xpos"]
         ypos = node_info_df["ypos"]
         weights = node_info_df["node_weights"]
