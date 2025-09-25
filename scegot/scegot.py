@@ -1,5 +1,7 @@
+import copy
 import itertools
 import warnings
+from collections import defaultdict
 from io import BytesIO
 
 import anndata
@@ -16,6 +18,7 @@ import plotly.graph_objects as go
 import pydotplus
 import scipy.linalg as spl
 import screcode
+import scvelo as scv
 import seaborn as sns
 import umap.umap_ as umap
 from adjustText import adjust_text
@@ -23,12 +26,12 @@ from IPython.display import HTML, Image, display
 from matplotlib import patheffects
 from matplotlib.colors import ListedColormap
 from PIL import Image as PILImage
-import scvelo as scv
 from scanpy.pp import neighbors
 from scipy import interpolate
 from scipy.sparse import csc_matrix, issparse, lil_matrix, linalg
 from scipy.stats import multivariate_normal, zscore
 from sklearn import linear_model
+from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA
 from sklearn.mixture import GaussianMixture
 from sklearn.neighbors import kneighbors_graph
@@ -941,32 +944,32 @@ class scEGOT:
 
         plt.close()
 
-    def _get_cell_state_edge_list(self, cluster_names, thresh):
-        node_source_target_combinations, edge_colors_based_on_source = [], []
-        for i in range(len(self.gmm_n_components_list) - 1):
-            current_combinations = [
-                x for x in itertools.product(cluster_names[i], cluster_names[i + 1])
-            ]
-            node_source_target_combinations += current_combinations
-            edge_colors_based_on_source += [i for _ in range(len(current_combinations))]
-        duplicated_cell_state_edge_list = pd.DataFrame(
-            node_source_target_combinations, columns=["source", "target"]
-        )
-        duplicated_cell_state_edge_list["edge_colors"] = edge_colors_based_on_source
-        duplicated_cell_state_edge_list["edge_weights"] = list(
-            itertools.chain.from_iterable(
-                itertools.chain.from_iterable(
-                    self.calculate_normalized_solutions(self.gmm_models)
-                )
-            )
-        )
-        cell_state_edge_list = duplicated_cell_state_edge_list.groupby(["source", "target"], as_index=False).agg({"edge_colors": "min", "edge_weights": "sum"})
+    # def _get_edge_list(self, cluster_names, thresh):
+    #     node_source_target_combinations, edge_colors_based_on_source = [], []
+    #     for i in range(len(self.gmm_n_components_list) - 1):
+    #         current_combinations = [
+    #             x for x in itertools.product(cluster_names[i], cluster_names[i + 1])
+    #         ]
+    #         node_source_target_combinations += current_combinations
+    #         edge_colors_based_on_source += [i for _ in range(len(current_combinations))]
+    #     duplicated_cell_state_edge_list = pd.DataFrame(
+    #         node_source_target_combinations, columns=["source", "target"]
+    #     )
+    #     duplicated_cell_state_edge_list["edge_colors"] = edge_colors_based_on_source
+    #     duplicated_cell_state_edge_list["edge_weights"] = list(
+    #         itertools.chain.from_iterable(
+    #             itertools.chain.from_iterable(
+    #                 self.calculate_normalized_solutions(self.gmm_models)
+    #             )
+    #         )
+    #     )
+    #     cell_state_edge_list = duplicated_cell_state_edge_list.groupby(["source", "target"], as_index=False).agg({"edge_colors": "min", "edge_weights": "sum"})
         
-        cell_state_edge_list = cell_state_edge_list[
-            cell_state_edge_list["edge_weights"] > thresh
-        ]
+    #     cell_state_edge_list = cell_state_edge_list[
+    #         cell_state_edge_list["edge_weights"] > thresh
+    #     ]
 
-        return cell_state_edge_list
+    #     return cell_state_edge_list
 
     def _get_gmm_node_weights_flattened(self):
         node_weights = [
@@ -1026,44 +1029,182 @@ class scEGOT:
             df_downgenes = pd.concat([df_downgenes, downgenes])
         return df_downgenes
     
-    def _merge_same_clusters(self, node_info_df):
-        xpos = node_info_df["xpos"]
-        ypos = node_info_df["ypos"]
-        weights = node_info_df["node_weights"]
-        merged_df = node_info_df.groupby(level=0).agg({
-            "node_days": "min",
-            "level_1": "min",
-            "node_weights": "sum",
-            "cluster_gmm": "min",
-            "cluster_weight": "min"
-        })
-        merged_df["xpos"] = (xpos * weights).groupby(level=0).sum() / weights.groupby(level=0).sum()
-        merged_df["ypos"] = (ypos * weights).groupby(level=0).sum() / weights.groupby(level=0).sum()
-        return merged_df
+    def _calculate_source_merged_edge_weights(self, df):
+        node_weights = self._get_gmm_node_weights_flattened()
+        source_node_weights = df.apply(lambda row: node_weights[row["source_index"]], axis=1)
+        edge_weights_weighted_by_source = source_node_weights * df["edge_weights"]
+        return pd.Series(
+            {
+                "edge_colors": df["edge_colors"].min(),
+                "edge_weights": sum(edge_weights_weighted_by_source) / sum(source_node_weights)
+            }
+        )
+
+    def _get_edge_list(self, cluster_names, thresh, require_parent):
+        node_source_target_combinations, edge_colors_based_on_source = [], []
+        cluster_nums = [len(names) for names in cluster_names]
+        cluster_start_indexes = [0] + [sum(cluster_nums[:i+1]) for i in range(len(cluster_names))]
+        for i in range(len(cluster_names) - 1):
+            current_combinations = list(itertools.product(
+                list(range(cluster_start_indexes[i], cluster_start_indexes[i+1])),
+                list(range(cluster_start_indexes[i+1], cluster_start_indexes[i+2]))
+            ))
+            node_source_target_combinations += current_combinations
+            edge_colors_based_on_source += [i for _ in range(len(current_combinations))]
+
+        cell_state_edges = pd.DataFrame(node_source_target_combinations, columns=["source_index", "target_index"])
+        cell_state_edges["edge_colors"] = edge_colors_based_on_source
+
+        cell_state_edges["edge_weights"] = list(
+            itertools.chain.from_iterable(
+                itertools.chain.from_iterable(
+                    self.calculate_normalized_solutions(self.gmm_models)
+                )
+            )
+        )
+        cluster_names_flattened = list(itertools.chain.from_iterable(cluster_names))
+
+        cell_state_edges["target"] = [cluster_names_flattened[i] for i in cell_state_edges["target_index"]]
+        cell_state_edges = cell_state_edges.groupby(["source_index", "target"], as_index=False).agg({"edge_colors": "min", "edge_weights": "sum"})
+        cell_state_edges["source"] = [cluster_names_flattened[i] for i in cell_state_edges["source_index"]]
+        cell_state_edges = cell_state_edges.groupby(["source", "target"], as_index=False).apply(self._calculate_source_merged_edge_weights)
+
+        filtered_cell_state_edges = cell_state_edges[cell_state_edges["edge_weights"] >= thresh]
+
+        if require_parent:
+            filtered_cell_state_edges = cell_state_edges[cell_state_edges["edge_weights"] >= thresh]
+            target_cluster_names_flattened = list(itertools.chain.from_iterable(cluster_names[1:]))
+            for cluster_name in target_cluster_names_flattened:
+                if not cluster_name in filtered_cell_state_edges["target"].values:
+                    current_df = cell_state_edges[cell_state_edges["target"] == cluster_name]
+                    max_weight = current_df["edge_weights"].max()
+                    additional_rows = current_df[current_df["edge_weights"] == max_weight]
+                    filtered_cell_state_edges = pd.concat([filtered_cell_state_edges, additional_rows])
+
+        return filtered_cell_state_edges
+
+    def merge_clusters_by_pathway(
+            self,
+            last_day_cluster_names=None,
+            merge_iter=1,
+            merge_method=None,
+            threshold=0.05,
+            n_clusters_list=None,
+            cluster_names=None,
+            **kwargs
+        ):
+        if not merge_iter in list(range(len(self.day_names) - 1)):
+            raise ValueError("The parameter 'merge_iter' should be an integer in the range of the number of days.")
+        
+        if merge_method == None:
+            merge_method = "pattern"
+
+        if not merge_method in ["pattern", "kmeans"]:
+            raise ValueError("The parameter 'merge_method' should be 'pattern' or 'kmeans'")
+        
+        if cluster_names is None:
+            cluster_names = self.generate_cluster_names_with_day()
+        else:
+            cluster_names = copy.deepcopy(cluster_names)
+
+        if merge_method == "kmeans" and n_clusters_list == None:
+            n_clusters_list = [min(len(cluster_names[i]), 4) for i in range(merge_iter)]
+            
+        if last_day_cluster_names is None:
+            last_day_cluster_names = cluster_names[-1]
+        
+        for i in range(merge_iter):
+            source_cluster_names = cluster_names[-(i+2)]
+            source_list = list(set(source_cluster_names))
+            day_name = self.day_names[-(i+2)]
+            target_list = list(set(cluster_names[-(i+1)]))
+
+            if merge_method == "pattern":
+                cell_state_edges = self._get_edge_list(cluster_names, threshold, False)
+                current_day_df = cell_state_edges[cell_state_edges["source"].isin(source_list)]
+
+                # sourceとtargetの一覧のリストの組を表すdataframeを作る
+                target_combination_df = current_day_df.groupby("source", as_index=False).apply(
+                    lambda df: pd.Series(
+                        [(target in df["target"].tolist()) for target in target_list],
+                        index=target_list
+                    )
+                )
+
+                # targetの組み合わせごとに分類
+                clusters_groupby_target = []
+                target_combination_df.groupby(target_list, as_index=False).apply(lambda df: clusters_groupby_target.append(df["source"].tolist()))
+
+                new_source_cluster_names = [""] * len(source_cluster_names)
+                for group_num, group in enumerate(clusters_groupby_target):
+                    for cluster in group:
+                        for index, name in enumerate(source_cluster_names):
+                            if cluster == name:
+                                new_source_cluster_names[index] = f"{day_name}-{group_num}" 
+
+            if merge_method == "kmeans":
+                cell_state_edges = self._get_edge_list(cluster_names, 0, False)
+                current_day_df = cell_state_edges[cell_state_edges["source"].isin(source_list)]
+
+                # sourceを行、targetを列とした重みのdataframeを作る
+                source_target_df = pd.DataFrame(
+                    [
+                        [current_day_df[(current_day_df["source"] == source) & (current_day_df["target"] == target)]["edge_weights"]
+                        for target in target_list]
+                        for source in source_cluster_names
+                    ], 
+                    columns=target_list,
+                    index=source_list
+                )
+                
+                # K-means法でクラスタリング
+                kmeans_model = KMeans(n_clusters=n_clusters_list[i], **kwargs).fit(source_target_df)
+                new_source_cluster_names = []
+                for group_num in kmeans_model.labels_:
+                    new_source_cluster_names.append(f"{day_name}-{group_num}")
+
+            cluster_names[-(i+2)] = new_source_cluster_names
+
+        return cluster_names
 
     def make_cell_state_graph(
         self,
-        cluster_names,
-        mode="pca",
         threshold=0.05,
-        merge_same_clusters=False
+        mode="pca",
+        cluster_names=None,
+        merge_same_clusters=False,
+        x_reverse=False,
+        y_reverse=False,
+        require_parent=False,
     ):
         """Compute cell state graph and build a networkx graph object.
 
         Parameters
         ----------
+        threshold : float, optional
+            Threshold to filter edges, by default 0.05
+            Only edges with edge_weights greater than this threshold will be included.
+            
+        mode : {'pca', 'umap'}, optional
+            The space to build the cell state graph, by default "pca"
+            
         cluster_names : 2D list of str
             1st dimension is the number of days, 2nd dimension is the number of gmm components
             in each day.
             Can be generaged by 'generate_cluster_names' method.
 
-        mode : {'pca', 'umap'}, optional
-            The space to build the cell state graph, by default "pca"
-            
-        threshold : float, optional
-            Threshold to filter edges, by default 0.05
-            Only edges with edge_weights greater than this threshold will be included.
+        merge_same_clusters : bool, optional
+            If True, merge nodes with the same cluster names in different days, by default False
+        
+        x_reverse : bool, optional
+            If True, reverse the X axis direction, by default False
 
+        y_reverse : bool, optional
+            If True, reverse the Y axis direction, by default False
+        
+        require_parent : bool, optional
+            If True, ensure that each cluster in the target day has at least one incoming edge from the source day, by default False
+        
         Returns
         -------
         nx.classes.digraph.DiGraph
@@ -1073,9 +1214,18 @@ class scEGOT:
         ------
         ValueError
             When 'mode' is not 'pca' or 'umap'.
+        ValueError
+            When the length of 'cluster_names' is not the same as the number of days.
         """
+
         if mode not in ["pca", "umap"]:
             raise ValueError("The parameter 'mode' should be 'pca' or 'umap'.")
+
+        if cluster_names and (len(cluster_names) != len(self.day_names)):
+            raise ValueError("The length of 'cluster_names' should be the same as the number of days.")
+        
+        if cluster_names is None:
+            cluster_names = self.generate_cluster_names_with_day()
 
         gmm_means_flattened = np.array(
             list(itertools.chain.from_iterable(self.get_gmm_means()))
@@ -1083,7 +1233,8 @@ class scEGOT:
         if mode == "umap":
             gmm_means_flattened = self.umap_model.transform(gmm_means_flattened)
 
-        cell_state_edge_list = self._get_cell_state_edge_list(cluster_names, threshold)
+        cell_state_edge_list = self._get_edge_list(cluster_names, threshold, require_parent)
+
         G = nx.from_pandas_edgelist(
             cell_state_edge_list,
             source="source",
@@ -1096,17 +1247,20 @@ class scEGOT:
             index=list(itertools.chain.from_iterable(cluster_names)),
             columns=["node_weights"],
         )
-        node_info["xpos"] = gmm_means_flattened.T[0]
-        node_info["ypos"] = gmm_means_flattened.T[1]
+        
+        if x_reverse:
+            node_info["xpos"] = gmm_means_flattened.T[0] * (-1)
+        else:
+            node_info["xpos"] = gmm_means_flattened.T[0]
+        if y_reverse:
+            node_info["ypos"] = gmm_means_flattened.T[1] * (-1)
+        else: 
+            node_info["ypos"] = gmm_means_flattened.T[1]
+
         node_info["node_days"] = self._get_day_order_of_each_node()
         if self.gmm_label_converter is None:
             node_info["cluster_gmm"] = list(
-                itertools.chain.from_iterable(
-                    [
-                        list(range(n_components))
-                        for n_components in self.gmm_n_components_list
-                    ]
-                )
+                itertools.chain.from_iterable([list(range(n_components)) for n_components in self.gmm_n_components_list])
             )
         else:
             node_info["cluster_gmm"] = list(
@@ -1122,6 +1276,7 @@ class scEGOT:
             )
         )
         node_sortby_weight = node_sortby_weight.reset_index()
+
         node_info = pd.DataFrame(
             node_sortby_weight.values, columns=node_sortby_weight.columns
         )
@@ -1150,8 +1305,166 @@ class scEGOT:
                 cluster_weight=row.cluster_weight,
             )
 
-        return G
+        graph = CellStateGraph(
+            G,
+            scegot=self,
+            threshold=threshold,
+            mode=mode,
+            cluster_names=cluster_names,
+            merge_same_clusters=merge_same_clusters,
+            x_reverse=x_reverse,
+            y_reverse=y_reverse,
+            require_parent=require_parent,
+        )
 
+        return graph
+
+    # return order of weight par day
+    def _get_cluster_weight_order(G):
+        weight_dict = dict(G.nodes(data="weight"))
+        day_dict = dict(G.nodes(data="day"))
+
+        cluster_dict = defaultdict(list)
+        for cluster, date in day_dict.items():
+            cluster_dict[date].append(cluster)
+
+        cluster_weight_order = {}
+
+        for _day, cluster_list in cluster_dict.items():
+            sorted_cluster_list = sorted(cluster_list, key=lambda cluster: weight_dict[cluster], reverse=True)
+            for rank, name in enumerate(sorted_cluster_list):
+                cluster_weight_order[name] = rank
+        
+        return cluster_weight_order
+
+    def _merge_same_clusters(self, node_info_df):
+        xpos = node_info_df["xpos"]
+        ypos = node_info_df["ypos"]
+        weights = node_info_df["node_weights"]
+        merged_df = node_info_df.groupby(level=0).agg({
+            "node_days": "min",
+            "level_1": "min",
+            "node_weights": "sum",
+            "cluster_gmm": "min",
+            "cluster_weight": "min"
+        })
+        merged_df["xpos"] = (xpos * weights).groupby(level=0).sum() / weights.groupby(level=0).sum()
+        merged_df["ypos"] = (ypos * weights).groupby(level=0).sum() / weights.groupby(level=0).sum()
+        return merged_df
+
+    # def make_cell_state_graph(
+    #     self,
+    #     cluster_names,
+    #     mode="pca",
+    #     threshold=0.05,
+    #     merge_same_clusters=False
+    # ):
+    #     """Compute cell state graph and build a networkx graph object.
+
+    #     Parameters
+    #     ----------
+    #     cluster_names : 2D list of str
+    #         1st dimension is the number of days, 2nd dimension is the number of gmm components
+    #         in each day.
+    #         Can be generaged by 'generate_cluster_names' method.
+
+    #     mode : {'pca', 'umap'}, optional
+    #         The space to build the cell state graph, by default "pca"
+            
+    #     threshold : float, optional
+    #         Threshold to filter edges, by default 0.05
+    #         Only edges with edge_weights greater than this threshold will be included.
+
+    #     Returns
+    #     -------
+    #     nx.classes.digraph.DiGraph
+    #         Networkx graph object of the cell state graph
+
+    #     Raises
+    #     ------
+    #     ValueError
+    #         When 'mode' is not 'pca' or 'umap'.
+    #     """
+    #     if mode not in ["pca", "umap"]:
+    #         raise ValueError("The parameter 'mode' should be 'pca' or 'umap'.")
+
+    #     gmm_means_flattened = np.array(
+    #         list(itertools.chain.from_iterable(self.get_gmm_means()))
+    #     )
+    #     if mode == "umap":
+    #         gmm_means_flattened = self.umap_model.transform(gmm_means_flattened)
+
+    #     cell_state_edge_list = self._get_edge_list(cluster_names, threshold)
+    #     G = nx.from_pandas_edgelist(
+    #         cell_state_edge_list,
+    #         source="source",
+    #         target="target",
+    #         edge_attr=["edge_weights", "edge_colors"],
+    #         create_using=nx.DiGraph,
+    #     )
+    #     node_info = pd.DataFrame(
+    #         self._get_gmm_node_weights_flattened(),
+    #         index=list(itertools.chain.from_iterable(cluster_names)),
+    #         columns=["node_weights"],
+    #     )
+    #     node_info["xpos"] = gmm_means_flattened.T[0]
+    #     node_info["ypos"] = gmm_means_flattened.T[1]
+    #     node_info["node_days"] = self._get_day_order_of_each_node()
+    #     if self.gmm_label_converter is None:
+    #         node_info["cluster_gmm"] = list(
+    #             itertools.chain.from_iterable(
+    #                 [
+    #                     list(range(n_components))
+    #                     for n_components in self.gmm_n_components_list
+    #                 ]
+    #             )
+    #         )
+    #     else:
+    #         node_info["cluster_gmm"] = list(
+    #             itertools.chain.from_iterable(self.gmm_label_converter)
+    #         )
+
+    #     node_sortby_weight = (
+    #         node_info.reset_index()
+    #         .groupby("node_days")
+    #         .apply(
+    #             lambda x: x.sort_values("node_weights", ascending=False),
+    #             include_groups=False,
+    #         )
+    #     )
+    #     node_sortby_weight = node_sortby_weight.reset_index()
+    #     node_info = pd.DataFrame(
+    #         node_sortby_weight.values, columns=node_sortby_weight.columns
+    #     )
+    #     node_info["cluster_weight"] = list(
+    #         itertools.chain.from_iterable(
+    #             [
+    #                 list(range(n_components))
+    #                 for n_components in self.gmm_n_components_list
+    #             ]
+    #         )
+    #     )
+    #     node_info.set_index("index", inplace=True)
+
+    #     if merge_same_clusters:
+    #         merged_node_info = self._merge_same_clusters(node_info)
+    #     else:
+    #         merged_node_info = node_info
+
+    #     for row in merged_node_info.itertuples():
+    #         G.add_node(
+    #             row.Index,
+    #             weight=row.node_weights,
+    #             day=row.node_days,
+    #             pos=(row.xpos, row.ypos),
+    #             cluster_gmm=row.cluster_gmm,
+    #             cluster_weight=row.cluster_weight,
+    #         )
+
+    #     return G
+
+
+ # この辺をCellStateGraphクラスに移動
     def _plot_cell_state_graph(
         self,
         G,
@@ -3408,3 +3721,174 @@ class scEGOT:
             )
         self.gmm_labels_modified = gmm_labels_modified
         self.gmm_label_converter = converter
+
+class CellStateGraph():
+    def __init__(
+        self,
+        G, 
+        scegot,
+        threshold=0.05,
+        mode="pca",
+        cluster_names=None,
+        merge_same_clusters=False,
+        x_reverse=False,
+        y_reverse=False,
+        require_parent=False
+    ):
+        self.G = G
+        self.scegot = scegot
+        self.threshold = threshold
+        self.mode = mode
+        self.cluster_names = cluster_names
+        self.merge_same_clusters = merge_same_clusters
+        self.x_reverse = x_reverse
+        self.y_reverse = y_reverse
+        self.require_parent = require_parent
+        self.day_num = len(scegot.day_names)
+        
+    def reverse_graph(self, x=False, y=False):
+        if x:
+            self.x_reverse = not self.x_reverse
+            for node in self.G.nodes():
+                self.G.nodes[node]["pos"] = (-1 * self.G.nodes[node]["pos"][0], self.G.nodes[node]["pos"][1])
+        if y:
+            self.y_reverse = not self.y_reverse
+            for node in self.G.nodes():
+                self.G.nodes[node]["pos"] = (self.G.nodes[node]["pos"][0], -1 * self.G.nodes[node]["pos"][1])
+
+    
+    def draw(self, ax, title, layout="normal", order_dict=None, weight_annotation=False):
+        if weight_annotation and weight_annotation not in ["both", "node", "edge"]:
+            raise ValueError("The parameter 'mode' should be 'both' or 'node' or 'edge'.")
+        
+        G = self.G
+        ax.set_title(title, fontsize=20)
+        node_color = [node["day"] for node in G.nodes.values()]
+        color_data = np.array([G.edges[edge]["edge_weights"] for edge in G.edges()])
+
+        pos = {}
+        if layout == "normal":
+            pos = {node: G.nodes[node]["pos"] for node in G.nodes()}
+        else:
+            if order_dict == None:
+                order_dict = self.scegot._get_cluster_weight_order(G)
+            for node in G.nodes():
+                try:
+                    order = -order_dict[node]
+                except:
+                    raise ValueError(f"The node name '{node}' does not exist in 'order_dict'.")
+                pos[node] = (G.nodes[node]["day"], order)
+        
+        # draw edge border
+        nx.draw(
+            G,
+            pos,
+            node_size=[node["weight"] * 4500 for node in G.nodes.values()],
+            node_color="white",
+            edge_color="black",
+            arrows=True,
+            arrowsize=30,
+            linewidths=2,
+            ax=ax,
+            width=6.0,
+        )
+        nx.draw(
+            G,
+            pos,
+            node_size=[node["weight"] * 5000 for node in G.nodes.values()],
+            node_color="white",
+            edge_color="white",
+            arrows=True,
+            arrowsize=30,
+            linewidths=2,
+            ax=ax,
+            width=5.0,
+        )
+
+        # draw edges
+        node_cmap = (
+            plt.cm.tab10(np.arange(10))
+            if self.day_num <= 10
+            else plt.cm.tab20(np.arange(20))
+        )
+        nx.draw(
+            G,
+            pos,
+            node_size=[node["weight"] * 5000 for node in G.nodes.values()],
+            node_color=node_color,
+            edge_color=color_data,
+            edgecolors="white",
+            arrows=True,
+            arrowsize=30,
+            linewidths=2,
+            cmap=ListedColormap(node_cmap[: self.day_num]),
+            edge_cmap=plt.cm.Reds,
+            ax=ax,
+            alpha=1,
+            width=5.0,
+        )
+
+        if weight_annotation in ["both", "edge"]: 
+            nx.draw_networkx_edge_labels(
+                G,
+                pos,
+                edge_labels={edge: f"{G.edges[edge]['edge_weights']:.3f}" for edge in G.edges()},
+                font_size=14,
+                label_pos=0.2,
+                ax=ax
+            )
+
+        texts = []
+        for node in G.nodes():
+            text_ = ax.text(
+                pos[node][0],
+                pos[node][1],
+                f'{node}\n{G.nodes[node]["weight"]:.3f}' if weight_annotation in ["both", "node"]  else node,
+                fontsize=14,
+                fontweight="bold",
+                ha="center",
+                va="center",
+            )
+            text_.set_path_effects(
+                [patheffects.withStroke(linewidth=3, foreground="w")]
+            )
+
+            texts.append(text_)
+
+        adjust_text(texts, ax=ax, arrowprops=dict(arrowstyle='->', color='red'))
+
+
+# def draw_multiple_graphs(
+#     scegot_list,
+#     G_list,
+#     plot_title="Cell State Graph",
+#     graph_titles=None,
+#     graph_col_num=None,
+#     graph_row_num=None,
+#     graph_places=None,
+#     save=False,
+#     save_path=None,
+#     **kwargs
+# ):
+#     graph_num = len(scegot_list)
+#     if graph_col_num == None:
+#         graph_col_num = min(graph_num, 3)
+#     if graph_row_num == None:
+#         graph_row_num = (graph_num + (graph_col_num-1)) // graph_col_num
+#     if graph_places == None:
+#         if graph_num <= graph_col_num:
+#             graph_places = list(range(graph_num))
+#         else:
+#             graph_places = [(i // graph_col_num, i % graph_col_num) for i in range(graph_num)]
+#     fig, axes = plt.subplots(graph_row_num, graph_col_num, figsize=(15*graph_col_num, 15*graph_row_num))
+#     plt.subplots_adjust(left=0, right=1, wspace=0, bottom=0)
+
+#     fig.suptitle(plot_title, weight="bold", fontsize=30)
+#     for i, (scegot, G) in enumerate(zip(scegot_list, G_list)):
+#         draw_graph(scegot, G, axes[graph_places[i]], graph_titles[i], **kwargs)
+
+#     if save:
+#         if save_path == None:
+#             save_path = "cell_state_graph"
+#         plt.savefig(save_path)
+
