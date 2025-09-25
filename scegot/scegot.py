@@ -295,18 +295,32 @@ class scEGOT:
         X_concated = self._normalize_log1p(X_concated)
         return X_concated
 
-    def _select_highly_variable_genes(self, X_concated, n_select_genes=2000):
+    def _select_highly_variable_genes(self, X_concated, n_select_genes=2000, hvg_method="dispersion", **recode_params):
+        if hvg_method not in ["dispersion", "RECODE"]:
+            raise ValueError("The parameter 'hvg_method' should be 'dispersion' or 'RECODE'.")
+        
         genes = pd.DataFrame(index=X_concated.columns)
-        mean = X_concated.values.mean(axis=0)
-        mean[mean == 0] = 1e-12
-        var_norm = X_concated.values.var(axis=0) / mean
-        var_norm[var_norm == 0] = np.nan
-        genes["dispersion"] = var_norm
-        highvar_gene_names = (
-            genes.sort_values(by=["dispersion"], ascending=False)
-            .head(n_select_genes)
-            .index
-        )
+        
+        if hvg_method == "dispersion":
+            mean = X_concated.values.mean(axis=0)
+            mean[mean == 0] = 1e-12
+            var_norm = X_concated.values.var(axis=0) / mean
+            var_norm[var_norm == 0] = np.nan
+            genes["dispersion"] = var_norm
+            highvar_gene_names = (
+                genes.sort_values(by=["dispersion"], ascending=False)
+                .head(n_select_genes)
+                .index
+            )
+        else:
+            adata = anndata.AnnData(X_concated.values)
+            adata.obs_names = X_concated.index
+            adata.var_names = X_concated.columns
+            recode = screcode.RECODE(verbose=self.verbose, **recode_params)
+            adata = recode.fit_transform(adata)
+            recode.highly_variable_genes(adata, n_top_genes=n_select_genes) 
+            highvar_gene_names = adata.var.index[adata.var["RECODE_highly_variable"]]
+
         highvar_genes = X_concated.loc[:, highvar_gene_names]
         return highvar_genes
 
