@@ -1167,6 +1167,24 @@ class scEGOT:
 
         return cluster_names
 
+    def _merge_nodes(self, node_info_df):
+        merged_df = node_info_df.groupby(level=0).agg({
+            "node_days": "min",
+            "level_1": "min",
+            "node_weights": "sum",
+            "cluster_gmm": "min",
+        })
+
+        xpos = node_info_df["xpos"]
+        ypos = node_info_df["ypos"]
+        weights = node_info_df["node_weights"]
+        merged_df["xpos"] = (xpos * weights).groupby(level=0).sum() / weights.groupby(level=0).sum()
+        merged_df["ypos"] = (ypos * weights).groupby(level=0).sum() / weights.groupby(level=0).sum()
+
+        merged_df["cluster_weight"] = merged_df.groupby("node_days")["node_weights"].rank(ascending=False).astype(int) - 1
+
+        return merged_df
+
     def make_cell_state_graph(
         self,
         threshold=0.05,
@@ -1291,7 +1309,7 @@ class scEGOT:
         node_info.set_index("index", inplace=True)
 
         if merge_same_clusters:
-            merged_node_info = self._merge_same_clusters(node_info)
+            merged_node_info = self._merge_nodes(node_info)
         else:
             merged_node_info = node_info
 
@@ -1318,39 +1336,6 @@ class scEGOT:
         )
 
         return graph
-
-    # return order of weight par day
-    def _get_cluster_weight_order(G):
-        weight_dict = dict(G.nodes(data="weight"))
-        day_dict = dict(G.nodes(data="day"))
-
-        cluster_dict = defaultdict(list)
-        for cluster, date in day_dict.items():
-            cluster_dict[date].append(cluster)
-
-        cluster_weight_order = {}
-
-        for _day, cluster_list in cluster_dict.items():
-            sorted_cluster_list = sorted(cluster_list, key=lambda cluster: weight_dict[cluster], reverse=True)
-            for rank, name in enumerate(sorted_cluster_list):
-                cluster_weight_order[name] = rank
-        
-        return cluster_weight_order
-
-    def _merge_same_clusters(self, node_info_df):
-        xpos = node_info_df["xpos"]
-        ypos = node_info_df["ypos"]
-        weights = node_info_df["node_weights"]
-        merged_df = node_info_df.groupby(level=0).agg({
-            "node_days": "min",
-            "level_1": "min",
-            "node_weights": "sum",
-            "cluster_gmm": "min",
-            "cluster_weight": "min"
-        })
-        merged_df["xpos"] = (xpos * weights).groupby(level=0).sum() / weights.groupby(level=0).sum()
-        merged_df["ypos"] = (ypos * weights).groupby(level=0).sum() / weights.groupby(level=0).sum()
-        return merged_df
 
     # def make_cell_state_graph(
     #     self,
@@ -1447,7 +1432,7 @@ class scEGOT:
     #     node_info.set_index("index", inplace=True)
 
     #     if merge_same_clusters:
-    #         merged_node_info = self._merge_same_clusters(node_info)
+    #         merged_node_info = self._merge_nodes(node_info)
     #     else:
     #         merged_node_info = node_info
 
@@ -1668,6 +1653,7 @@ class scEGOT:
         tf_nlargest.columns += 1
         tf_nsmallest.columns += 1
         # edges
+        print(mean_gene_values_per_cluster)
         tf_up_genes = self._get_up_regulated_genes(
             mean_tf_gene_values_per_cluster, G, num=tf_gene_pick_num
         )
@@ -1687,135 +1673,141 @@ class scEGOT:
             save_path=save_path,
         )
 
-    def plot_simple_cell_state_graph(
-        self, G, layout="normal", order=None, save=False, save_path=None
-    ):
-        """Plot the cell state graph with the given graph object in a simple way.
+    # def plot_simple_cell_state_graph(
+    #     self, G, layout="normal", order=None, save=False, save_path=None
+    # ):
+    #     """Plot the cell state graph with the given graph object in a simple way.
 
-        Parameters
-        ----------
-        G : nx.classes.digraph.DiGraph
-            Networkx graph object of the cell state graph.
+    #     Parameters
+    #     ----------
+    #     G : nx.classes.digraph.DiGraph
+    #         Networkx graph object of the cell state graph.
 
-        layout : {'normal', 'hierarchy'}, optional
-            The layout of the graph, by default "normal"
-            When 'normal', the graph is plotted the same layout as the self.plot_cell_state_graph method.
-            When 'hierarchy', the graph is plotted with the day on the x-axis and the cluster on the y-axis.
+    #     layout : {'normal', 'hierarchy'}, optional
+    #         The layout of the graph, by default "normal"
+    #         When 'normal', the graph is plotted the same layout as the self.plot_cell_state_graph method.
+    #         When 'hierarchy', the graph is plotted with the day on the x-axis and the cluster on the y-axis.
 
-        order : {'weight', None}, optional
-            Order of nodes along the y-axis, by default None
-            This parameter is only used when 'layout' is 'hierarchy'.
-            When 'weight', the nodes are ordered by the size of the nodes.
-            When None, the nodes are ordered by the cluster number.
+    #     order : {'weight', None}, optional
+    #         Order of nodes along the y-axis, by default None
+    #         This parameter is only used when 'layout' is 'hierarchy'.
+    #         When 'weight', the nodes are ordered by the size of the nodes.
+    #         When None, the nodes are ordered by the cluster number.
 
-        save : bool, optional
-            If True, save the output image, by default False
+    #     save : bool, optional
+    #         If True, save the output image, by default False
 
-        save_path : str, optional
-            Path to save the output image, by default None
-            If None, the image will be saved as './simple_cell_state_graph.png'
+    #     save_path : str, optional
+    #         Path to save the output image, by default None
+    #         If None, the image will be saved as './simple_cell_state_graph.png'
 
-        Raises
-        ------
-        ValueError
-            When 'layout' is not 'normal' or 'hierarchy', or 'order' is not None or 'weight'.
-        """
+    #     Raises
+    #     ------
+    #     ValueError
+    #         When 'layout' is not 'normal' or 'hierarchy', or 'order' is not None or 'weight'.
+    #     """
         
-        if layout not in ["normal", "hierarchy"]:
-            raise ValueError("The parameter 'layout' should be 'normal or 'hierarchy'.")
-        if order is not None and order != "weight":
-            raise ValueError("The parameter 'order' should be None or 'weight'.")
+    #     if layout not in ["normal", "hierarchy"]:
+    #         raise ValueError("The parameter 'layout' should be 'normal or 'hierarchy'.")
+    #     if order is not None and order != "weight":
+    #         raise ValueError("The parameter 'order' should be None or 'weight'.")
 
-        if save and save_path is None:
-            save_path = "./simple_cell_state_graph.png"
+    #     if save and save_path is None:
+    #         save_path = "./simple_cell_state_graph.png"
 
-        node_color = [node["day"] for node in G.nodes.values()]
 
-        color_data = np.array([G.edges[edge]["edge_weights"] for edge in G.edges()])
 
-        if layout == "normal":
-            pos = {node: G.nodes[node]["pos"] for node in G.nodes()}
-        else:
-            pos = {}
-            for node in G.nodes():
-                if order is None:
-                    pos[node] = (G.nodes[node]["day"], -G.nodes[node]["cluster_gmm"])
-                else:
-                    pos[node] = (G.nodes[node]["day"], -G.nodes[node]["cluster_weight"])
-        fig, ax = plt.subplots(figsize=(12, 10))
 
-        # draw edge border
-        nx.draw(
-            G,
-            pos,
-            node_size=[node["weight"] * 4500 for node in G.nodes.values()],
-            node_color="white",
-            edge_color="black",
-            arrows=True,
-            arrowsize=30,
-            linewidths=2,
-            ax=ax,
-            width=6.0,
-        )
-        nx.draw(
-            G,
-            pos,
-            node_size=[node["weight"] * 5000 for node in G.nodes.values()],
-            node_color="white",
-            edge_color="white",
-            arrows=True,
-            arrowsize=30,
-            linewidths=2,
-            ax=ax,
-            width=5.0,
-        )
 
-        # draw edges
-        node_cmap = (
-            plt.cm.tab10(np.arange(10))
-            if len(self.X_raw) <= 10
-            else plt.cm.tab20(np.arange(20))
-        )
-        nx.draw(
-            G,
-            pos,
-            node_size=[node["weight"] * 5000 for node in G.nodes.values()],
-            node_color=node_color,
-            edge_color=color_data,
-            edgecolors="white",
-            arrows=True,
-            arrowsize=30,
-            linewidths=2,
-            cmap=ListedColormap(node_cmap[: len(self.X_raw)]),
-            edge_cmap=plt.cm.Reds,
-            ax=ax,
-            alpha=1,
-            width=5.0,
-        )
 
-        texts = []
-        for node in G.nodes():
-            text_ = ax.text(
-                pos[node][0],
-                pos[node][1],
-                str(node),
-                fontsize=14,
-                fontweight="bold",
-                ha="center",
-                va="center",
-            )
-            text_.set_path_effects(
-                [patheffects.withStroke(linewidth=3, foreground="w")]
-            )
-            texts.append(text_)
 
-        if layout == "normal":
-            adjust_text(texts)
 
-        plt.show()
+    #     node_color = [node["day"] for node in G.nodes.values()]
+    #     color_data = np.array([G.edges[edge]["edge_weights"] for edge in G.edges()])
 
-        if save:
-            fig.savefig(save_path, dpi=200, bbox_inches="tight")
+    #     # !orderの決め方要検討
+    #     if layout == "normal":
+    #         pos = {node: G.nodes[node]["pos"] for node in G.nodes()}
+    #     else:
+    #         pos = {}
+    #         for node in G.nodes():
+    #             if order is None:
+    #                 pos[node] = (G.nodes[node]["day"], -G.nodes[node]["cluster_gmm"])
+    #             else:
+    #                 pos[node] = (G.nodes[node]["day"], -G.nodes[node]["cluster_weight"])
+    #     fig, ax = plt.subplots(figsize=(12, 10))
+    #     # draw edge border
+    #     nx.draw(
+    #         G,
+    #         pos,
+    #         node_size=[node["weight"] * 4500 for node in G.nodes.values()],
+    #         node_color="white",
+    #         edge_color="black",
+    #         arrows=True,
+    #         arrowsize=30,
+    #         linewidths=2,
+    #         ax=ax,
+    #         width=6.0,
+    #     )
+    #     nx.draw(
+    #         G,
+    #         pos,
+    #         node_size=[node["weight"] * 5000 for node in G.nodes.values()],
+    #         node_color="white",
+    #         edge_color="white",
+    #         arrows=True,
+    #         arrowsize=30,
+    #         linewidths=2,
+    #         ax=ax,
+    #         width=5.0,
+    #     )
+
+    #     # draw edges
+    #     node_cmap = (
+    #         plt.cm.tab10(np.arange(10))
+    #         if len(self.X_raw) <= 10
+    #         else plt.cm.tab20(np.arange(20))
+    #     )
+    #     nx.draw(
+    #         G,
+    #         pos,
+    #         node_size=[node["weight"] * 5000 for node in G.nodes.values()],
+    #         node_color=node_color,
+    #         edge_color=color_data,
+    #         edgecolors="white",
+    #         arrows=True,
+    #         arrowsize=30,
+    #         linewidths=2,
+    #         cmap=ListedColormap(node_cmap[: len(self.X_raw)]),
+    #         edge_cmap=plt.cm.Reds,
+    #         ax=ax,
+    #         alpha=1,
+    #         width=5.0,
+    #     )
+
+    #     texts = []
+    #     for node in G.nodes():
+    #         text_ = ax.text(
+    #             pos[node][0],
+    #             pos[node][1],
+    #             str(node),
+    #             fontsize=14,
+    #             fontweight="bold",
+    #             ha="center",
+    #             va="center",
+    #         )
+    #         text_.set_path_effects(
+    #             [patheffects.withStroke(linewidth=3, foreground="w")]
+    #         )
+    #         texts.append(text_)
+
+    #     if layout == "normal":
+    #         adjust_text(texts)
+
+    #     plt.show()
+
+    #     if save:
+    #         fig.savefig(save_path, dpi=200, bbox_inches="tight")
 
     def plot_fold_change(
         self,
@@ -3756,13 +3748,96 @@ class CellStateGraph():
             for node in self.G.nodes():
                 self.G.nodes[node]["pos"] = (self.G.nodes[node]["pos"][0], -1 * self.G.nodes[node]["pos"][1])
 
-    
-    def draw(self, ax, title, layout="normal", order_dict=None, weight_annotation=False):
-        if weight_annotation and weight_annotation not in ["both", "node", "edge"]:
-            raise ValueError("The parameter 'mode' should be 'both' or 'node' or 'edge'.")
+    def _get_day_node_dict(self):
+        day_dict = dict(self.G.nodes(data="day"))
+        day_node_dict = defaultdict(list)
+
+        for cluster, day in day_dict.items():
+            day_node_dict[day].append(cluster)
+
+        return day_node_dict
+
+    # return rank of weight per day
+    def _get_node_alphabetical_order(self):
+        day_node_dict = self._get_day_node_dict()
+
+        cluster_alphabetical_order = {}
+        for cluster_list in day_node_dict.values():
+            sorted_cluster_list = sorted(cluster_list)
+            for order, name in enumerate(sorted_cluster_list):
+                cluster_alphabetical_order[name] = order
+
+        return cluster_alphabetical_order
+
+    # return rank of weight per day
+    def _get_node_weight_rank(self):
+        weight_dict = dict(self.G.nodes(data="weight"))
+        day_node_dict = self._get_day_node_dict()
+
+        node_weight_rank = {}
+        for cluster_list in day_node_dict.values():
+            sorted_cluster_list = sorted(cluster_list, key=lambda cluster: weight_dict[cluster], reverse=True)
+            for rank, name in enumerate(sorted_cluster_list):
+                node_weight_rank[name] = rank
+
+        return node_weight_rank
+
+    def plot_simple_cell_state_graph(
+        self,
+        layout="normal",
+        y_position="name",
+        weight_annotation=False,
+        save=False,
+        save_path=None
+    ):
+        """Plot the cell state graph with the given graph object in a simple way.
+
+        Parameters
+        ----------
+        G : nx.classes.digraph.DiGraph
+            Networkx graph object of the cell state graph.
+
+        layout : {'normal', 'hierarchy'}, optional
+            The layout of the graph, by default "normal"
+            When 'normal', the graph is plotted the same layout as the self.plot_cell_state_graph method.
+            When 'hierarchy', the graph is plotted with the day on the x-axis and the cluster on the y-axis.
+
+        order : {'weight', None}, optional
+            Order of nodes along the y-axis, by default None
+            This parameter is only used when 'layout' is 'hierarchy'.
+            When 'weight', the nodes are ordered by the size of the nodes.
+            When None, the nodes are ordered by the cluster number.
+
+        save : bool, optional
+            If True, save the output image, by default False
+
+        save_path : str, optional
+            Path to save the output image, by default None
+            If None, the image will be saved as './simple_cell_state_graph.png'
+
+        Raises
+        ------
+        ValueError
+            When 'layout' is not 'normal' or 'hierarchy', or 'order' is not None or 'weight'.
+        """
+
+        #!weight_annotation : {'both', 'node', 'edge', False}, optional を追記
         
+        if layout not in ["normal", "hierarchy"]:
+            raise ValueError("The parameter 'layout' should be 'normal or 'hierarchy'.")
+        if layout == "hierarchy":
+            if type(y_position) not in [str, dict]:
+                raise TypeError("The Type of 'y_position' should be string or dict.")
+            if type(y_position) == str and y_position not in ["name", "weight"]:
+                raise ValueError("The parameter 'y_position' should be 'name', 'weight' or dictionary object.")
+        if weight_annotation not in ["both", "node", "edge", False]:
+            raise ValueError("The parameter 'weight_annotation' should be 'both', 'node', 'edge' or False.")
+
+        if save and save_path is None:
+            save_path = "./simple_cell_state_graph.png"
+
         G = self.G
-        ax.set_title(title, fontsize=20)
+
         node_color = [node["day"] for node in G.nodes.values()]
         color_data = np.array([G.edges[edge]["edge_weights"] for edge in G.edges()])
 
@@ -3770,14 +3845,20 @@ class CellStateGraph():
         if layout == "normal":
             pos = {node: G.nodes[node]["pos"] for node in G.nodes()}
         else:
-            if order_dict == None:
-                order_dict = self.scegot._get_cluster_weight_order(G)
+            if y_position == "name":
+                ypos_dict = self._get_node_alphabetical_order()
+            elif y_position == "weight":
+                ypos_dict = self._get_node_weight_rank()
+            else:
+                ypos_dict = y_position
             for node in G.nodes():
                 try:
-                    order = -order_dict[node]
+                    ypos = -ypos_dict[node]
                 except:
-                    raise ValueError(f"The node name '{node}' does not exist in 'order_dict'.")
-                pos[node] = (G.nodes[node]["day"], order)
+                    raise ValueError(f"The node name '{node}' does not exist in 'y_position'.")
+                pos[node] = (G.nodes[node]["day"], ypos)
+
+        fig, ax = plt.subplots(figsize=(12, 10))
         
         # draw edge border
         nx.draw(
@@ -3828,6 +3909,7 @@ class CellStateGraph():
             width=5.0,
         )
 
+        # edge annotations
         if weight_annotation in ["both", "edge"]: 
             nx.draw_networkx_edge_labels(
                 G,
@@ -3838,6 +3920,7 @@ class CellStateGraph():
                 ax=ax
             )
 
+        # node annotations
         texts = []
         for node in G.nodes():
             text_ = ax.text(
@@ -3852,10 +3935,15 @@ class CellStateGraph():
             text_.set_path_effects(
                 [patheffects.withStroke(linewidth=3, foreground="w")]
             )
-
             texts.append(text_)
 
-        adjust_text(texts, ax=ax, arrowprops=dict(arrowstyle='->', color='red'))
+        if layout == "normal":
+            adjust_text(texts)
+
+        plt.show()
+
+        if save:
+            fig.savefig(save_path, dpi=200, bbox_inches="tight")
 
 
 # def draw_multiple_graphs(
