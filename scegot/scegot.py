@@ -330,7 +330,7 @@ class scEGOT:
     def _split_dataframe_by_row(self, df, row_counts):
         split_indices = list(itertools.accumulate(row_counts))
         df_list = [
-            df.iloc[split_indices[i - 1] if i > 0 else 0 : split_indices[i]]
+            df.iloc[(split_indices[i - 1] if i > 0 else 0) : split_indices[i]]
             for i in range(len(split_indices))
         ]
         return df_list
@@ -1031,7 +1031,7 @@ class scEGOT:
     
     def _calculate_source_merged_edge_weights(self, df):
         node_weights = self._get_gmm_node_weights_flattened()
-        source_node_weights = df.apply(lambda row: node_weights[row["source_index"]], axis=1)
+        source_node_weights = df.apply(lambda row: node_weights[int(row["source_cluster"])], axis=1)
         edge_weights_weighted_by_source = source_node_weights * df["edge_weights"]
         return pd.Series(
             {
@@ -1040,21 +1040,31 @@ class scEGOT:
             }
         )
 
-    def _get_edge_list(self, cluster_names, thresh, require_parent):
-        node_source_target_combinations, edge_colors_based_on_source = [], []
-        cluster_nums = [len(names) for names in cluster_names]
-        cluster_start_indexes = [0] + [sum(cluster_nums[:i+1]) for i in range(len(cluster_names))]
-        for i in range(len(cluster_names) - 1):
+    def _get_edge_list(self, node_ids, merge_same_cluster, thresh, require_parent):
+        node_source_target_combinations = []
+        day_source_target_combinations = []
+        edge_colors_based_on_source = []
+
+        cluster_nums = self.gmm_n_components_list
+        cluster_start_indexes = [0] + [sum(cluster_nums[:i+1]) for i in range(len(cluster_nums))] + [sum(cluster_nums)]
+        
+        for i in range(len(cluster_nums) - 1):
             current_combinations = list(itertools.product(
                 list(range(cluster_start_indexes[i], cluster_start_indexes[i+1])),
                 list(range(cluster_start_indexes[i+1], cluster_start_indexes[i+2]))
-            ))
+            ))            
             node_source_target_combinations += current_combinations
+            day_source_target_combinations += [(i, i+1)] * len(current_combinations)
             edge_colors_based_on_source += [i for _ in range(len(current_combinations))]
 
-        cell_state_edges = pd.DataFrame(node_source_target_combinations, columns=["source_index", "target_index"])
+        cell_state_edges = pd.DataFrame(
+            node_source_target_combinations, 
+            columns=["source_cluster", "target_cluster"]
+        ).join(pd.DataFrame(
+            day_source_target_combinations,
+            columns=["source_day", "target_day"]
+        ))
         cell_state_edges["edge_colors"] = edge_colors_based_on_source
-
         cell_state_edges["edge_weights"] = list(
             itertools.chain.from_iterable(
                 itertools.chain.from_iterable(
@@ -1062,21 +1072,26 @@ class scEGOT:
                 )
             )
         )
-        cluster_names_flattened = list(itertools.chain.from_iterable(cluster_names))
 
-        cell_state_edges["target"] = [cluster_names_flattened[i] for i in cell_state_edges["target_index"]]
-        cell_state_edges = cell_state_edges.groupby(["source_index", "target"], as_index=False).agg({"edge_colors": "min", "edge_weights": "sum"})
-        cell_state_edges["source"] = [cluster_names_flattened[i] for i in cell_state_edges["source_index"]]
-        cell_state_edges = cell_state_edges.groupby(["source", "target"], as_index=False).apply(self._calculate_source_merged_edge_weights)
+        if merge_same_cluster:
+            # targetが同じclusterをmerge
+            cell_state_edges["target"] = [node_ids[i] for i in cell_state_edges["target_cluster"]]
+            cell_state_edges = cell_state_edges.groupby(["source_cluster", "source_day", "target", "target_day"],as_index=False).agg({"edge_colors": "min", "edge_weights": "sum"})
+            # sourceが同じclusterをmerge
+            cell_state_edges["source"] = [node_ids[i] for i in cell_state_edges["source_cluster"]]
+            cell_state_edges = cell_state_edges.groupby(["source", "source_day", "target", "target_day"], as_index=False).apply(self._calculate_source_merged_edge_weights)
+        else:
+            cell_state_edges["source"] = [node_ids[i] for i in cell_state_edges["source_cluster"]]
+            cell_state_edges["target"] = [node_ids[i] for i in cell_state_edges["target_cluster"]]
 
         filtered_cell_state_edges = cell_state_edges[cell_state_edges["edge_weights"] >= thresh]
 
         if require_parent:
             filtered_cell_state_edges = cell_state_edges[cell_state_edges["edge_weights"] >= thresh]
-            target_cluster_names_flattened = list(itertools.chain.from_iterable(cluster_names[1:]))
-            for cluster_name in target_cluster_names_flattened:
-                if not cluster_name in filtered_cell_state_edges["target"].values:
-                    current_df = cell_state_edges[cell_state_edges["target"] == cluster_name]
+            target_cluster_ids_flattened = list(itertools.chain.from_iterable(node_ids[1:]))
+            for cluster_id in target_cluster_ids_flattened:
+                if not cluster_id in filtered_cell_state_edges["target"].values:
+                    current_df = cell_state_edges[cell_state_edges["target"] == cluster_id]
                     max_weight = current_df["edge_weights"].max()
                     additional_rows = current_df[current_df["edge_weights"] == max_weight]
                     filtered_cell_state_edges = pd.concat([filtered_cell_state_edges, additional_rows])
@@ -1168,20 +1183,21 @@ class scEGOT:
         return cluster_names
 
     def _merge_nodes(self, node_info_df):
+        node_info_df = node_info_df.set_index("id")
+
         merged_df = node_info_df.groupby(level=0).agg({
-            "node_days": "min",
-            "level_1": "min",
-            "node_weights": "sum",
+            "name": lambda x: ", ".join(set(x)),
+            "day": "min",
+            "weight": "sum",
             "cluster_gmm": "min",
         })
 
         xpos = node_info_df["xpos"]
         ypos = node_info_df["ypos"]
-        weights = node_info_df["node_weights"]
+        weights = node_info_df["weight"]
+
         merged_df["xpos"] = (xpos * weights).groupby(level=0).sum() / weights.groupby(level=0).sum()
         merged_df["ypos"] = (ypos * weights).groupby(level=0).sum() / weights.groupby(level=0).sum()
-
-        merged_df["cluster_weight"] = merged_df.groupby("node_days")["node_weights"].rank(ascending=False).astype(int) - 1
 
         return merged_df
 
@@ -1240,10 +1256,31 @@ class scEGOT:
             raise ValueError("The parameter 'mode' should be 'pca' or 'umap'.")
 
         if cluster_names and (len(cluster_names) != len(self.day_names)):
-            raise ValueError("The length of 'cluster_names' should be the same as the number of days.")
+            raise ValueError("Size of the first dimension of 'cluster_names' should be the same as the number of days.")
+        
+        if not [len(day_cluster_names) for day_cluster_names in cluster_names] == self.gmm_n_components_list:
+            raise ValueError("Size of the second dimension of 'cluster_names' should be the same as the number of GMM components in each day.")
         
         if cluster_names is None:
             cluster_names = self.generate_cluster_names_with_day()
+        
+        cluster_days = self._get_day_order_of_each_node()
+        cluster_names_flattened = list(itertools.chain.from_iterable(cluster_names))
+
+        # nodeにIDを振る
+        if merge_same_clusters:
+            node_ids = []
+            cluster_id_dict_list = []
+            accum_n_node = 0
+            for day_cluster_names in cluster_names:
+                day_cluster_set = sorted(list(set(day_cluster_names)), key=day_cluster_names.index)
+                n_day_node = len(day_cluster_set)
+                cluster_id_dict = dict(zip(day_cluster_set, range(accum_n_node, accum_n_node + n_day_node)))
+                cluster_id_dict_list.append(cluster_id_dict)
+                accum_n_node += n_day_node
+            node_ids = [cluster_id_dict_list[day][name] for day, name in zip(cluster_days, cluster_names_flattened)]
+        else:
+            node_ids = list(range(len(cluster_names_flattened)))
 
         gmm_means_flattened = np.array(
             list(itertools.chain.from_iterable(self.get_gmm_means()))
@@ -1251,8 +1288,7 @@ class scEGOT:
         if mode == "umap":
             gmm_means_flattened = self.umap_model.transform(gmm_means_flattened)
 
-        cell_state_edge_list = self._get_edge_list(cluster_names, threshold, require_parent)
-
+        cell_state_edge_list = self._get_edge_list(node_ids, merge_same_clusters, threshold, require_parent)
         G = nx.from_pandas_edgelist(
             cell_state_edge_list,
             source="source",
@@ -1260,12 +1296,14 @@ class scEGOT:
             edge_attr=["edge_weights", "edge_colors"],
             create_using=nx.DiGraph,
         )
-        node_info = pd.DataFrame(
-            self._get_gmm_node_weights_flattened(),
-            index=list(itertools.chain.from_iterable(cluster_names)),
-            columns=["node_weights"],
-        )
-        
+
+        node_info = pd.DataFrame()
+
+        node_info["id"] = node_ids
+        node_info["name"] = cluster_names_flattened
+        node_info["day"] = cluster_days
+        node_info["weight"] = self._get_gmm_node_weights_flattened()
+
         if x_reverse:
             node_info["xpos"] = gmm_means_flattened.T[0] * (-1)
         else:
@@ -1275,7 +1313,6 @@ class scEGOT:
         else: 
             node_info["ypos"] = gmm_means_flattened.T[1]
 
-        node_info["node_days"] = self._get_day_order_of_each_node()
         if self.gmm_label_converter is None:
             node_info["cluster_gmm"] = list(
                 itertools.chain.from_iterable([list(range(n_components)) for n_components in self.gmm_n_components_list])
@@ -1285,39 +1322,42 @@ class scEGOT:
                 itertools.chain.from_iterable(self.gmm_label_converter)
             )
 
-        node_sortby_weight = (
-            node_info.reset_index()
-            .groupby("node_days")
-            .apply(
-                lambda x: x.sort_values("node_weights", ascending=False),
-                include_groups=False,
-            )
-        )
-        node_sortby_weight = node_sortby_weight.reset_index()
+        #! この辺要らなそう
+        # node_sortby_weight = (
+        #     node_info.reset_index()
+        #     .groupby("day")
+        #     .apply(
+        #         lambda x: x.sort_values("weight", ascending=False),
+        #         include_groups=False,
+        #     )
+        # )
+        # node_sortby_weight = node_sortby_weight.reset_index()
 
-        node_info = pd.DataFrame(
-            node_sortby_weight.values, columns=node_sortby_weight.columns
-        )
-        node_info["cluster_weight"] = list(
-            itertools.chain.from_iterable(
-                [
-                    list(range(n_components))
-                    for n_components in self.gmm_n_components_list
-                ]
-            )
-        )
-        node_info.set_index("index", inplace=True)
+        # node_info = pd.DataFrame(
+        #     node_sortby_weight.values, columns=node_sortby_weight.columns
+        # )
+        # node_info["cluster_weight"] = list(
+        #     itertools.chain.from_iterable(
+        #         [
+        #             list(range(n_components))
+        #             for n_components in self.gmm_n_components_list
+        #         ]
+        #     )
+        # )
 
         if merge_same_clusters:
             merged_node_info = self._merge_nodes(node_info)
         else:
             merged_node_info = node_info
 
+        merged_node_info["cluster_weight"] = merged_node_info.groupby("day")["weight"].rank(ascending=False).astype(int) - 1
+
         for row in merged_node_info.itertuples():
             G.add_node(
                 row.Index,
-                weight=row.node_weights,
-                day=row.node_days,
+                name=row.name,
+                weight=row.weight,
+                day=row.day,
                 pos=(row.xpos, row.ypos),
                 cluster_gmm=row.cluster_gmm,
                 cluster_weight=row.cluster_weight,
@@ -1714,13 +1754,6 @@ class scEGOT:
 
     #     if save and save_path is None:
     #         save_path = "./simple_cell_state_graph.png"
-
-
-
-
-
-
-
 
     #     node_color = [node["day"] for node in G.nodes.values()]
     #     color_data = np.array([G.edges[edge]["edge_weights"] for edge in G.edges()])
@@ -3848,15 +3881,18 @@ class CellStateGraph():
             if y_position == "name":
                 ypos_dict = self._get_node_alphabetical_order()
             elif y_position == "weight":
-                ypos_dict = self._get_node_weight_rank()
+                # ypos_dict = self._get_node_weight_rank()
+                for node in G.nodes():
+                    pos[node] = (G.nodes[node]["day"], -G.nodes[node]["cluster_weight"])
             else:
                 ypos_dict = y_position
-            for node in G.nodes():
-                try:
-                    ypos = -ypos_dict[node]
-                except:
-                    raise ValueError(f"The node name '{node}' does not exist in 'y_position'.")
-                pos[node] = (G.nodes[node]["day"], ypos)
+                for node in G.nodes():
+                    node_name = G.nodes.data("name")[node]
+                    try:
+                        ypos = -ypos_dict[node_name]
+                    except:
+                        raise ValueError(f"The node name '{node_name}' does not exist in 'y_position'.")
+                    pos[node] = (G.nodes[node]["day"], ypos)
 
         fig, ax = plt.subplots(figsize=(12, 10))
         
@@ -3923,10 +3959,11 @@ class CellStateGraph():
         # node annotations
         texts = []
         for node in G.nodes():
+            node_name = G.nodes.data("name")[node]
             text_ = ax.text(
                 pos[node][0],
                 pos[node][1],
-                f'{node}\n{G.nodes[node]["weight"]:.3f}' if weight_annotation in ["both", "node"]  else node,
+                f'{node_name}\n{G.nodes[node]["weight"]:.3f}' if weight_annotation in ["both", "node"] else node_name,
                 fontsize=14,
                 fontweight="bold",
                 ha="center",
