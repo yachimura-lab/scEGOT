@@ -3689,11 +3689,6 @@ class CellStateGraph():
         self.y_reverse = y_reverse
         self.require_parent = require_parent
         self.day_num = len(scegot.day_names)
-
-        self.tf_nlargest = None
-        self.tf_nsmallest = None
-        self.tf_up_genes = None
-        self.tf_down_genes = None
         
     def reverse_graph(self, x=False, y=False):
         if x:
@@ -3914,13 +3909,9 @@ class CellStateGraph():
             weighted_df = df.drop("weights", axis=1).mul(df["weights"], axis=0)
             return (weighted_df.sum() / df["weights"].sum()).to_frame(name=df.index[0]).T
 
-    def _set_tf_genes(self, tf_gene_names=None, tf_gene_pick_num=5):
+    def _get_tf_genes_info(self, tf_gene_names, tf_gene_pick_num):
         scegot = self.scegot
-        if tf_gene_names is None:
-            gene_names_to_use = scegot.gene_names
-        else:
-            gene_names_to_use = tf_gene_names
-
+        
         mean_gene_values_per_cluster = (
             scegot.get_positive_gmm_mean_gene_values_per_cluster(
                 scegot.get_gmm_means(),
@@ -3934,26 +3925,28 @@ class CellStateGraph():
             mean_gene_values_per_cluster = mean_gene_values_per_cluster.reset_index(level=1, drop=True)
         
         mean_tf_gene_values_per_cluster = mean_gene_values_per_cluster.loc[
-            :, mean_gene_values_per_cluster.columns.isin(gene_names_to_use)
+            :, mean_gene_values_per_cluster.columns.isin(tf_gene_names)
         ]
         # nodes
-        self.tf_nlargest = mean_tf_gene_values_per_cluster.T.apply(
+        tf_nlargest = mean_tf_gene_values_per_cluster.T.apply(
             scegot._get_nlargest_gene_indices, num=tf_gene_pick_num
         ).T
-        self.tf_nsmallest = mean_tf_gene_values_per_cluster.T.apply(
+        tf_nsmallest = mean_tf_gene_values_per_cluster.T.apply(
             scegot._get_nsmallest_gene_indices, num=tf_gene_pick_num
         ).T
-        self.tf_nlargest.columns += 1
-        self.tf_nsmallest.columns += 1
+        tf_nlargest.columns += 1
+        tf_nsmallest.columns += 1
         # edges
-        self.tf_up_genes = scegot._get_up_regulated_genes(
+        tf_up_genes = scegot._get_up_regulated_genes(
             mean_tf_gene_values_per_cluster, self.G, num=tf_gene_pick_num
         )
-        self.tf_down_genes = scegot._get_down_regulated_genes(
+        tf_down_genes = scegot._get_down_regulated_genes(
             mean_tf_gene_values_per_cluster, self.G, num=tf_gene_pick_num
         )
-        self.tf_up_genes.columns += 1
-        self.tf_down_genes.columns += 1
+        tf_up_genes.columns += 1
+        tf_down_genes.columns += 1
+
+        return tf_nlargest, tf_nsmallest, tf_up_genes, tf_down_genes
 
     def plot_cell_state_graph(
         self,
@@ -3993,12 +3986,14 @@ class CellStateGraph():
         
         if save and save_path is None:
             save_path = "./cell_state_graph.png"
+        
+        if tf_gene_names is None:
+            tf_gene_names = self.scegot.gene_names
 
         if cluster_names is None:
             cluster_names = self.cluster_names
 
-        if all(x is not None for x in [self.tf_nlargest, self.tf_nsmallest, self.tf_up_genes, self.tf_down_genes]):
-            self._set_tf_genes()
+        tf_nlargest, tf_nsmallest, tf_up_genes, tf_down_genes = self._get_tf_genes_info(tf_gene_names, tf_gene_pick_num)
 
         tail_list = []
         head_list = []
@@ -4052,7 +4047,7 @@ class CellStateGraph():
             x_0, y_0 = source["pos"]
             x_1, y_1 = target["pos"]
             from_to = str(edge[0]) + str(edge[1])
-            hovertext = f"""up_genes: {', '.join(self.tf_up_genes.T[from_to].values)}<br>down_genes: {', '.join(self.tf_down_genes.T[from_to].values)}"""
+            hovertext = f"""up_genes: {', '.join(tf_up_genes.T[from_to].values)}<br>down_genes: {', '.join(tf_down_genes.T[from_to].values)}"""
             middle_hover_trace["x"] += tuple([(x_0 + x_1) / 2])
             middle_hover_trace["y"] += tuple([(y_0 + y_1) / 2])
             middle_hover_trace["hovertext"] += tuple([hovertext])
@@ -4099,7 +4094,7 @@ class CellStateGraph():
             x, y = G.nodes[node]["pos"]
             node_x.append(x)
             node_y.append(y)
-            hovertext = f"""largest_genes: {', '.join(self.tf_nlargest.T[node].values)}<br>smallest_genes: {', '.join(self.tf_nsmallest.T[node].values)}"""
+            hovertext = f"""largest_genes: {', '.join(tf_nlargest.T[node].values)}<br>smallest_genes: {', '.join(tf_nsmallest.T[node].values)}"""
             node_hover_trace["x"] += tuple([x])
             node_hover_trace["y"] += tuple([y])
             node_hover_trace["hovertext"] += tuple([hovertext])
