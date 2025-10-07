@@ -1072,7 +1072,6 @@ class scEGOT:
                 )
             )
         )
-
         if merge_same_cluster:
             # targetが同じclusterをmerge
             cell_state_edges["target"] = [node_ids[i] for i in cell_state_edges["target_cluster"]]
@@ -1080,6 +1079,7 @@ class scEGOT:
             # sourceが同じclusterをmerge
             cell_state_edges["source"] = [node_ids[i] for i in cell_state_edges["source_cluster"]]
             cell_state_edges = cell_state_edges.groupby(["source", "source_day", "target", "target_day"], as_index=False).apply(self._calculate_source_merged_edge_weights)
+            cell_state_edges["edge_colors"] = cell_state_edges["edge_colors"].astype(int)
         else:
             cell_state_edges["source"] = [node_ids[i] for i in cell_state_edges["source_cluster"]]
             cell_state_edges["target"] = [node_ids[i] for i in cell_state_edges["target_cluster"]]
@@ -1088,14 +1088,13 @@ class scEGOT:
 
         if require_parent:
             filtered_cell_state_edges = cell_state_edges[cell_state_edges["edge_weights"] >= thresh]
-            target_cluster_ids_flattened = list(itertools.chain.from_iterable(node_ids[1:]))
-            for cluster_id in target_cluster_ids_flattened:
+            target_node_ids_flattened = list(itertools.chain.from_iterable(node_ids[1:]))
+            for cluster_id in target_node_ids_flattened:
                 if not cluster_id in filtered_cell_state_edges["target"].values:
                     current_df = cell_state_edges[cell_state_edges["target"] == cluster_id]
                     max_weight = current_df["edge_weights"].max()
                     additional_rows = current_df[current_df["edge_weights"] == max_weight]
                     filtered_cell_state_edges = pd.concat([filtered_cell_state_edges, additional_rows])
-
         return filtered_cell_state_edges
 
     def merge_clusters_by_pathway(
@@ -1369,6 +1368,7 @@ class scEGOT:
             threshold=threshold,
             mode=mode,
             cluster_names=cluster_names,
+            node_ids=node_ids,
             merge_same_clusters=merge_same_clusters,
             x_reverse=x_reverse,
             y_reverse=y_reverse,
@@ -1490,229 +1490,148 @@ class scEGOT:
 
 
  # この辺をCellStateGraphクラスに移動
-    def _plot_cell_state_graph(
-        self,
-        G,
-        nodes_up_gene,
-        nodes_down_gene,
-        edges_up_gene,
-        edges_down_gene,
-        save,
-        save_path,
-    ):
-        tail_list = []
-        head_list = []
-        color_list = []
-        trace_recode = []
+    # def _plot_cell_state_graph(
+    #     self,
+    #     G,
+    #     nodes_up_gene,
+    #     nodes_down_gene,
+    #     edges_up_gene,
+    #     edges_down_gene,
+    #     save,
+    #     save_path,
+    # ):
+    #     tail_list = []
+    #     head_list = []
+    #     color_list = []
+    #     trace_recode = []
 
-        day_num = len(self.day_names)
+    #     day_num = len(self.day_names)
 
-        colors = plt.cm.inferno(np.linspace(0, 1, day_num + 2))
-        for edge in G.edges():
-            x_0, y_0 = G.nodes[edge[0]]["pos"]
-            x_1, y_1 = G.nodes[edge[1]]["pos"]
-            tail_list.append((x_0, y_0))
-            head_list.append((x_1, y_1))
-            weight = G.edges[edge]["edge_weights"] * 25
-            color = colors[G.edges[edge]["edge_colors"] + 1]
+    #     colors = plt.cm.inferno(np.linspace(0, 1, day_num + 2))
+    #     for edge in G.edges():
+    #         source = G.nodes[edge[0]]
+    #         target = G.nodes[edge[1]]
+    #         x_0, y_0 = source["pos"]
+    #         x_1, y_1 = target["pos"]
+    #         tail_list.append((x_0, y_0))
+    #         head_list.append((x_1, y_1))
+    #         weight = G.edges[edge]["edge_weights"] * 25
+    #         color = colors[G.edges[edge]["edge_colors"] + 1]
 
-            color_list.append(f"rgb({color[0]},{color[1]},{color[2]})")
+    #         color_list.append(f"rgb({color[0]},{color[1]},{color[2]})")
 
-            edge_trace = go.Scatter(
-                x=tuple([x_0, x_1, None]),
-                y=tuple([y_0, y_1, None]),
-                mode="lines",
-                line={"width": weight},
-                line_color=f"rgb({color[0]},{color[1]},{color[2]})",
-                line_shape="spline",
-                opacity=0.4,
-            )
+    #         edge_trace = go.Scatter(
+    #             x=tuple([x_0, x_1, None]),
+    #             y=tuple([y_0, y_1, None]),
+    #             mode="lines",
+    #             line={"width": weight},
+    #             line_color=f"rgb({color[0]},{color[1]},{color[2]})",
+    #             line_shape="spline",
+    #             opacity=0.4,
+    #         )
 
-            trace_recode.append(edge_trace)
+    #         trace_recode.append(edge_trace)
 
-        middle_hover_trace = go.Scatter(
-            x=[],
-            y=[],
-            hovertext=[],
-            mode="markers",
-            textposition="top center",
-            hoverinfo="text",
-            marker={
-                "size": 20,
-                "color": [edge["edge_colors"] + 1 for edge in G.edges.values()],
-            },
-            opacity=0,
-        )
+    #     middle_hover_trace = go.Scatter(
+    #         x=[],
+    #         y=[],
+    #         hovertext=[],
+    #         mode="markers",
+    #         textposition="top center",
+    #         hoverinfo="text",
+    #         marker={
+    #             "size": 20,
+    #             "color": [edge["edge_colors"] + 1 for edge in G.edges.values()],
+    #         },
+    #         opacity=0,
+    #     )
 
-        for edge in G.edges():
-            x_0, y_0 = G.nodes[edge[0]]["pos"]
-            x_1, y_1 = G.nodes[edge[1]]["pos"]
-            from_to = str(edge[0]) + str(edge[1])
-            hovertext = f"""up_genes: {', '.join(edges_up_gene.T[from_to].values)}<br>down_genes: {', '.join(edges_down_gene.T[from_to].values)}"""
-            middle_hover_trace["x"] += tuple([(x_0 + x_1) / 2])
-            middle_hover_trace["y"] += tuple([(y_0 + y_1) / 2])
-            middle_hover_trace["hovertext"] += tuple([hovertext])
-            trace_recode.append(middle_hover_trace)
+    #     for edge in G.edges():
+    #         source = G.nodes[edge[0]]
+    #         target = G.nodes[edge[1]]
+    #         x_0, y_0 = source["pos"]
+    #         x_1, y_1 = target["pos"]
+    #         from_to = str(edge[0]) + str(edge[1])
+    #         hovertext = f"""up_genes: {', '.join(edges_up_gene.T[from_to].values)}<br>down_genes: {', '.join(edges_down_gene.T[from_to].values)}"""
+    #         middle_hover_trace["x"] += tuple([(x_0 + x_1) / 2])
+    #         middle_hover_trace["y"] += tuple([(y_0 + y_1) / 2])
+    #         middle_hover_trace["hovertext"] += tuple([hovertext])
+    #         trace_recode.append(middle_hover_trace)
 
-        arrows = [
-            go.layout.Annotation(
-                dict(
-                    x=head[0],
-                    y=head[1],
-                    showarrow=True,
-                    xref="x",
-                    yref="y",
-                    arrowcolor=color,
-                    arrowsize=2,
-                    arrowwidth=2,
-                    ax=tail[0],
-                    ay=tail[1],
-                    axref="x",
-                    ayref="y",
-                    arrowhead=1,
-                )
-            )
-            for head, tail, color in zip(head_list, tail_list, color_list)
-        ]
+    #     arrows = [
+    #         go.layout.Annotation(
+    #             dict(
+    #                 x=head[0],
+    #                 y=head[1],
+    #                 showarrow=True,
+    #                 xref="x",
+    #                 yref="y",
+    #                 arrowcolor=color,
+    #                 arrowsize=2,
+    #                 arrowwidth=2,
+    #                 ax=tail[0],
+    #                 ay=tail[1],
+    #                 axref="x",
+    #                 ayref="y",
+    #                 arrowhead=1,
+    #             )
+    #         )
+    #         for head, tail, color in zip(head_list, tail_list, color_list)
+    #     ]
 
-        node_x = []
-        node_y = []
-        node_hover_trace = go.Scatter(
-            x=[],
-            y=[],
-            hovertext=[],
-            mode="markers",
-            textposition="top center",
-            hoverinfo="text",
-            marker={
-                "size": 20,
-                "color": [node["day"] + 1 for node in G.nodes.values()],
-            },
-            opacity=0,
-        )
+    #     node_x = []
+    #     node_y = []
+    #     node_hover_trace = go.Scatter(
+    #         x=[],
+    #         y=[],
+    #         hovertext=[],
+    #         mode="markers",
+    #         textposition="top center",
+    #         hoverinfo="text",
+    #         marker={
+    #             "size": 20,
+    #             "color": [node["day"] + 1 for node in G.nodes.values()],
+    #         },
+    #         opacity=0,
+    #     )
 
-        for node in G.nodes():
-            x, y = G.nodes[node]["pos"]
-            node_x.append(x)
-            node_y.append(y)
-            hovertext = f"""largest_genes: {', '.join(nodes_up_gene.T[node].values)}<br>smallest_genes: {', '.join(nodes_down_gene.T[node].values)}"""
-            node_hover_trace["x"] += tuple([x])
-            node_hover_trace["y"] += tuple([y])
-            node_hover_trace["hovertext"] += tuple([hovertext])
-            trace_recode.append(node_hover_trace)
+    #     for node in G.nodes():
+    #         x, y = G.nodes[node]["pos"]
+    #         node_x.append(x)
+    #         node_y.append(y)
+    #         hovertext = f"""largest_genes: {', '.join(nodes_up_gene.T[node].values)}<br>smallest_genes: {', '.join(nodes_down_gene.T[node].values)}"""
+    #         node_hover_trace["x"] += tuple([x])
+    #         node_hover_trace["y"] += tuple([y])
+    #         node_hover_trace["hovertext"] += tuple([hovertext])
+    #         trace_recode.append(node_hover_trace)
 
-        node_trace = go.Scatter(
-            x=node_x,
-            y=node_y,
-            text=list(G.nodes()),
-            textposition="top center",
-            mode="markers+text",
-            hoverinfo="text",
-            marker=dict(line_width=2),
-        )
+    #     node_trace = go.Scatter(
+    #         x=node_x,
+    #         y=node_y,
+    #         text=list(dict(G.nodes.data("name")).values()),
+    #         textposition="top center",
+    #         mode="markers+text",
+    #         hoverinfo="text",
+    #         marker=dict(line_width=2),
+    #     )
 
-        node_trace.marker.color = [node["day"] for node in G.nodes.values()]
-        node_trace.marker.size = [node["weight"] * 140 for node in G.nodes.values()]
-        trace_recode.append(node_trace)
+    #     node_trace.marker.color = [node["day"] for node in G.nodes.values()]
+    #     node_trace.marker.size = [node["weight"] * 140 for node in G.nodes.values()]
+    #     trace_recode.append(node_trace)
 
-        fig = go.Figure(
-            data=trace_recode, layout=go.Layout(showlegend=False, hovermode="closest")
-        )
+    #     fig = go.Figure(
+    #         data=trace_recode, layout=go.Layout(showlegend=False, hovermode="closest")
+    #     )
 
-        fig.update_layout(annotations=arrows)
+    #     fig.update_layout(annotations=arrows)
 
-        fig.update_layout(width=1000, height=800, title="Cell state graph")
-        fig.show()
+    #     fig.update_layout(width=1000, height=800, title="Cell state graph")
+    #     fig.show()
 
-        if save:
-            fig.write_image(save_path)
+    #     if save:
+    #         fig.write_image(save_path)
 
-    def plot_cell_state_graph(
-        self,
-        G,
-        cluster_names,
-        tf_gene_names=None,
-        tf_gene_pick_num=5,
-        save=False,
-        save_path=None,
-        merge_same_clusters=False
-    ):
-        """Plot the cell state graph with the given graph object.
-
-        Parameters
-        ----------
-        G : nx.classes.digraph.DiGraph
-            Networkx graph object of the cell state graph.
-
-        cluster_names : list of list of str
-            1st dimension is the number of days, 2nd dimension is the number of gmm components
-            of each day.
-            Can be generaged by 'generate_cluster_names' method.
-
-        tf_gene_names : list of str, optional
-            List of transcription factor gene names to use, by default None
-            If None, all gene names (self.gene_names) will be used.
-            You can pass on any list of gene names you want to use, not limited to TF genes.
-
-        tf_gene_pick_num : int, optional
-            The number of genes to show in each node and edge, by default 5
-
-        save : bool, optional
-            If True, save the output image, by default False
-
-        save_path : _type_, optional
-            Path to save the output image, by default None
-            If None, the image will be saved as './cell_state_graph.png'
-        """
-        
-        if save and save_path is None:
-            save_path = "./cell_state_graph.png"
-
-        if tf_gene_names is None:
-            gene_names_to_use = self.gene_names
-        else:
-            gene_names_to_use = tf_gene_names
-
-        mean_gene_values_per_cluster = (
-            self.get_positive_gmm_mean_gene_values_per_cluster(
-                self.get_gmm_means(),
-                list(itertools.chain.from_iterable(cluster_names)),
-                merge_same_clusters=merge_same_clusters
-            )
-        )
-        mean_tf_gene_values_per_cluster = mean_gene_values_per_cluster.loc[
-            :, mean_gene_values_per_cluster.columns.isin(gene_names_to_use)
-        ]
-        # nodes
-        tf_nlargest = mean_tf_gene_values_per_cluster.T.apply(
-            self._get_nlargest_gene_indices, num=tf_gene_pick_num
-        ).T
-        tf_nsmallest = mean_tf_gene_values_per_cluster.T.apply(
-            self._get_nsmallest_gene_indices, num=tf_gene_pick_num
-        ).T
-        tf_nlargest.columns += 1
-        tf_nsmallest.columns += 1
-        # edges
-        print(mean_gene_values_per_cluster)
-        tf_up_genes = self._get_up_regulated_genes(
-            mean_tf_gene_values_per_cluster, G, num=tf_gene_pick_num
-        )
-        tf_down_genes = self._get_down_regulated_genes(
-            mean_tf_gene_values_per_cluster, G, num=tf_gene_pick_num
-        )
-        tf_up_genes.columns += 1
-        tf_down_genes.columns += 1
-
-        self._plot_cell_state_graph(
-            G,
-            nodes_up_gene=tf_nlargest,
-            nodes_down_gene=tf_nsmallest,
-            edges_up_gene=tf_up_genes,
-            edges_down_gene=tf_down_genes,
-            save=save,
-            save_path=save_path,
-        )
-
+    
     # def plot_simple_cell_state_graph(
     #     self, G, layout="normal", order=None, save=False, save_path=None
     # ):
@@ -3726,13 +3645,11 @@ class scEGOT:
         return gmm_mean_gene_values_per_cluster
 
     def get_positive_gmm_mean_gene_values_per_cluster(
-        self, gmm_means, cluster_names=None, merge_same_clusters=False
+        self, gmm_means, cluster_names=None,
     ):
         gmm_mean_gene_values_per_cluster = self._get_gmm_mean_gene_values_per_cluster(
             gmm_means, cluster_names
         )
-        if merge_same_clusters:
-            gmm_mean_gene_values_per_cluster = gmm_mean_gene_values_per_cluster.groupby(level=0).sum()
         gmm_mean_gene_values_per_cluster = gmm_mean_gene_values_per_cluster.where(
             gmm_mean_gene_values_per_cluster > 0, 0
         )
@@ -3755,6 +3672,7 @@ class CellStateGraph():
         threshold=0.05,
         mode="pca",
         cluster_names=None,
+        node_ids=None,
         merge_same_clusters=False,
         x_reverse=False,
         y_reverse=False,
@@ -3765,11 +3683,17 @@ class CellStateGraph():
         self.threshold = threshold
         self.mode = mode
         self.cluster_names = cluster_names
+        self.node_ids = node_ids
         self.merge_same_clusters = merge_same_clusters
         self.x_reverse = x_reverse
         self.y_reverse = y_reverse
         self.require_parent = require_parent
         self.day_num = len(scegot.day_names)
+
+        self.tf_nlargest = None
+        self.tf_nsmallest = None
+        self.tf_up_genes = None
+        self.tf_down_genes = None
         
     def reverse_graph(self, x=False, y=False):
         if x:
@@ -3983,6 +3907,230 @@ class CellStateGraph():
             fig.savefig(save_path, dpi=200, bbox_inches="tight")
 
 
+    def _calculate_weighted_mean_of_gene_values(self, df):
+        if len(df) == 1:
+            return df.drop("weights", axis=1)
+        else:
+            weighted_df = df.drop("weights", axis=1).mul(df["weights"], axis=0)
+            return (weighted_df.sum() / df["weights"].sum()).to_frame(name=df.index[0]).T
+
+    def _set_tf_genes(self, tf_gene_names=None, tf_gene_pick_num=5):
+        scegot = self.scegot
+        if tf_gene_names is None:
+            gene_names_to_use = scegot.gene_names
+        else:
+            gene_names_to_use = tf_gene_names
+
+        mean_gene_values_per_cluster = (
+            scegot.get_positive_gmm_mean_gene_values_per_cluster(
+                scegot.get_gmm_means(),
+                self.node_ids,
+            )
+        )
+        if self.merge_same_clusters:
+            cluster_weights = pd.Series(scegot._get_gmm_node_weights_flattened(), index=mean_gene_values_per_cluster.index, name="weight")
+            mean_gene_values_per_cluster["weights"] = cluster_weights
+            mean_gene_values_per_cluster = mean_gene_values_per_cluster.groupby(level=0).apply(self._calculate_weighted_mean_of_gene_values)
+            mean_gene_values_per_cluster = mean_gene_values_per_cluster.reset_index(level=1, drop=True)
+        
+        mean_tf_gene_values_per_cluster = mean_gene_values_per_cluster.loc[
+            :, mean_gene_values_per_cluster.columns.isin(gene_names_to_use)
+        ]
+        # nodes
+        self.tf_nlargest = mean_tf_gene_values_per_cluster.T.apply(
+            scegot._get_nlargest_gene_indices, num=tf_gene_pick_num
+        ).T
+        self.tf_nsmallest = mean_tf_gene_values_per_cluster.T.apply(
+            scegot._get_nsmallest_gene_indices, num=tf_gene_pick_num
+        ).T
+        self.tf_nlargest.columns += 1
+        self.tf_nsmallest.columns += 1
+        # edges
+        self.tf_up_genes = scegot._get_up_regulated_genes(
+            mean_tf_gene_values_per_cluster, self.G, num=tf_gene_pick_num
+        )
+        self.tf_down_genes = scegot._get_down_regulated_genes(
+            mean_tf_gene_values_per_cluster, self.G, num=tf_gene_pick_num
+        )
+        self.tf_up_genes.columns += 1
+        self.tf_down_genes.columns += 1
+
+    def plot_cell_state_graph(
+        self,
+        cluster_names=None,
+        tf_gene_names=None,
+        tf_gene_pick_num=5,
+        save=False,
+        save_path=None,                                                  
+    ):
+        """Plot the cell state graph with the given graph object.
+
+        Parameters
+        ----------
+        G : nx.classes.digraph.DiGraph
+            Networkx graph object of the cell state graph.
+
+        cluster_names : list of list of str
+            1st dimension is the number of days, 2nd dimension is the number of gmm components
+            of each day.
+            Can be generaged by 'generate_cluster_names' method.
+
+        tf_gene_names : list of str, optional
+            List of transcription factor gene names to use, by default None
+            If None, all gene names (self.gene_names) will be used.
+            You can pass on any list of gene names you want to use, not limited to TF genes.
+
+        tf_gene_pick_num : int, optional
+            The number of genes to show in each node and edge, by default 5
+
+        save : bool, optional
+            If True, save the output image, by default False
+
+        save_path : _type_, optional
+            Path to save the output image, by default None
+            If None, the image will be saved as './cell_state_graph.png'
+        """
+        
+        if save and save_path is None:
+            save_path = "./cell_state_graph.png"
+
+        if cluster_names is None:
+            cluster_names = self.cluster_names
+
+        if all(x is not None for x in [self.tf_nlargest, self.tf_nsmallest, self.tf_up_genes, self.tf_down_genes]):
+            self._set_tf_genes()
+
+        tail_list = []
+        head_list = []
+        color_list = []
+        trace_recode = []
+
+        G = self.G
+
+        colors = plt.cm.inferno(np.linspace(0, 1, self.day_num + 2))
+        for edge in G.edges():
+            source = G.nodes[edge[0]]
+            target = G.nodes[edge[1]]
+            x_0, y_0 = source["pos"]
+            x_1, y_1 = target["pos"]
+            tail_list.append((x_0, y_0))
+            head_list.append((x_1, y_1))
+            weight = G.edges[edge]["edge_weights"] * 25
+            color = colors[G.edges[edge]["edge_colors"] + 1]
+
+            color_list.append(f"rgb({color[0]},{color[1]},{color[2]})")
+
+            edge_trace = go.Scatter(
+                x=tuple([x_0, x_1, None]),
+                y=tuple([y_0, y_1, None]),
+                mode="lines",
+                line={"width": weight},
+                line_color=f"rgb({color[0]},{color[1]},{color[2]})",
+                line_shape="spline",
+                opacity=0.4,
+            )
+
+            trace_recode.append(edge_trace)
+
+        middle_hover_trace = go.Scatter(
+            x=[],
+            y=[],
+            hovertext=[],
+            mode="markers",
+            textposition="top center",
+            hoverinfo="text",
+            marker={
+                "size": 20,
+                "color": [edge["edge_colors"] + 1 for edge in G.edges.values()],
+            },
+            opacity=0,
+        )
+
+        for edge in G.edges():
+            source = G.nodes[edge[0]]
+            target = G.nodes[edge[1]]
+            x_0, y_0 = source["pos"]
+            x_1, y_1 = target["pos"]
+            from_to = str(edge[0]) + str(edge[1])
+            hovertext = f"""up_genes: {', '.join(self.tf_up_genes.T[from_to].values)}<br>down_genes: {', '.join(self.tf_down_genes.T[from_to].values)}"""
+            middle_hover_trace["x"] += tuple([(x_0 + x_1) / 2])
+            middle_hover_trace["y"] += tuple([(y_0 + y_1) / 2])
+            middle_hover_trace["hovertext"] += tuple([hovertext])
+            trace_recode.append(middle_hover_trace)
+
+        arrows = [
+            go.layout.Annotation(
+                dict(
+                    x=head[0],
+                    y=head[1],
+                    showarrow=True,
+                    xref="x",
+                    yref="y",
+                    arrowcolor=color,
+                    arrowsize=2,
+                    arrowwidth=2,
+                    ax=tail[0],
+                    ay=tail[1],
+                    axref="x",
+                    ayref="y",
+                    arrowhead=1,
+                )
+            )
+            for head, tail, color in zip(head_list, tail_list, color_list)
+        ]
+
+        node_x = []
+        node_y = []
+        node_hover_trace = go.Scatter(
+            x=[],
+            y=[],
+            hovertext=[],
+            mode="markers",
+            textposition="top center",
+            hoverinfo="text",
+            marker={
+                "size": 20,
+                "color": [node["day"] + 1 for node in G.nodes.values()],
+            },
+            opacity=0,
+        )
+
+        for node in G.nodes():
+            x, y = G.nodes[node]["pos"]
+            node_x.append(x)
+            node_y.append(y)
+            hovertext = f"""largest_genes: {', '.join(self.tf_nlargest.T[node].values)}<br>smallest_genes: {', '.join(self.tf_nsmallest.T[node].values)}"""
+            node_hover_trace["x"] += tuple([x])
+            node_hover_trace["y"] += tuple([y])
+            node_hover_trace["hovertext"] += tuple([hovertext])
+            trace_recode.append(node_hover_trace)
+
+        node_trace = go.Scatter(
+            x=node_x,
+            y=node_y,
+            text=list(dict(G.nodes.data("name")).values()),
+            textposition="top center",
+            mode="markers+text",
+            hoverinfo="text",
+            marker=dict(line_width=2),
+        )
+
+        node_trace.marker.color = [node["day"] for node in G.nodes.values()]
+        node_trace.marker.size = [node["weight"] * 140 for node in G.nodes.values()]
+        trace_recode.append(node_trace)
+
+        fig = go.Figure(
+            data=trace_recode, layout=go.Layout(showlegend=False, hovermode="closest")
+        )
+
+        fig.update_layout(annotations=arrows)
+
+        fig.update_layout(width=1000, height=800, title="Cell state graph")
+        fig.show()
+
+        if save:
+            fig.write_image(save_path)
+        
 # def draw_multiple_graphs(
 #     scegot_list,
 #     G_list,
