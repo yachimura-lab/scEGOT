@@ -1087,24 +1087,38 @@ class scEGOT:
         filtered_cell_state_edges = cell_state_edges[cell_state_edges["edge_weights"] >= thresh]
 
         if require_parent:
-            filtered_cell_state_edges = cell_state_edges[cell_state_edges["edge_weights"] >= thresh]
-            target_node_ids_flattened = list(itertools.chain.from_iterable(node_ids[1:]))
-            for cluster_id in target_node_ids_flattened:
-                if not cluster_id in filtered_cell_state_edges["target"].values:
-                    current_df = cell_state_edges[cell_state_edges["target"] == cluster_id]
+            unique_target_node_ids_flattened = node_ids[1:]
+            for id in unique_target_node_ids_flattened:
+                if not id in filtered_cell_state_edges["target"].values:
+                    current_df = cell_state_edges[cell_state_edges["target"] == id]
                     max_weight = current_df["edge_weights"].max()
                     additional_rows = current_df[current_df["edge_weights"] == max_weight]
                     filtered_cell_state_edges = pd.concat([filtered_cell_state_edges, additional_rows])
+                    
         return filtered_cell_state_edges
+    
+    def _generate_node_ids(self, cluster_names):
+        cluster_days = self._get_day_order_of_each_node()
+        cluster_names_flattened = list(itertools.chain.from_iterable(cluster_names))
+        node_ids = []
+        cluster_id_dict_list = []
+        accum_n_node = 0
+        for day_cluster_names in cluster_names:
+            day_cluster_set = sorted(list(set(day_cluster_names)), key=day_cluster_names.index)
+            n_day_node = len(day_cluster_set)
+            cluster_id_dict = dict(zip(day_cluster_set, range(accum_n_node, accum_n_node + n_day_node)))
+            cluster_id_dict_list.append(cluster_id_dict)
+            accum_n_node += n_day_node
+        node_ids = [cluster_id_dict_list[day][name] for day, name in zip(cluster_days, cluster_names_flattened)]
+        return node_ids
 
     def merge_clusters_by_pathway(
             self,
-            last_day_cluster_names=None,
+            last_day_cluster_names,
             merge_iter=1,
             merge_method=None,
             threshold=0.05,
             n_clusters_list=None,
-            cluster_names=None,
             **kwargs
         ):
         if not merge_iter in list(range(len(self.day_names) - 1)):
@@ -1116,70 +1130,84 @@ class scEGOT:
         if not merge_method in ["pattern", "kmeans"]:
             raise ValueError("The parameter 'merge_method' should be 'pattern' or 'kmeans'")
         
-        if cluster_names is None:
-            cluster_names = self.generate_cluster_names_with_day()
-        else:
-            cluster_names = copy.deepcopy(cluster_names)
-
         if merge_method == "kmeans" and n_clusters_list == None:
-            n_clusters_list = [min(len(cluster_names[i]), 4) for i in range(merge_iter)]
-            
-        if last_day_cluster_names is None:
-            last_day_cluster_names = cluster_names[-1]
-        
-        for i in range(merge_iter):
-            source_cluster_names = cluster_names[-(i+2)]
-            source_list = list(set(source_cluster_names))
-            day_name = self.day_names[-(i+2)]
-            target_list = list(set(cluster_names[-(i+1)]))
+            n_clusters_list = [min(self.gmm_n_components_list[-(i+1)], 4) for i in range(merge_iter)]
+
+        cluster_names = self.generate_cluster_names_with_day()
+        cluster_names[-1] = last_day_cluster_names
+
+        node_ids = self._generate_node_ids(cluster_names)
+        cluster_days = self._get_day_order_of_each_node()
+        node_ids_by_day = [[] for _ in range(len(self.day_names))]
+        for day, node_id in zip(cluster_days, node_ids):
+            node_ids_by_day[day].append(node_id)
+
+        for i in range(merge_iter):    
+            source_node_ids = node_ids_by_day[-(i+2)]
+            unique_target_node_ids = list(set(node_ids_by_day[-(i+1)]))
+            node_ids = list(itertools.chain.from_iterable(node_ids_by_day))
 
             if merge_method == "pattern":
-                cell_state_edges = self._get_edge_list(cluster_names, threshold, False)
-                current_day_df = cell_state_edges[cell_state_edges["source"].isin(source_list)]
+                cell_state_edges = self._get_edge_list(node_ids, True, threshold, False)
+                current_day_df = cell_state_edges[cell_state_edges["source"].isin(source_node_ids)]
 
                 # sourceとtargetの一覧のリストの組を表すdataframeを作る
                 target_combination_df = current_day_df.groupby("source", as_index=False).apply(
                     lambda df: pd.Series(
-                        [(target in df["target"].tolist()) for target in target_list],
-                        index=target_list
+                        [(target in df["target"].tolist()) for target in unique_target_node_ids],
+                        index=unique_target_node_ids
                     )
                 )
 
                 # targetの組み合わせごとに分類
                 clusters_groupby_target = []
-                target_combination_df.groupby(target_list, as_index=False).apply(lambda df: clusters_groupby_target.append(df["source"].tolist()))
+                target_combination_df.groupby(unique_target_node_ids, as_index=False).apply(
+                    lambda df: clusters_groupby_target.append(df["source"].tolist())
+                )
 
-                new_source_cluster_names = [""] * len(source_cluster_names)
+                new_source_cluster_ids = [None] * len(source_node_ids)
+                node_id_base = min(source_node_ids)
                 for group_num, group in enumerate(clusters_groupby_target):
                     for cluster in group:
-                        for index, name in enumerate(source_cluster_names):
-                            if cluster == name:
-                                new_source_cluster_names[index] = f"{day_name}-{group_num}" 
+                        for index, id in enumerate(source_node_ids):
+                            if cluster == id:
+                                new_source_cluster_ids[index] = node_id_base + group_num
 
             if merge_method == "kmeans":
-                cell_state_edges = self._get_edge_list(cluster_names, 0, False)
-                current_day_df = cell_state_edges[cell_state_edges["source"].isin(source_list)]
+                cell_state_edges = self._get_edge_list(node_ids, True, 0, False)
+                current_day_df = cell_state_edges[cell_state_edges["source"].isin(source_node_ids)]
 
                 # sourceを行、targetを列とした重みのdataframeを作る
                 source_target_df = pd.DataFrame(
                     [
-                        [current_day_df[(current_day_df["source"] == source) & (current_day_df["target"] == target)]["edge_weights"]
-                        for target in target_list]
-                        for source in source_cluster_names
-                    ], 
-                    columns=target_list,
-                    index=source_list
+                        [current_day_df[(current_day_df["source"] == source) & (current_day_df["target"] == target)]["edge_weights"].values[0]
+                        for target in unique_target_node_ids]
+                        for source in source_node_ids
+                    ],
+                    columns=unique_target_node_ids,
+                    index=source_node_ids
                 )
                 
                 # K-means法でクラスタリング
                 kmeans_model = KMeans(n_clusters=n_clusters_list[i], **kwargs).fit(source_target_df)
-                new_source_cluster_names = []
+                node_id_base = min(source_node_ids)
+                new_source_cluster_ids = []
                 for group_num in kmeans_model.labels_:
-                    new_source_cluster_names.append(f"{day_name}-{group_num}")
+                    new_source_cluster_ids.append(node_id_base + group_num)
 
-            cluster_names[-(i+2)] = new_source_cluster_names
+            node_ids_by_day[-(i+2)] = new_source_cluster_ids
 
-        return cluster_names
+        day_names = self.day_names
+        new_cluster_names = []
+        for day_name, day_node_ids in zip(day_names[:-1], node_ids_by_day[:-1]):
+            node_id_base = min(day_node_ids)
+            new_day_cluster_names = []
+            for node_id in day_node_ids:
+                new_day_cluster_names.append(f"{day_name}-{node_id - node_id_base}")
+            new_cluster_names.append(new_day_cluster_names)
+        new_cluster_names.append(last_day_cluster_names)
+
+        return new_cluster_names
 
     def _merge_nodes(self, node_info_df):
         node_info_df = node_info_df.set_index("id")
@@ -1262,22 +1290,10 @@ class scEGOT:
         
         if cluster_names is None:
             cluster_names = self.generate_cluster_names_with_day()
-        
-        cluster_days = self._get_day_order_of_each_node()
-        cluster_names_flattened = list(itertools.chain.from_iterable(cluster_names))
 
         # nodeにIDを振る
         if merge_same_clusters:
-            node_ids = []
-            cluster_id_dict_list = []
-            accum_n_node = 0
-            for day_cluster_names in cluster_names:
-                day_cluster_set = sorted(list(set(day_cluster_names)), key=day_cluster_names.index)
-                n_day_node = len(day_cluster_set)
-                cluster_id_dict = dict(zip(day_cluster_set, range(accum_n_node, accum_n_node + n_day_node)))
-                cluster_id_dict_list.append(cluster_id_dict)
-                accum_n_node += n_day_node
-            node_ids = [cluster_id_dict_list[day][name] for day, name in zip(cluster_days, cluster_names_flattened)]
+            node_ids = self._generate_node_ids(cluster_names)
         else:
             node_ids = list(range(len(cluster_names_flattened)))
 
@@ -1297,6 +1313,9 @@ class scEGOT:
         )
 
         node_info = pd.DataFrame()
+
+        cluster_days = self._get_day_order_of_each_node()
+        cluster_names_flattened = list(itertools.chain.from_iterable(cluster_names))
 
         node_info["id"] = node_ids
         node_info["name"] = cluster_names_flattened
