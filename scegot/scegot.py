@@ -1216,7 +1216,7 @@ class scEGOT:
             "name": lambda x: ", ".join(set(x)),
             "day": "min",
             "weight": "sum",
-            "cluster_gmm": "min",
+            "cluster_gmm_list": lambda x: sum(x.values.tolist(), start=[])
         })
 
         xpos = node_info_df["xpos"]
@@ -1332,13 +1332,14 @@ class scEGOT:
             node_info["ypos"] = gmm_means_flattened.T[1]
 
         if self.gmm_label_converter is None:
-            node_info["cluster_gmm"] = list(
+            cluster_gmms = list(
                 itertools.chain.from_iterable([list(range(n_components)) for n_components in self.gmm_n_components_list])
             )
         else:
-            node_info["cluster_gmm"] = list(
+            cluster_gmms = list(
                 itertools.chain.from_iterable(self.gmm_label_converter)
             )
+        node_info["cluster_gmm_list"] = [[x] for x in cluster_gmms]
 
         #! この辺要らなそう
         # node_sortby_weight = (
@@ -1377,7 +1378,7 @@ class scEGOT:
                 weight=row.weight,
                 day=row.day,
                 pos=(row.xpos, row.ypos),
-                cluster_gmm=row.cluster_gmm,
+                cluster_gmm_list=row.cluster_gmm_list,
                 cluster_weight=row.cluster_weight,
             )
 
@@ -1455,7 +1456,7 @@ class scEGOT:
     #     node_info["ypos"] = gmm_means_flattened.T[1]
     #     node_info["node_days"] = self._get_day_order_of_each_node()
     #     if self.gmm_label_converter is None:
-    #         node_info["cluster_gmm"] = list(
+    #         node_info["cluster_gmm_list"] = list(
     #             itertools.chain.from_iterable(
     #                 [
     #                     list(range(n_components))
@@ -1464,7 +1465,7 @@ class scEGOT:
     #             )
     #         )
     #     else:
-    #         node_info["cluster_gmm"] = list(
+    #         node_info["cluster_gmm_list"] = list(
     #             itertools.chain.from_iterable(self.gmm_label_converter)
     #         )
 
@@ -1501,7 +1502,7 @@ class scEGOT:
     #             weight=row.node_weights,
     #             day=row.node_days,
     #             pos=(row.xpos, row.ypos),
-    #             cluster_gmm=row.cluster_gmm,
+    #             cluster_gmm_list=row.cluster_gmm_list,
     #             cluster_weight=row.cluster_weight,
     #         )
 
@@ -1703,7 +1704,7 @@ class scEGOT:
     #         pos = {}
     #         for node in G.nodes():
     #             if order is None:
-    #                 pos[node] = (G.nodes[node]["day"], -G.nodes[node]["cluster_gmm"])
+    #                 pos[node] = (G.nodes[node]["day"], -G.nodes[node]["cluster_gmm_list"])
     #             else:
     #                 pos[node] = (G.nodes[node]["day"], -G.nodes[node]["cluster_weight"])
     #     fig, ax = plt.subplots(figsize=(12, 10))
