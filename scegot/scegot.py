@@ -1097,7 +1097,7 @@ class scEGOT:
                     
         return filtered_cell_state_edges
     
-    def _generate_node_ids(self, cluster_names):
+    def _generate_merged_node_ids(self, cluster_names):
         cluster_days = self._get_day_order_of_each_node()
         cluster_names_flattened = list(itertools.chain.from_iterable(cluster_names))
         node_ids = []
@@ -1136,7 +1136,7 @@ class scEGOT:
         cluster_names = self.generate_cluster_names_with_day()
         cluster_names[-1] = last_day_cluster_names
 
-        node_ids = self._generate_node_ids(cluster_names)
+        node_ids = self._generate_merged_node_ids(cluster_names)
         cluster_days = self._get_day_order_of_each_node()
         node_ids_by_day = [[] for _ in range(len(self.day_names))]
         for day, node_id in zip(cluster_days, node_ids):
@@ -1213,7 +1213,6 @@ class scEGOT:
         node_info_df = node_info_df.set_index("id")
 
         merged_df = node_info_df.groupby(level=0).agg({
-            "name": lambda x: ", ".join(set(x)),
             "day": "min",
             "weight": "sum",
             "cluster_gmm_list": lambda x: sum(x.values.tolist(), start=[])
@@ -1293,7 +1292,7 @@ class scEGOT:
 
         # nodeにIDを振る
         if merge_same_clusters:
-            node_ids = self._generate_node_ids(cluster_names)
+            node_ids = self._generate_merged_node_ids(cluster_names)
         else:
             node_ids = list(range(len(cluster_names_flattened)))
 
@@ -1315,10 +1314,9 @@ class scEGOT:
         node_info = pd.DataFrame()
 
         cluster_days = self._get_day_order_of_each_node()
-        cluster_names_flattened = list(itertools.chain.from_iterable(cluster_names))
+        # cluster_names_flattened = list(itertools.chain.from_iterable(cluster_names))
 
         node_info["id"] = node_ids
-        node_info["name"] = cluster_names_flattened
         node_info["day"] = cluster_days
         node_info["weight"] = self._get_gmm_node_weights_flattened()
 
@@ -1374,7 +1372,6 @@ class scEGOT:
         for row in merged_node_info.itertuples():
             G.add_node(
                 row.Index,
-                name=row.name,
                 weight=row.weight,
                 day=row.day,
                 pos=(row.xpos, row.ypos),
@@ -3729,30 +3726,26 @@ class CellStateGraph():
 
         return day_node_dict
 
-    # return rank of weight per day
-    def _get_node_alphabetical_order(self):
-        day_node_dict = self._get_day_node_dict()
-
+    def _get_node_name_alphabetical_order_dict(self):
         cluster_alphabetical_order = {}
-        for cluster_list in day_node_dict.values():
-            sorted_cluster_list = sorted(cluster_list)
-            for order, name in enumerate(sorted_cluster_list):
+        for day_cluster_names in self.cluster_names:
+            sorted_day_cluster_names = sorted(set(day_cluster_names))
+            for order, name in enumerate(sorted_day_cluster_names):
                 cluster_alphabetical_order[name] = order
-
         return cluster_alphabetical_order
-
+    
     # return rank of weight per day
-    def _get_node_weight_rank(self):
-        weight_dict = dict(self.G.nodes(data="weight"))
-        day_node_dict = self._get_day_node_dict()
+    # def _get_node_weight_rank(self):
+    #     weight_dict = dict(self.G.nodes(data="weight"))
+    #     day_node_dict = self._get_day_node_dict()
 
-        node_weight_rank = {}
-        for cluster_list in day_node_dict.values():
-            sorted_cluster_list = sorted(cluster_list, key=lambda cluster: weight_dict[cluster], reverse=True)
-            for rank, name in enumerate(sorted_cluster_list):
-                node_weight_rank[name] = rank
+    #     node_weight_rank = {}
+    #     for cluster_list in day_node_dict.values():
+    #         sorted_cluster_list = sorted(cluster_list, key=lambda cluster: weight_dict[cluster], reverse=True)
+    #         for rank, name in enumerate(sorted_cluster_list):
+    #             node_weight_rank[name] = rank
 
-        return node_weight_rank
+    #     return node_weight_rank
 
     def plot_simple_cell_state_graph(
         self,
@@ -3817,16 +3810,18 @@ class CellStateGraph():
         if layout == "normal":
             pos = {node: G.nodes[node]["pos"] for node in G.nodes()}
         else:
-            if y_position == "name":
-                ypos_dict = self._get_node_alphabetical_order()
-            elif y_position == "weight":
-                # ypos_dict = self._get_node_weight_rank()
+            if y_position == "weight":
                 for node in G.nodes():
                     pos[node] = (G.nodes[node]["day"], -G.nodes[node]["cluster_weight"])
             else:
-                ypos_dict = y_position
+                if y_position == "name":
+                    ypos_dict = self._get_node_name_alphabetical_order_dict()
+                else:
+                    ypos_dict = y_position
                 for node in G.nodes():
-                    node_name = G.nodes.data("name")[node]
+                    node_day = G.nodes[node]["day"]
+                    node_gmm = G.nodes[node]["cluster_gmm_list"][0]
+                    node_name = self.cluster_names[node_day][node_gmm]
                     try:
                         ypos = -ypos_dict[node_name]
                     except:
@@ -3898,7 +3893,9 @@ class CellStateGraph():
         # node annotations
         texts = []
         for node in G.nodes():
-            node_name = G.nodes.data("name")[node]
+            node_day = G.nodes[node]["day"]
+            node_gmm = G.nodes[node]["cluster_gmm_list"][0]
+            node_name = self.cluster_names[node_day][node_gmm]
             text_ = ax.text(
                 pos[node][0],
                 pos[node][1],
@@ -4094,8 +4091,6 @@ class CellStateGraph():
             for head, tail, color in zip(head_list, tail_list, color_list)
         ]
 
-        node_x = []
-        node_y = []
         node_hover_trace = go.Scatter(
             x=[],
             y=[],
@@ -4110,6 +4105,9 @@ class CellStateGraph():
             opacity=0,
         )
 
+        node_x = []
+        node_y = []
+        node_names = []
         for node in G.nodes():
             x, y = G.nodes[node]["pos"]
             node_x.append(x)
@@ -4119,11 +4117,14 @@ class CellStateGraph():
             node_hover_trace["y"] += tuple([y])
             node_hover_trace["hovertext"] += tuple([hovertext])
             trace_recode.append(node_hover_trace)
+            node_day = G.nodes[node]["day"]
+            node_gmm = G.nodes[node]["cluster_gmm_list"][0]
+            node_names.append(cluster_names[node_day][node_gmm])
 
         node_trace = go.Scatter(
             x=node_x,
             y=node_y,
-            text=list(dict(G.nodes.data("name")).values()),
+            text=node_names,
             textposition="top center",
             mode="markers+text",
             hoverinfo="text",
