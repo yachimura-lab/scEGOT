@@ -1281,11 +1281,11 @@ class scEGOT:
         if mode not in ["pca", "umap"]:
             raise ValueError("The parameter 'mode' should be 'pca' or 'umap'.")
 
-        if cluster_names and (len(cluster_names) != len(self.day_names)):
-            raise ValueError("Size of the first dimension of 'cluster_names' should be the same as the number of days.")
-        
-        if not [len(day_cluster_names) for day_cluster_names in cluster_names] == self.gmm_n_components_list:
-            raise ValueError("Size of the second dimension of 'cluster_names' should be the same as the number of GMM components in each day.")
+        if cluster_names:
+            if (len(cluster_names) != len(self.day_names)):
+                raise ValueError("Size of the first dimension of 'cluster_names' should be the same as the number of days.")
+            if not [len(day_cluster_names) for day_cluster_names in cluster_names] == self.gmm_n_components_list:
+                raise ValueError("Size of the second dimension of 'cluster_names' should be the same as the number of GMM components in each day.")
         
         if cluster_names is None:
             cluster_names = self.generate_cluster_names_with_day()
@@ -1294,7 +1294,7 @@ class scEGOT:
         if merge_same_clusters:
             node_ids = self._generate_merged_node_ids(cluster_names)
         else:
-            node_ids = list(range(len(cluster_names_flattened)))
+            node_ids = list(range(sum(self.gmm_n_components_list)))
 
         gmm_means_flattened = np.array(
             list(itertools.chain.from_iterable(self.get_gmm_means()))
@@ -1314,7 +1314,6 @@ class scEGOT:
         node_info = pd.DataFrame()
 
         cluster_days = self._get_day_order_of_each_node()
-        # cluster_names_flattened = list(itertools.chain.from_iterable(cluster_names))
 
         node_info["id"] = node_ids
         node_info["day"] = cluster_days
@@ -4068,7 +4067,8 @@ class CellStateGraph():
             middle_hover_trace["x"] += tuple([(x_0 + x_1) / 2])
             middle_hover_trace["y"] += tuple([(y_0 + y_1) / 2])
             middle_hover_trace["hovertext"] += tuple([hovertext])
-            trace_recode.append(middle_hover_trace)
+        
+        trace_recode.append(middle_hover_trace)
 
         arrows = [
             go.layout.Annotation(
@@ -4090,11 +4090,44 @@ class CellStateGraph():
             )
             for head, tail, color in zip(head_list, tail_list, color_list)
         ]
+        
+        node_x = []
+        node_y = []
+        node_names = []
+        node_names_with_gmm_numbers = []
+        node_gene_texts = []
 
-        node_hover_trace = go.Scatter(
-            x=[],
-            y=[],
-            hovertext=[],
+        for node in G.nodes():
+            x, y = G.nodes[node]["pos"]
+            node_x.append(x)
+            node_y.append(y)
+            node_day = G.nodes[node]["day"]
+            node_gmm = G.nodes[node]["cluster_gmm_list"][0]
+            node_name = cluster_names[node_day][node_gmm]
+            node_cluster_gmm_list = G.nodes[node]["cluster_gmm_list"]
+            node_names.append(node_name)
+            node_names_with_gmm_numbers.append(f"{node_name}<br>GMM cluster numbers = {', '.join(map(str, node_cluster_gmm_list))}")
+            node_gene_text = f"largest_genes: {', '.join(tf_nlargest.T[node].values)}<br>smallest_genes: {', '.join(tf_nsmallest.T[node].values)}"
+            node_gene_texts.append(node_gene_text)
+
+        node_trace = go.Scatter(
+            x=node_x,
+            y=node_y,
+            text=node_names,
+            hovertext=node_names_with_gmm_numbers,
+            textposition="top center",
+            mode="markers+text",
+            hoverinfo="text",
+            marker=dict(line_width=2),
+        )
+        node_trace.marker.color = [node["day"] for node in G.nodes.values()]
+        node_trace.marker.size = [node["weight"] * 140 for node in G.nodes.values()]
+        trace_recode.append(node_trace)
+
+        node_gene_trace = go.Scatter(
+            x=node_x,
+            y=node_y,
+            hovertext=node_gene_texts,
             mode="markers",
             textposition="top center",
             hoverinfo="text",
@@ -4104,36 +4137,7 @@ class CellStateGraph():
             },
             opacity=0,
         )
-
-        node_x = []
-        node_y = []
-        node_names = []
-        for node in G.nodes():
-            x, y = G.nodes[node]["pos"]
-            node_x.append(x)
-            node_y.append(y)
-            hovertext = f"""largest_genes: {', '.join(tf_nlargest.T[node].values)}<br>smallest_genes: {', '.join(tf_nsmallest.T[node].values)}"""
-            node_hover_trace["x"] += tuple([x])
-            node_hover_trace["y"] += tuple([y])
-            node_hover_trace["hovertext"] += tuple([hovertext])
-            trace_recode.append(node_hover_trace)
-            node_day = G.nodes[node]["day"]
-            node_gmm = G.nodes[node]["cluster_gmm_list"][0]
-            node_names.append(cluster_names[node_day][node_gmm])
-
-        node_trace = go.Scatter(
-            x=node_x,
-            y=node_y,
-            text=node_names,
-            textposition="top center",
-            mode="markers+text",
-            hoverinfo="text",
-            marker=dict(line_width=2),
-        )
-
-        node_trace.marker.color = [node["day"] for node in G.nodes.values()]
-        node_trace.marker.size = [node["weight"] * 140 for node in G.nodes.values()]
-        trace_recode.append(node_trace)
+        trace_recode.append(node_gene_trace)
 
         fig = go.Figure(
             data=trace_recode, layout=go.Layout(showlegend=False, hovermode="closest")
