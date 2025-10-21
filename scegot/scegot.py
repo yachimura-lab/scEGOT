@@ -3680,6 +3680,97 @@ class scEGOT:
         self.gmm_labels_modified = gmm_labels_modified
         self.gmm_label_converter = converter
 
+    def create_separated_data(self, data_names):
+        separated_scegot_dict = {}
+        umap_flag = self.X_umap is not None and self.umap_model is not None
+        gmm_label_flag = self.gmm_labels is not None
+        gmm_model_flag = self.gmm_models is not None
+
+        for data_name in data_names:
+            separated_X_raw = []
+            separated_X_normalized = []
+            separated_X_selected = []
+            separated_X_pca = []
+            separated_gmm_model = []
+            separated_gmm_label = []
+            if umap_flag:
+                separated_X_umap = []
+
+            for day in range(len(self.day_names)):
+                day_separated_X_raw = self.X_raw[day].loc[self.X_raw[day].index.str.startswith(data_name)]
+                day_separated_X_normalized = self.X_normalized[day].loc[self.X_normalized[day].index.str.startswith(data_name)]
+                day_separated_X_selected = self.X_selected[day].loc[self.X_selected[day].index.str.startswith(data_name)]
+                day_separated_X_pca = self.X_pca[day].loc[self.X_pca[day].index.str.startswith(data_name)]
+
+                separated_X_raw.append(day_separated_X_raw)
+                separated_X_normalized.append(day_separated_X_normalized)
+                separated_X_pca.append(day_separated_X_pca)
+                separated_X_selected.append(day_separated_X_selected)
+
+                if umap_flag:
+                    day_separated_X_umap = self.X_umap[day].loc[self.X_umap[day].index.str.startswith(data_name)]
+                    separated_X_umap.append(day_separated_X_umap)
+                
+                if gmm_model_flag:
+                    day_concated_gmm_model = self.gmm_models[day]
+
+                    if gmm_label_flag:
+                        day_separated_gmm_label = self.gmm_labels[day][self.X_raw[day].index.str.startswith(data_name)]
+                        separated_gmm_label.append(day_separated_gmm_label)
+                        day_separated_gmm_model = copy.deepcopy(day_concated_gmm_model)
+                        weights = []
+                        means = []
+                        covariances = []
+                        day_data_num = len(day_separated_X_raw)
+                        for cluster_index in range(day_separated_gmm_model.n_components):
+                            cluster_data = day_separated_X_pca[day_separated_gmm_label == cluster_index]
+                            if cluster_data.shape[0] == 0:
+                                # raise ValueError("No data in the cluster")
+                                print(f"Warning: No data in the cluster {cluster_index} of day {self.day_names[day]} for {data_name}. This cluster will be ignored.")
+                                continue
+                            means.append(cluster_data.mean().values)
+                            covariances.append(np.cov(cluster_data.T))
+                            weights.append(len(cluster_data) / day_data_num)
+                        
+                        day_separated_gmm_model.weights_ = np.array(weights)
+                        day_separated_gmm_model.means_ = np.array(means)
+                        day_separated_gmm_model.covariances_ = np.array(covariances)
+                        separated_gmm_model.append(day_separated_gmm_model)
+                    else:
+                        day_separated_gmm_model = GaussianMixture(**day_concated_gmm_model.get_params())
+                        day_separated_gmm_model.set_params(
+                            weights_init = day_concated_gmm_model.weights_,
+                            means_init = day_concated_gmm_model.means_,
+                            precisions_init = day_concated_gmm_model.precisions_
+                        )
+                        separated_gmm_model.append(day_separated_gmm_model)
+                
+            separated_scegot = scEGOT(separated_X_raw, day_names=self.day_names, verbose=self.verbose)
+            separated_scegot.X_normalized = separated_X_normalized
+            separated_scegot.X_selected = separated_X_selected
+            separated_scegot.X_pca = separated_X_pca
+            
+            separated_scegot.pca_model = self.pca_model
+            separated_scegot.gene_names = self.gene_names
+            separated_scegot.gmm_label_converter = self.gmm_label_converter
+
+            if umap_flag:
+                separated_scegot.X_umap = separated_X_umap
+                separated_scegot.umap_model = self.umap_model
+
+            if gmm_model_flag:
+                separated_scegot.gmm_n_components_list = self.gmm_n_components_list
+                separated_scegot.gmm_models = separated_gmm_model
+            
+            if gmm_label_flag:
+                separated_scegot.gmm_labels = separated_gmm_label
+                separated_scegot.gmm_labels_modified = separated_gmm_label
+
+            separated_scegot_dict[data_name] = separated_scegot
+
+        return separated_scegot_dict
+
+
 class CellStateGraph():
     def __init__(
         self,
