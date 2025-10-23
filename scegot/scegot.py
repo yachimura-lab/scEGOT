@@ -1,4 +1,3 @@
-import copy
 import itertools
 import warnings
 from collections import defaultdict
@@ -31,6 +30,7 @@ from scipy import interpolate
 from scipy.sparse import csc_matrix, issparse, lil_matrix, linalg
 from scipy.stats import multivariate_normal, zscore
 from sklearn import linear_model
+from sklearn.base import clone as sklearn_clone
 from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA
 from sklearn.mixture import GaussianMixture
@@ -3251,6 +3251,7 @@ class scEGOT:
         separated_scegot_dict = {}
         umap_flag = self.X_umap is not None and self.umap_model is not None
         gmm_label_flag = self.gmm_labels is not None
+        # gmm_label_flag = False
         gmm_model_flag = self.gmm_models is not None
 
         for data_name in data_names:
@@ -3284,10 +3285,12 @@ class scEGOT:
                     if gmm_label_flag:
                         day_separated_gmm_label = self.gmm_labels[day][self.X_raw[day].index.str.startswith(data_name)]
                         separated_gmm_label.append(day_separated_gmm_label)
-                        day_separated_gmm_model = copy.deepcopy(day_concated_gmm_model)
+                        day_separated_gmm_model = sklearn_clone(day_concated_gmm_model)
                         weights = []
                         means = []
                         covariances = []
+                        precisions = []
+                        precisions_cholesky = []
                         day_data_num = len(day_separated_X_raw)
                         for cluster_index in range(day_separated_gmm_model.n_components):
                             cluster_data = day_separated_X_pca[day_separated_gmm_label == cluster_index]
@@ -3295,22 +3298,37 @@ class scEGOT:
                                 # raise ValueError("No data in the cluster")
                                 print(f"Warning: No data in the cluster {cluster_index} of day {self.day_names[day]} for {data_name}. This cluster will be ignored.")
                                 continue
-                            means.append(cluster_data.mean().values)
-                            covariances.append(np.cov(cluster_data.T))
                             weights.append(len(cluster_data) / day_data_num)
-                        
+                            means.append(cluster_data.mean().values)
+                            cov = np.cov(cluster_data.T)
+                            cov_cholesky = spl.cholesky(cov, lower=True)
+                            prec_cholesky = spl.solve_triangular(
+                                cov_cholesky, np.eye(cov.shape[0], dtype=cov.dtype), lower=True
+                            ).T
+                            covariances.append(cov)
+                            precisions.append(np.dot(prec_cholesky, prec_cholesky.T))
+                            precisions_cholesky.append(prec_cholesky)
+
                         day_separated_gmm_model.weights_ = np.array(weights)
                         day_separated_gmm_model.means_ = np.array(means)
                         day_separated_gmm_model.covariances_ = np.array(covariances)
+                        day_separated_gmm_model.precisions_ = np.array(precisions)
+                        day_separated_gmm_model.precisions_cholesky_ = np.array(precisions_cholesky)
+                        day_separated_gmm_model.converged_ = day_concated_gmm_model.converged_
+                        day_separated_gmm_model.lower_bound_ = day_concated_gmm_model.lower_bound_
+                        day_separated_gmm_model.lower_bounds_ = day_concated_gmm_model.lower_bounds_
+                        day_separated_gmm_model.n_features_in_ = day_concated_gmm_model.n_features_in_
+                        day_separated_gmm_model.n_iter_ = day_concated_gmm_model.n_iter_
+
                         separated_gmm_model.append(day_separated_gmm_model)
                     else:
-                        day_separated_gmm_model = GaussianMixture(**day_concated_gmm_model.get_params())
-                        day_separated_gmm_model.set_params(
-                            weights_init = day_concated_gmm_model.weights_,
-                            means_init = day_concated_gmm_model.means_,
-                            precisions_init = day_concated_gmm_model.precisions_
-                        )
-                        separated_gmm_model.append(day_separated_gmm_model)
+                    #     day_separated_gmm_model = GaussianMixture(**day_concated_gmm_model.get_params())
+                    #     day_separated_gmm_model.set_params(
+                    #         weights_init = day_concated_gmm_model.weights_,
+                    #         means_init = day_concated_gmm_model.means_,
+                    #         precisions_init = day_concated_gmm_model.precisions_
+                    #     )
+                        separated_gmm_model.append(day_concated_gmm_model)
                 
             separated_scegot = scEGOT(separated_X_raw, day_names=self.day_names, verbose=self.verbose)
             separated_scegot.X_normalized = separated_X_normalized
