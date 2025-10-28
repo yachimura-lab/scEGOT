@@ -1278,11 +1278,12 @@ class scEGOT:
             gmm_means_flattened = self.umap_model.transform(gmm_means_flattened)
 
         cell_state_edge_list = self._get_edge_list(node_ids, merge_same_clusters, threshold, require_parent)
+        cell_state_edge_list.rename(columns={"edge_weights": "weight", "edge_colors": "color"}, inplace=True)
         G = nx.from_pandas_edgelist(
             cell_state_edge_list,
             source="source",
             target="target",
-            edge_attr=["edge_weights", "edge_colors"],
+            edge_attr=["weight", "color"],
             create_using=nx.DiGraph,
         )
 
@@ -3249,7 +3250,7 @@ class scEGOT:
         self.gmm_labels_modified = gmm_labels_modified
         self.gmm_label_converter = converter
 
-    def create_separated_data(self, data_names, cluster_names=None, return_cluster_names=False, calculate_precisions_cholesky=True):
+    def create_separated_data(self, data_names, return_cluster_names=False, cluster_names=None, calculate_precisions_cholesky=True):
         separated_scegot_dict = {}
         separated_cluster_names_dict = {}
         umap_flag = self.X_umap is not None and self.umap_model is not None
@@ -3499,7 +3500,7 @@ class CellStateGraph():
         G = self.G
 
         node_color = [node["day"] for node in G.nodes.values()]
-        color_data = np.array([G.edges[edge]["edge_weights"] for edge in G.edges()])
+        edge_color = np.array([G.edges[edge]["weight"] for edge in G.edges()])
 
         pos = {}
         if layout == "normal":
@@ -3562,7 +3563,7 @@ class CellStateGraph():
             pos,
             node_size=[node["weight"] * 5000 for node in G.nodes.values()],
             node_color=node_color,
-            edge_color=color_data,
+            edge_color=edge_color,
             edgecolors="white",
             arrows=True,
             arrowsize=30,
@@ -3579,7 +3580,7 @@ class CellStateGraph():
             nx.draw_networkx_edge_labels(
                 G,
                 pos,
-                edge_labels={edge: f"{G.edges[edge]['edge_weights']:.3f}" for edge in G.edges()},
+                edge_labels={edge: f"{G.edges[edge]['weight']:.3f}" for edge in G.edges()},
                 font_size=14,
                 label_pos=0.2,
                 ax=ax
@@ -3695,7 +3696,7 @@ class CellStateGraph():
             Path to save the output image, by default None
             If None, the image will be saved as './cell_state_graph.png'
         """
-        
+
         if save and save_path is None:
             save_path = "./cell_state_graph.png"
         
@@ -3722,8 +3723,8 @@ class CellStateGraph():
             x_1, y_1 = target["pos"]
             tail_list.append((x_0, y_0))
             head_list.append((x_1, y_1))
-            weight = G.edges[edge]["edge_weights"] * 25
-            color = colors[G.edges[edge]["edge_colors"] + 1]
+            weight = G.edges[edge]["weight"] * 25
+            color = colors[G.edges[edge]["color"] + 1]
 
             color_list.append(f"rgb({color[0]},{color[1]},{color[2]})")
 
@@ -3748,7 +3749,7 @@ class CellStateGraph():
             hoverinfo="text",
             marker={
                 "size": 20,
-                "color": [edge["edge_colors"] + 1 for edge in G.edges.values()],
+                "color": [edge["color"] + 1 for edge in G.edges.values()],
             },
             opacity=0,
         )
@@ -3759,7 +3760,13 @@ class CellStateGraph():
             x_0, y_0 = source["pos"]
             x_1, y_1 = target["pos"]
             from_to = str(edge[0]) + str(edge[1])
-            hovertext = f"""up_genes: {', '.join(tf_up_genes.T[from_to].values)}<br>down_genes: {', '.join(tf_down_genes.T[from_to].values)}"""
+            source_day = source["day"]
+            source_gmm = source["cluster_gmm_list"][0]
+            source_name = cluster_names[source_day][source_gmm]
+            target_day = target["day"]
+            target_gmm = target["cluster_gmm_list"][0]
+            target_name = cluster_names[target_day][target_gmm]
+            hovertext = f"""<b>Edge from {source_name} to {target_name}</b><br>weight = {G.edges[edge]["weight"]:.4f}<br>up_genes: {', '.join(tf_up_genes.T[from_to].values)}<br>down_genes: {', '.join(tf_down_genes.T[from_to].values)}"""
             middle_hover_trace["x"] += tuple([(x_0 + x_1) / 2])
             middle_hover_trace["y"] += tuple([(y_0 + y_1) / 2])
             middle_hover_trace["hovertext"] += tuple([hovertext])
@@ -3802,7 +3809,7 @@ class CellStateGraph():
             node_name = cluster_names[node_day][node_gmm]
             node_cluster_gmm_list = G.nodes[node]["cluster_gmm_list"]
             node_names.append(node_name)
-            node_names_with_gmm_numbers.append(f"{node_name}<br>GMM cluster numbers = {', '.join(map(str, node_cluster_gmm_list))}")
+            node_names_with_gmm_numbers.append(f"<b>{node_name}</b><br>weight = {G.nodes[node]['weight']:.4f}<br>GMM cluster numbers = {', '.join(map(str, node_cluster_gmm_list))}")
             node_gene_text = f"largest_genes: {', '.join(tf_nlargest.T[node].values)}<br>smallest_genes: {', '.join(tf_nsmallest.T[node].values)}"
             node_gene_texts.append(node_gene_text)
 
