@@ -17,6 +17,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import pydotplus
 import scipy.linalg as spl
+import scipy.sparse.linalg as spl_sparse
 import screcode
 import scvelo as scv
 import seaborn as sns
@@ -28,7 +29,7 @@ from matplotlib.colors import ListedColormap
 from PIL import Image as PILImage
 from scanpy.pp import neighbors
 from scipy import interpolate
-from scipy.sparse import csc_matrix, issparse, lil_matrix, linalg
+from scipy.sparse import csc_matrix, issparse, lil_matrix
 from scipy.stats import multivariate_normal, zscore
 from sklearn import linear_model
 from sklearn.base import clone as sklearn_clone
@@ -2876,7 +2877,7 @@ class scEGOT:
         )
         lap = dia - sim
         lap = csc_matrix(np.array(lap))
-        waddington_potential, *_ = linalg.lsqr(lap, F_all)
+        waddington_potential, *_ = spl_sparse.lsqr(lap, F_all)
 
         waddington_potential = zscore(waddington_potential)
 
