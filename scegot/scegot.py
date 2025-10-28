@@ -1,3 +1,4 @@
+import copy
 import itertools
 import warnings
 from collections import defaultdict
@@ -3247,12 +3248,16 @@ class scEGOT:
         self.gmm_labels_modified = gmm_labels_modified
         self.gmm_label_converter = converter
 
-    def create_separated_data(self, data_names):
+    def create_separated_data(self, data_names, cluster_names=None, return_cluster_names=False, calculate_precisions_cholesky=True):
         separated_scegot_dict = {}
+        separated_cluster_names_dict = {}
         umap_flag = self.X_umap is not None and self.umap_model is not None
         gmm_label_flag = self.gmm_labels is not None
-        # gmm_label_flag = False
         gmm_model_flag = self.gmm_models is not None
+        gmm_n_components_list = self.gmm_n_components_list.copy()
+
+        if return_cluster_names and cluster_names is None:
+            cluster_names = self.generate_cluster_names_with_day()
 
         for data_name in data_names:
             separated_X_raw = []
@@ -3263,6 +3268,8 @@ class scEGOT:
             separated_gmm_label = []
             if umap_flag:
                 separated_X_umap = []
+            if return_cluster_names:
+                separated_cluster_names = copy.deepcopy(cluster_names)
 
             for day in range(len(self.day_names)):
                 day_separated_X_raw = self.X_raw[day].loc[self.X_raw[day].index.str.startswith(data_name)]
@@ -3289,36 +3296,55 @@ class scEGOT:
                         weights = []
                         means = []
                         covariances = []
-                        precisions = []
-                        precisions_cholesky = []
+                        if calculate_precisions_cholesky:
+                            precisions = []
+                            precisions_cholesky = []
                         day_data_num = len(day_separated_X_raw)
+                        removed_clusters_num = 0
                         for cluster_index in range(day_separated_gmm_model.n_components):
-                            cluster_data = day_separated_X_pca[day_separated_gmm_label == cluster_index]
+                            cluster_data = day_separated_X_pca[day_separated_gmm_label == (cluster_index - removed_clusters_num)]
                             if cluster_data.shape[0] == 0:
-                                # raise ValueError("No data in the cluster")
-                                print(f"Warning: No data in the cluster {cluster_index} of day {self.day_names[day]} for {data_name}. This cluster will be ignored.")
+                                if self.verbose:
+                                    print(f"Warning: No data in the cluster {cluster_index} of day {self.day_names[day]} for {data_name}. This cluster will be ignored.")
+                                gmm_n_components_list[day] -= 1
+                                day_separated_gmm_model.n_components -= 1
+                                day_separated_gmm_label = np.where(
+                                    day_separated_gmm_label > cluster_index, day_separated_gmm_label - 1, day_separated_gmm_label
+                                )
+                                if return_cluster_names:
+                                    del separated_cluster_names[day][cluster_index - removed_clusters_num]
+                                removed_clusters_num += 1
                                 continue
+                            if cluster_data.shape[0] <= self.pca_model.n_components_:
+                                if calculate_precisions_cholesky:
+                                    raise ValueError(f"The number of data points in the cluster {cluster_index} of day {self.day_names[day]} for {data_name} is less than or equal to the number of PCA components. The covariance matrix cannot be inverted accurately.")
+                                else:
+                                    if self.verbose:
+                                        print(f"Warning: The number of data points in the cluster {cluster_index} of day {self.day_names[day]} for {data_name} is less than or equal to the number of PCA components. The covariance matrix cannot be inverted accurately.")    
+
                             weights.append(len(cluster_data) / day_data_num)
                             means.append(cluster_data.mean().values)
                             cov = np.cov(cluster_data.T)
-                            cov_cholesky = spl.cholesky(cov, lower=True)
-                            prec_cholesky = spl.solve_triangular(
-                                cov_cholesky, np.eye(cov.shape[0], dtype=cov.dtype), lower=True
-                            ).T
                             covariances.append(cov)
-                            precisions.append(np.dot(prec_cholesky, prec_cholesky.T))
-                            precisions_cholesky.append(prec_cholesky)
+                            if calculate_precisions_cholesky:
+                                cov_cholesky = spl.cholesky(cov, lower=True)
+                                prec_cholesky = spl.solve_triangular(
+                                    cov_cholesky, np.eye(cov.shape[0], dtype=cov.dtype), lower=True
+                                ).T
+                                precisions.append(np.dot(prec_cholesky, prec_cholesky.T))
+                                precisions_cholesky.append(prec_cholesky)
 
                         day_separated_gmm_model.weights_ = np.array(weights)
                         day_separated_gmm_model.means_ = np.array(means)
                         day_separated_gmm_model.covariances_ = np.array(covariances)
-                        day_separated_gmm_model.precisions_ = np.array(precisions)
-                        day_separated_gmm_model.precisions_cholesky_ = np.array(precisions_cholesky)
                         day_separated_gmm_model.converged_ = day_concated_gmm_model.converged_
                         day_separated_gmm_model.lower_bound_ = day_concated_gmm_model.lower_bound_
                         day_separated_gmm_model.lower_bounds_ = day_concated_gmm_model.lower_bounds_
                         day_separated_gmm_model.n_features_in_ = day_concated_gmm_model.n_features_in_
                         day_separated_gmm_model.n_iter_ = day_concated_gmm_model.n_iter_
+                        if calculate_precisions_cholesky:
+                            day_separated_gmm_model.precisions_ = np.array(precisions)
+                            day_separated_gmm_model.precisions_cholesky_ = np.array(precisions_cholesky)
 
                         separated_gmm_model.append(day_separated_gmm_model)
                     else:
@@ -3344,7 +3370,7 @@ class scEGOT:
                 separated_scegot.umap_model = self.umap_model
 
             if gmm_model_flag:
-                separated_scegot.gmm_n_components_list = self.gmm_n_components_list
+                separated_scegot.gmm_n_components_list = gmm_n_components_list
                 separated_scegot.gmm_models = separated_gmm_model
             
             if gmm_label_flag:
@@ -3353,7 +3379,13 @@ class scEGOT:
 
             separated_scegot_dict[data_name] = separated_scegot
 
-        return separated_scegot_dict
+            if return_cluster_names:
+                separated_cluster_names_dict[data_name] = separated_cluster_names
+
+        if return_cluster_names:
+            return separated_scegot_dict, separated_cluster_names_dict
+        else:
+            return separated_scegot_dict
 
 
 class CellStateGraph():
