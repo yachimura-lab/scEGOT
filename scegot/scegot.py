@@ -1090,23 +1090,20 @@ class scEGOT:
     def merge_clusters_by_pathway(
             self,
             last_day_cluster_names,
-            merge_iter=1,
-            merge_method=None,
+            n_merge_iter=1,
+            merge_method="pattern",
             threshold=0.05,
             n_clusters_list=None,
             **kwargs
         ):
-        if not merge_iter in list(range(len(self.day_names) - 1)):
-            raise ValueError("The parameter 'merge_iter' should be an integer in the range of the number of days.")
-        
-        if merge_method == None:
-            merge_method = "pattern"
+        if not n_merge_iter in list(range(len(self.day_names) - 1)):
+            raise ValueError("The parameter 'n_merge_iter' should be an integer in the range of the number of days.")
 
         if not merge_method in ["pattern", "kmeans"]:
             raise ValueError("The parameter 'merge_method' should be 'pattern' or 'kmeans'")
         
         if merge_method == "kmeans" and n_clusters_list == None:
-            n_clusters_list = [min(self.gmm_n_components_list[-(i+1)], 4) for i in range(merge_iter)]
+            n_clusters_list = [min(self.gmm_n_components_list[-(i+1)], 4) for i in range(n_merge_iter)]
 
         cluster_names = self.generate_cluster_names_with_day()
         cluster_names[-1] = last_day_cluster_names
@@ -1117,7 +1114,7 @@ class scEGOT:
         for day, node_id in zip(cluster_days, node_ids):
             node_ids_by_day[day].append(node_id)
 
-        for i in range(merge_iter):    
+        for i in range(n_merge_iter):    
             source_node_ids = node_ids_by_day[-(i+2)]
             unique_target_node_ids = list(set(node_ids_by_day[-(i+1)]))
             node_ids = list(itertools.chain.from_iterable(node_ids_by_day))
@@ -3256,7 +3253,6 @@ class scEGOT:
         umap_flag = self.X_umap is not None and self.umap_model is not None
         gmm_label_flag = self.gmm_labels is not None
         gmm_model_flag = self.gmm_models is not None
-        gmm_n_components_list = self.gmm_n_components_list.copy()
 
         if return_cluster_names and cluster_names is None:
             cluster_names = self.generate_cluster_names_with_day()
@@ -3271,7 +3267,8 @@ class scEGOT:
             if umap_flag:
                 separated_X_umap = []
             if return_cluster_names:
-                separated_cluster_names = copy.deepcopy(cluster_names)
+                separated_cluster_names = copy.deepcopy(cluster_names)            
+            gmm_n_components_list = self.gmm_n_components_list.copy()
 
             for day in range(len(self.day_names)):
                 day_separated_X_raw = self.X_raw[day].loc[self.X_raw[day].index.str.startswith(data_name)]
@@ -3281,8 +3278,8 @@ class scEGOT:
 
                 separated_X_raw.append(day_separated_X_raw)
                 separated_X_normalized.append(day_separated_X_normalized)
-                separated_X_pca.append(day_separated_X_pca)
                 separated_X_selected.append(day_separated_X_selected)
+                separated_X_pca.append(day_separated_X_pca)
 
                 if umap_flag:
                     day_separated_X_umap = self.X_umap[day].loc[self.X_umap[day].index.str.startswith(data_name)]
@@ -3329,10 +3326,8 @@ class scEGOT:
                             cov = np.cov(cluster_data.T)
                             covariances.append(cov)
                             if calculate_precisions_cholesky:
-                                cov_cholesky = spl.cholesky(cov, lower=True)
-                                prec_cholesky = spl.solve_triangular(
-                                    cov_cholesky, np.eye(cov.shape[0], dtype=cov.dtype), lower=True
-                                ).T
+                                cov_cholesky = np.linalg.cholesky(cov)
+                                prec_cholesky = np.linalg.solve(cov_cholesky, np.eye(cov.shape[0], dtype=cov.dtype)).T
                                 precisions.append(np.dot(prec_cholesky, prec_cholesky.T))
                                 precisions_cholesky.append(prec_cholesky)
 
@@ -3356,7 +3351,7 @@ class scEGOT:
                     #         means_init = day_concated_gmm_model.means_,
                     #         precisions_init = day_concated_gmm_model.precisions_
                     #     )
-                        separated_gmm_model.append(day_concated_gmm_model)
+                        separated_gmm_model.append(sklearn_clone(day_concated_gmm_model))
                 
             separated_scegot = scEGOT(separated_X_raw, day_names=self.day_names, verbose=self.verbose)
             separated_scegot.X_normalized = separated_X_normalized
@@ -3447,7 +3442,8 @@ class CellStateGraph():
         self,
         layout="normal",
         y_position="name",
-        weight_annotation=False,
+        node_weight_annotation=False,
+        edge_weight_annotation=False,
         save=False,
         save_path=None
     ):
@@ -3491,8 +3487,6 @@ class CellStateGraph():
                 raise TypeError("The Type of 'y_position' should be string or dict.")
             if type(y_position) == str and y_position not in ["name", "weight"]:
                 raise ValueError("The parameter 'y_position' should be 'name', 'weight' or dictionary object.")
-        if weight_annotation not in ["both", "node", "edge", False]:
-            raise ValueError("The parameter 'weight_annotation' should be 'both', 'node', 'edge' or False.")
 
         if save and save_path is None:
             save_path = "./simple_cell_state_graph.png"
@@ -3576,7 +3570,7 @@ class CellStateGraph():
         )
 
         # edge annotations
-        if weight_annotation in ["both", "edge"]: 
+        if edge_weight_annotation: 
             nx.draw_networkx_edge_labels(
                 G,
                 pos,
@@ -3595,7 +3589,7 @@ class CellStateGraph():
             text_ = ax.text(
                 pos[node][0],
                 pos[node][1],
-                f'{node_name}\n{G.nodes[node]["weight"]:.3f}' if weight_annotation in ["both", "node"] else node_name,
+                f'{node_name}\n{G.nodes[node]["weight"]:.3f}' if node_weight_annotation else node_name,
                 fontsize=14,
                 fontweight="bold",
                 ha="center",
@@ -3667,7 +3661,7 @@ class CellStateGraph():
         tf_gene_names=None,
         tf_gene_pick_num=5,
         save=False,
-        save_path=None,                                                  
+        save_path=None,
     ):
         """Plot the cell state graph with the given graph object.
 
@@ -3810,7 +3804,7 @@ class CellStateGraph():
             node_cluster_gmm_list = G.nodes[node]["cluster_gmm_list"]
             node_names.append(node_name)
             node_names_with_gmm_numbers.append(f"<b>{node_name}</b><br>weight = {G.nodes[node]['weight']:.4f}<br>GMM cluster numbers = {', '.join(map(str, node_cluster_gmm_list))}")
-            node_gene_text = f"largest_genes: {', '.join(tf_nlargest.T[node].values)}<br>smallest_genes: {', '.join(tf_nsmallest.T[node].values)}"
+            node_gene_text = f"<b>{node_name}</b><br>largest_genes: {', '.join(tf_nlargest.T[node].values)}<br>smallest_genes: {', '.join(tf_nsmallest.T[node].values)}"
             node_gene_texts.append(node_gene_text)
 
         node_trace = go.Scatter(
