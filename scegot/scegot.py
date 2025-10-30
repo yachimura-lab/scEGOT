@@ -3247,7 +3247,7 @@ class scEGOT:
         self.gmm_labels_modified = gmm_labels_modified
         self.gmm_label_converter = converter
 
-    def create_separated_data(self, data_names, return_cluster_names=False, cluster_names=None, calculate_precisions_cholesky=True):
+    def create_separated_data(self, data_names, min_cluster_size=2, return_cluster_names=False, cluster_names=None, calculate_precisions_cholesky=True):
         separated_scegot_dict = {}
         separated_cluster_names_dict = {}
         umap_flag = self.X_umap is not None and self.umap_model is not None
@@ -3262,8 +3262,8 @@ class scEGOT:
             separated_X_normalized = []
             separated_X_selected = []
             separated_X_pca = []
-            separated_gmm_model = []
-            separated_gmm_label = []
+            separated_gmm_models = []
+            separated_gmm_labels = []
             if umap_flag:
                 separated_X_umap = []
             if return_cluster_names:
@@ -3276,11 +3276,6 @@ class scEGOT:
                 day_separated_X_selected = self.X_selected[day].loc[self.X_selected[day].index.str.startswith(data_name)]
                 day_separated_X_pca = self.X_pca[day].loc[self.X_pca[day].index.str.startswith(data_name)]
 
-                separated_X_raw.append(day_separated_X_raw)
-                separated_X_normalized.append(day_separated_X_normalized)
-                separated_X_selected.append(day_separated_X_selected)
-                separated_X_pca.append(day_separated_X_pca)
-
                 if umap_flag:
                     day_separated_X_umap = self.X_umap[day].loc[self.X_umap[day].index.str.startswith(data_name)]
                     separated_X_umap.append(day_separated_X_umap)
@@ -3290,23 +3285,31 @@ class scEGOT:
 
                     if gmm_label_flag:
                         day_separated_gmm_label = self.gmm_labels[day][self.X_raw[day].index.str.startswith(data_name)]
-                        separated_gmm_label.append(day_separated_gmm_label)
                         day_separated_gmm_model = sklearn_clone(day_concated_gmm_model)
-                        weights = []
+                        cluster_sizes = []
                         means = []
                         covariances = []
                         if calculate_precisions_cholesky:
                             precisions = []
                             precisions_cholesky = []
-                        day_data_num = len(day_separated_X_raw)
                         removed_clusters_num = 0
                         for cluster_index in range(day_separated_gmm_model.n_components):
                             cluster_data = day_separated_X_pca[day_separated_gmm_label == (cluster_index - removed_clusters_num)]
-                            if cluster_data.shape[0] == 0:
+                            n_cluster_data_rows = cluster_data.shape[0]
+                            if n_cluster_data_rows < min_cluster_size:
                                 if self.verbose:
-                                    print(f"Warning: No data in the cluster {cluster_index} of day {self.day_names[day]} for {data_name}. This cluster will be ignored.")
+                                    print(f"Warning: The number of cells in the cluster {cluster_index} of day {self.day_names[day]} for {data_name} ({n_cluster_data_rows}) is less than the minimum required cluster size ({min_cluster_size}). This cluster will be ignored.")
                                 gmm_n_components_list[day] -= 1
                                 day_separated_gmm_model.n_components -= 1
+                                if n_cluster_data_rows >= 1:
+                                    not_removed_cell_mask = day_separated_gmm_label != (cluster_index - removed_clusters_num)
+                                    day_separated_X_raw = day_separated_X_raw.loc[not_removed_cell_mask]
+                                    day_separated_X_normalized = day_separated_X_normalized.loc[not_removed_cell_mask]
+                                    day_separated_X_selected = day_separated_X_selected.loc[not_removed_cell_mask]
+                                    day_separated_X_pca = day_separated_X_pca.loc[not_removed_cell_mask]
+                                    day_separated_gmm_label = day_separated_gmm_label[not_removed_cell_mask]
+                                    if umap_flag:
+                                        day_separated_X_umap = day_separated_X_umap.loc[not_removed_cell_mask]
                                 day_separated_gmm_label = np.where(
                                     day_separated_gmm_label > cluster_index, day_separated_gmm_label - 1, day_separated_gmm_label
                                 )
@@ -3321,7 +3324,7 @@ class scEGOT:
                                     if self.verbose:
                                         print(f"Warning: The number of data points in the cluster {cluster_index} of day {self.day_names[day]} for {data_name} is less than or equal to the number of PCA components. The covariance matrix cannot be inverted accurately.")    
 
-                            weights.append(len(cluster_data) / day_data_num)
+                            cluster_sizes.append(len(cluster_data))
                             means.append(cluster_data.mean().values)
                             cov = np.cov(cluster_data.T)
                             covariances.append(cov)
@@ -3330,8 +3333,9 @@ class scEGOT:
                                 prec_cholesky = np.linalg.solve(cov_cholesky, np.eye(cov.shape[0], dtype=cov.dtype)).T
                                 precisions.append(np.dot(prec_cholesky, prec_cholesky.T))
                                 precisions_cholesky.append(prec_cholesky)
+                        separated_gmm_labels.append(day_separated_gmm_label)
 
-                        day_separated_gmm_model.weights_ = np.array(weights)
+                        day_separated_gmm_model.weights_ = np.array(cluster_sizes) / len(day_separated_X_raw)
                         day_separated_gmm_model.means_ = np.array(means)
                         day_separated_gmm_model.covariances_ = np.array(covariances)
                         day_separated_gmm_model.converged_ = day_concated_gmm_model.converged_
@@ -3343,7 +3347,7 @@ class scEGOT:
                             day_separated_gmm_model.precisions_ = np.array(precisions)
                             day_separated_gmm_model.precisions_cholesky_ = np.array(precisions_cholesky)
 
-                        separated_gmm_model.append(day_separated_gmm_model)
+                        separated_gmm_models.append(day_separated_gmm_model)
                     else:
                     #     day_separated_gmm_model = GaussianMixture(**day_concated_gmm_model.get_params())
                     #     day_separated_gmm_model.set_params(
@@ -3351,8 +3355,13 @@ class scEGOT:
                     #         means_init = day_concated_gmm_model.means_,
                     #         precisions_init = day_concated_gmm_model.precisions_
                     #     )
-                        separated_gmm_model.append(sklearn_clone(day_concated_gmm_model))
+                        separated_gmm_models.append(sklearn_clone(day_concated_gmm_model))
                 
+                separated_X_raw.append(day_separated_X_raw)
+                separated_X_normalized.append(day_separated_X_normalized)
+                separated_X_selected.append(day_separated_X_selected)
+                separated_X_pca.append(day_separated_X_pca)
+
             separated_scegot = scEGOT(separated_X_raw, day_names=self.day_names, verbose=self.verbose)
             separated_scegot.X_normalized = separated_X_normalized
             separated_scegot.X_selected = separated_X_selected
@@ -3368,11 +3377,11 @@ class scEGOT:
 
             if gmm_model_flag:
                 separated_scegot.gmm_n_components_list = gmm_n_components_list
-                separated_scegot.gmm_models = separated_gmm_model
+                separated_scegot.gmm_models = separated_gmm_models
             
             if gmm_label_flag:
-                separated_scegot.gmm_labels = separated_gmm_label
-                separated_scegot.gmm_labels_modified = separated_gmm_label
+                separated_scegot.gmm_labels = separated_gmm_labels
+                separated_scegot.gmm_labels_modified = separated_gmm_labels
 
             separated_scegot_dict[data_name] = separated_scegot
 
