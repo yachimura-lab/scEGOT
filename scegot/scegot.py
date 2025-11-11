@@ -3426,6 +3426,33 @@ class CellStateGraph():
             for order, name in enumerate(sorted_day_cluster_names):
                 cluster_alphabetical_order[name] = order
         return cluster_alphabetical_order
+    
+    def get_node_position_dict(self, layout, y_position):
+        G = self.G
+        pos = {}
+
+        if layout == "normal":
+            pos = {node: G.nodes[node]["pos"] for node in G.nodes()}
+        else:
+            if y_position == "weight":
+                for node in G.nodes():
+                    pos[node] = (G.nodes[node]["day"], -G.nodes[node]["cluster_weight"])
+            else:
+                if y_position == "name":
+                    ypos_dict = self._get_node_name_alphabetical_order_dict()
+                else:
+                    ypos_dict = y_position
+                for node in G.nodes():
+                    node_day = G.nodes[node]["day"]
+                    node_gmm = G.nodes[node]["cluster_gmm_list"][0]
+                    node_name = self.cluster_names[node_day][node_gmm]
+                    try:
+                        ypos = -ypos_dict[node_name]
+                    except:
+                        raise ValueError(f"The node name '{node_name}' does not exist in 'y_position'.")
+                    pos[node] = (G.nodes[node]["day"], ypos)
+
+        return pos
 
     def plot_simple_cell_state_graph(
         self,
@@ -3466,8 +3493,6 @@ class CellStateGraph():
         ValueError
             When 'layout' is not 'normal' or 'hierarchy', or 'order' is not None or 'weight'.
         """
-
-        #!weight_annotation : {'both', 'node', 'edge', False}, optional を追記
         
         if layout not in ["normal", "hierarchy"]:
             raise ValueError("The parameter 'layout' should be 'normal or 'hierarchy'.")
@@ -3484,29 +3509,7 @@ class CellStateGraph():
 
         node_color = [node["day"] for node in G.nodes.values()]
         edge_color = np.array([G.edges[edge]["weight"] for edge in G.edges()])
-
-        pos = {}
-        if layout == "normal":
-            pos = {node: G.nodes[node]["pos"] for node in G.nodes()}
-        else:
-            if y_position == "weight":
-                for node in G.nodes():
-                    pos[node] = (G.nodes[node]["day"], -G.nodes[node]["cluster_weight"])
-            else:
-                if y_position == "name":
-                    ypos_dict = self._get_node_name_alphabetical_order_dict()
-                else:
-                    ypos_dict = y_position
-                for node in G.nodes():
-                    node_day = G.nodes[node]["day"]
-                    node_gmm = G.nodes[node]["cluster_gmm_list"][0]
-                    node_name = self.cluster_names[node_day][node_gmm]
-                    try:
-                        ypos = -ypos_dict[node_name]
-                    except:
-                        raise ValueError(f"The node name '{node_name}' does not exist in 'y_position'.")
-                    pos[node] = (G.nodes[node]["day"], ypos)
-
+        pos = self.get_node_position_dict(layout, y_position)
         fig, ax = plt.subplots(figsize=(12, 10))
         
         # draw edge border
@@ -3680,6 +3683,8 @@ class CellStateGraph():
 
     def plot_cell_state_graph(
         self,
+        layout="normal",
+        y_position="name",
         cluster_names=None,
         tf_gene_names=None,
         tf_gene_pick_num=5,
@@ -3714,6 +3719,14 @@ class CellStateGraph():
             If None, the image will be saved as './cell_state_graph.png'
         """
 
+        if layout not in ["normal", "hierarchy"]:
+            raise ValueError("The parameter 'layout' should be 'normal or 'hierarchy'.")
+        if layout == "hierarchy":
+            if type(y_position) not in [str, dict]:
+                raise TypeError("The Type of 'y_position' should be string or dict.")
+            if type(y_position) == str and y_position not in ["name", "weight"]:
+                raise ValueError("The parameter 'y_position' should be 'name', 'weight' or dictionary object.")
+
         if save and save_path is None:
             save_path = "./cell_state_graph.png"
         
@@ -3731,13 +3744,12 @@ class CellStateGraph():
         trace_recode = []
 
         G = self.G
-
         colors = plt.cm.inferno(np.linspace(0, 1, self.day_num + 2))
+        pos = self.get_node_position_dict(layout, y_position)
+
         for edge in G.edges():
-            source = G.nodes[edge[0]]
-            target = G.nodes[edge[1]]
-            x_0, y_0 = source["pos"]
-            x_1, y_1 = target["pos"]
+            x_0, y_0 = pos[edge[0]]
+            x_1, y_1 = pos[edge[1]]
             tail_list.append((x_0, y_0))
             head_list.append((x_1, y_1))
             weight = G.edges[edge]["weight"] * 25
@@ -3774,8 +3786,8 @@ class CellStateGraph():
         for edge in G.edges():
             source = G.nodes[edge[0]]
             target = G.nodes[edge[1]]
-            x_0, y_0 = source["pos"]
-            x_1, y_1 = target["pos"]
+            x_0, y_0 = pos[edge[0]]
+            x_1, y_1 = pos[edge[1]]
             tf_genes_index = (str(edge[0]), str(edge[1]))
             source_day = source["day"]
             source_gmm = source["cluster_gmm_list"][0]
@@ -3823,7 +3835,7 @@ class CellStateGraph():
         node_gene_texts = []
 
         for node in G.nodes():
-            x, y = G.nodes[node]["pos"]
+            x, y = pos[node]
             node_x.append(x)
             node_y.append(y)
             node_day = G.nodes[node]["day"]
