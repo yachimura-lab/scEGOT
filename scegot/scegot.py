@@ -3409,6 +3409,43 @@ class CellStateGraph():
             self.y_reverse = not self.y_reverse
             for node in self.G.nodes():
                 self.G.nodes[node]["pos"] = (self.G.nodes[node]["pos"][0], -1 * self.G.nodes[node]["pos"][1])
+    
+    def _validate_cluster_names(self, cluster_names):
+        if type(cluster_names) != list:
+            raise TypeError("The type of 'cluster_names' should be list.")
+        day_num = self.day_num
+        if len(cluster_names) != day_num:
+            raise ValueError(f"The length of 'cluster_names' should be equal to the number of days ({day_num}).")
+        gmm_n_components_list = self.scegot.gmm_n_components_list
+        for day in range(day_num):
+            if type(cluster_names[day]) != list:
+                raise TypeError(f"The element located at index {day} in 'cluster_names' should be a list.")
+            if len(cluster_names[day]) != gmm_n_components_list[day]:
+                raise ValueError(
+                    f"The element located at index {day} in 'cluster_names' must contain the same number of elements as "
+                    f"the number of clusters of the {self.scegot.day_names[day]} (= {gmm_n_components_list[day]}), \n"
+                    f"The actual length of the element at index {day} in 'cluster_names' was {len(cluster_names[day])}."
+                )
+        if self.merge_same_clusters:
+            cluster_names_flattened = list(itertools.chain.from_iterable(cluster_names))
+            old_cluster_names_flattened = list(itertools.chain.from_iterable(self.cluster_names))
+            id_name_dict = {}
+            for i in range(len(self.node_ids)):
+                id = self.node_ids[i]
+                name = cluster_names_flattened[i]
+                if id in id_name_dict:
+                    if id_name_dict[id] != name:
+                        raise ValueError(
+                            f"When merge_same_clusters = True, clusters that shared the same original name must be given the same new name.\n"
+                            f"Cluster '{old_cluster_names_flattened[i]}' has inconsistent names: '{id_name_dict[id]}' and '{name}'."
+                        )
+                else:
+                    id_name_dict[id] = name
+        return cluster_names
+    
+    def set_cluster_names(self, cluster_names):
+        cluster_names = self._validate_cluster_names(cluster_names)
+        self.cluster_names = cluster_names
 
     def _get_day_node_dict(self):
         day_dict = dict(self.G.nodes(data="day"))
@@ -3427,7 +3464,7 @@ class CellStateGraph():
                 cluster_alphabetical_order[name] = order
         return cluster_alphabetical_order
     
-    def get_node_position_dict(self, layout, y_position):
+    def _get_node_position_dict(self, layout, y_position):
         G = self.G
         pos = {}
 
@@ -3509,7 +3546,7 @@ class CellStateGraph():
 
         node_color = [node["day"] for node in G.nodes.values()]
         edge_color = np.array([G.edges[edge]["weight"] for edge in G.edges()])
-        pos = self.get_node_position_dict(layout, y_position)
+        pos = self._get_node_position_dict(layout, y_position)
         fig, ax = plt.subplots(figsize=(12, 10))
         
         # draw edge border
@@ -3746,7 +3783,7 @@ class CellStateGraph():
 
         G = self.G
         colors = plt.cm.inferno(np.linspace(0, 1, self.day_num + 2))
-        pos = self.get_node_position_dict(layout, y_position)
+        pos = self._get_node_position_dict(layout, y_position)
 
         for edge in G.edges():
             x_0, y_0 = pos[edge[0]]
