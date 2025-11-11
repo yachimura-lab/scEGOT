@@ -3688,6 +3688,7 @@ class CellStateGraph():
         cluster_names=None,
         tf_gene_names=None,
         tf_gene_pick_num=5,
+        plot_title="Cell State Graph",
         save=False,
         save_path=None,
     ):
@@ -3882,7 +3883,7 @@ class CellStateGraph():
 
         fig.update_layout(annotations=arrows)
 
-        fig.update_layout(width=1000, height=800, title="Cell state graph")
+        fig.update_layout(width=1000, height=800, title=plot_title)
         fig.show()
 
         if save:
