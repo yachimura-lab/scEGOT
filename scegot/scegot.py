@@ -3247,7 +3247,7 @@ class scEGOT:
         self.gmm_labels_modified = gmm_labels_modified
         self.gmm_label_converter = converter
 
-    def create_separated_data(self, data_names, min_cluster_size=2, return_cluster_names=False, cluster_names=None, calculate_precisions_cholesky=True):
+    def create_separated_data(self, data_names, min_cluster_size=2, return_cluster_names=False, cluster_names=None, calculate_precisions_cholesky=False):
         separated_scegot_dict = {}
         separated_cluster_names_dict = {}
         umap_flag = self.X_umap is not None and self.umap_model is not None
@@ -3298,7 +3298,12 @@ class scEGOT:
                             n_cluster_data_rows = cluster_data.shape[0]
                             if n_cluster_data_rows < min_cluster_size:
                                 if self.verbose:
-                                    print(f"Warning: The number of cells in the cluster {cluster_index} of day {self.day_names[day]} for {data_name} ({n_cluster_data_rows}) is less than the minimum required cluster size ({min_cluster_size}). This cluster will be ignored.")
+                                    msg = (
+                                        f"The number of cells in the cluster {cluster_index} of day {self.day_names[day]} "
+                                        f"for {data_name} ({n_cluster_data_rows}) is less than the minimum required cluster size ({min_cluster_size}). "
+                                        "This cluster will be ignored."
+                                    )
+                                    print("Info: " + msg)
                                 gmm_n_components_list[day] -= 1
                                 day_separated_gmm_model.n_components -= 1
                                 if n_cluster_data_rows >= 1:
@@ -3317,13 +3322,18 @@ class scEGOT:
                                     del separated_cluster_names[day][cluster_index - removed_clusters_num]
                                 removed_clusters_num += 1
                                 continue
-                            if cluster_data.shape[0] <= self.pca_model.n_components_:
+                            if n_cluster_data_rows <= self.pca_model.n_components_:
+                                msg = (
+                                    f"The number of cells in the cluster {cluster_index} of day {self.day_names[day]} "
+                                    f"for {data_name} ({n_cluster_data_rows}) is less than or equal to "
+                                    f"the number of PCA components ({self.pca_model.n_components_}). "
+                                    "The covariance matrix cannot be inverted accurately."
+                                )
                                 if calculate_precisions_cholesky:
-                                    raise ValueError(f"The number of data points in the cluster {cluster_index} of day {self.day_names[day]} for {data_name} is less than or equal to the number of PCA components. The covariance matrix cannot be inverted accurately.")
+                                    raise ValueError(msg)
                                 else:
                                     if self.verbose:
-                                        print(f"Warning: The number of data points in the cluster {cluster_index} of day {self.day_names[day]} for {data_name} is less than or equal to the number of PCA components. The covariance matrix cannot be inverted accurately.")    
-
+                                        print("Info: " + msg)
                             cluster_sizes.append(len(cluster_data))
                             means.append(cluster_data.mean().values)
                             cov = np.cov(cluster_data.T)
