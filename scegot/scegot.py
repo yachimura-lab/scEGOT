@@ -973,36 +973,6 @@ class scEGOT:
         )
         fold_change = fold_change.sort_values(ascending=False)
         return fold_change
-
-    def _get_up_regulated_genes(self, gene_values, G, num=10):
-        df_upgenes = pd.DataFrame([])
-        for edge in G.edges():
-            fold_change = self._get_fold_change(
-                gene_values,
-                edge[0],
-                edge[1],
-            )
-            upgenes = pd.DataFrame(
-                self._get_nlargest_gene_indices(fold_change, num=num).values,
-                columns=[f"{edge[0]}{edge[1]}"],
-            ).T
-            df_upgenes = pd.concat([df_upgenes, upgenes])
-        return df_upgenes
-
-    def _get_down_regulated_genes(self, gene_values, G, num=10):
-        df_downgenes = pd.DataFrame([])
-        for edge in G.edges():
-            fold_change = self._get_fold_change(
-                gene_values,
-                edge[0],
-                edge[1],
-            )
-            downgenes = pd.DataFrame(
-                self._get_nsmallest_gene_indices(fold_change, num=num).values,
-                columns=[f"{edge[0]}{edge[1]}"],
-            ).T
-            df_downgenes = pd.concat([df_downgenes, downgenes])
-        return df_downgenes
     
     def _calculate_source_merged_edge_weights(self, df):
         node_weights = self._get_gmm_node_weights_flattened()
@@ -3634,6 +3604,42 @@ class CellStateGraph():
         else:
             weighted_df = df.drop("weights", axis=1).mul(df["weights"], axis=0)
             return (weighted_df.sum() / df["weights"].sum()).to_frame(name=df.index[0]).T
+        
+    def _get_up_regulated_genes(self, gene_values, num=10):
+        scegot = self.scegot
+        columns = [f"up_gene_{i+1}" for i in range(num)]
+        df_upgenes = pd.DataFrame(columns=columns, index=pd.MultiIndex.from_tuples([], names=["source", "target"]))
+        for edge in self.G.edges():
+            fold_change = scegot._get_fold_change(
+                gene_values,
+                edge[0],
+                edge[1],
+            )
+            upgenes = pd.DataFrame(
+                [scegot._get_nlargest_gene_indices(fold_change, num=num).values],
+                columns=columns,
+                index=pd.MultiIndex.from_tuples([(str(edge[0]), str(edge[1]))], names=["source", "target"])
+            )
+            df_upgenes = pd.concat([df_upgenes, upgenes])
+        return df_upgenes
+
+    def _get_down_regulated_genes(self, gene_values, num=10):
+        scegot = self.scegot
+        columns = [f"down_gene_{i+1}" for i in range(num)]
+        df_downgenes = pd.DataFrame(columns=columns, index=pd.MultiIndex.from_tuples([], names=["source", "target"]))
+        for edge in self.G.edges():
+            fold_change = scegot._get_fold_change(
+                gene_values,
+                edge[0],
+                edge[1],
+            )
+            downgenes = pd.DataFrame(
+                [scegot._get_nsmallest_gene_indices(fold_change, num=num).values],
+                columns=columns,
+                index=pd.MultiIndex.from_tuples([(str(edge[0]), str(edge[1]))], names=["source", "target"])
+            )
+            df_downgenes = pd.concat([df_downgenes, downgenes])
+        return df_downgenes
 
     def _get_tf_genes_info(self, tf_gene_names, tf_gene_pick_num):
         scegot = self.scegot
@@ -3663,14 +3669,12 @@ class CellStateGraph():
         tf_nlargest.columns += 1
         tf_nsmallest.columns += 1
         # edges
-        tf_up_genes = scegot._get_up_regulated_genes(
-            mean_tf_gene_values_per_cluster, self.G, num=tf_gene_pick_num
+        tf_up_genes = self._get_up_regulated_genes(
+            mean_tf_gene_values_per_cluster, num=tf_gene_pick_num
         )
-        tf_down_genes = scegot._get_down_regulated_genes(
-            mean_tf_gene_values_per_cluster, self.G, num=tf_gene_pick_num
+        tf_down_genes = self._get_down_regulated_genes(
+            mean_tf_gene_values_per_cluster, num=tf_gene_pick_num
         )
-        tf_up_genes.columns += 1
-        tf_down_genes.columns += 1
 
         return tf_nlargest, tf_nsmallest, tf_up_genes, tf_down_genes
 
@@ -3772,14 +3776,19 @@ class CellStateGraph():
             target = G.nodes[edge[1]]
             x_0, y_0 = source["pos"]
             x_1, y_1 = target["pos"]
-            from_to = str(edge[0]) + str(edge[1])
+            tf_genes_index = (str(edge[0]), str(edge[1]))
             source_day = source["day"]
             source_gmm = source["cluster_gmm_list"][0]
             source_name = cluster_names[source_day][source_gmm]
             target_day = target["day"]
             target_gmm = target["cluster_gmm_list"][0]
             target_name = cluster_names[target_day][target_gmm]
-            hovertext = f"""<b>Edge from {source_name} to {target_name}</b><br>weight = {G.edges[edge]["weight"]:.4f}<br>up_genes: {', '.join(tf_up_genes.T[from_to].values)}<br>down_genes: {', '.join(tf_down_genes.T[from_to].values)}"""
+            hovertext = (
+                f"<b>Edge from {source_name} to {target_name}</b><br>"
+                f"weight = {G.edges[edge]['weight']:.4f}<br>"
+                f"up_genes: {', '.join(tf_up_genes.T[tf_genes_index].values)}<br>"
+                f"down_genes: {', '.join(tf_down_genes.T[tf_genes_index].values)}"
+            )
             middle_hover_trace["x"] += tuple([(x_0 + x_1) / 2])
             middle_hover_trace["y"] += tuple([(y_0 + y_1) / 2])
             middle_hover_trace["hovertext"] += tuple([hovertext])
