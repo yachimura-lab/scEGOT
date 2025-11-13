@@ -3221,8 +3221,10 @@ class scEGOT:
         separated_scegot_dict = {}
         separated_cluster_names_dict = {}
         umap_flag = self.X_umap is not None and self.umap_model is not None
-        gmm_label_flag = self.gmm_labels is not None
         gmm_model_flag = self.gmm_models is not None
+        gmm_label_flag = self.gmm_labels is not None
+        return_cluster_names = gmm_label_flag and return_cluster_names
+        calculate_precisions_cholesky = gmm_label_flag and calculate_precisions_cholesky
 
         if return_cluster_names and cluster_names is None:
             cluster_names = self.generate_cluster_names_with_day()
@@ -3236,9 +3238,12 @@ class scEGOT:
             separated_gmm_labels = []
             if umap_flag:
                 separated_X_umap = []
+            if gmm_label_flag:
+                gmm_n_components_list = self.gmm_n_components_list.copy()
+                removed_cluster_names = []
+                small_cluster_names = []
             if return_cluster_names:
-                separated_cluster_names = copy.deepcopy(cluster_names)            
-            gmm_n_components_list = self.gmm_n_components_list.copy()
+                separated_cluster_names = copy.deepcopy(cluster_names) 
 
             for day in range(len(self.day_names)):
                 day_separated_X_raw = self.X_raw[day].loc[self.X_raw[day].index.str.startswith(data_name)]
@@ -3268,12 +3273,7 @@ class scEGOT:
                             n_cluster_data_rows = cluster_data.shape[0]
                             if n_cluster_data_rows < min_cluster_size:
                                 if self.verbose:
-                                    msg = (
-                                        f"The number of cells in the cluster {cluster_index} of day {self.day_names[day]} "
-                                        f"for {data_name} ({n_cluster_data_rows}) is less than the minimum required cluster size ({min_cluster_size}). "
-                                        "This cluster will be ignored."
-                                    )
-                                    print("Info: " + msg)
+                                    removed_cluster_names.append(cluster_names[day][cluster_index])
                                 gmm_n_components_list[day] -= 1
                                 day_separated_gmm_model.n_components -= 1
                                 if n_cluster_data_rows >= 1:
@@ -3293,17 +3293,16 @@ class scEGOT:
                                 removed_clusters_num += 1
                                 continue
                             if n_cluster_data_rows <= self.pca_model.n_components_:
-                                msg = (
-                                    f"The number of cells in the cluster {cluster_index} of day {self.day_names[day]} "
-                                    f"for {data_name} ({n_cluster_data_rows}) is less than or equal to "
-                                    f"the number of PCA components ({self.pca_model.n_components_}). "
-                                    "The covariance matrix cannot be inverted accurately."
-                                )
                                 if calculate_precisions_cholesky:
+                                    msg = (
+                                        f"The number of cells in the cluster {cluster_names[day][cluster_index]} "
+                                        f"for {data_name} ({n_cluster_data_rows}) is less than or equal to "
+                                        f"the number of PCA components ({self.pca_model.n_components_}). "
+                                        "The covariance matrix cannot be inverted accurately."
+                                    )
                                     raise ValueError(msg)
-                                else:
-                                    if self.verbose:
-                                        print("Info: " + msg)
+                                elif self.verbose:
+                                    small_cluster_names.append(cluster_names[day][cluster_index])
                             cluster_sizes.append(len(cluster_data))
                             means.append(cluster_data.mean().values)
                             cov = np.cov(cluster_data.T)
@@ -3341,6 +3340,23 @@ class scEGOT:
                 separated_X_normalized.append(day_separated_X_normalized)
                 separated_X_selected.append(day_separated_X_selected)
                 separated_X_pca.append(day_separated_X_pca)
+            
+            if len(removed_cluster_names) > 0:
+                msg = (
+                    f"The following clusters in {data_name} have been removed because "
+                    f"the number of cells is less than the minimum cluster size ({min_cluster_size}): \n"
+                    f"{', '.join(removed_cluster_names)}."
+                )
+                print("Info: \n" + msg)
+
+            if self.verbose and len(small_cluster_names) > 0:
+                msg = (
+                    f"The number of cells in the following clusters in {data_name} are "
+                    f"less than or equal to the number of PCA components ({self.pca_model.n_components_}): \n"
+                    f"{', '.join(small_cluster_names)}. \n"
+                    "The covariance matrices of these clusters may not be inverted accurately."
+                )
+                print("Info: \n" + msg)
 
             separated_scegot = scEGOT(separated_X_raw, day_names=self.day_names, verbose=self.verbose)
             separated_scegot.X_normalized = separated_X_normalized
