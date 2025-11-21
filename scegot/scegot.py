@@ -3530,6 +3530,7 @@ class CellStateGraph():
         self,
         layout="normal",
         y_position="name",
+        cluster_names=None,
         node_weight_annotation=False,
         edge_weight_annotation=False,
         save=False,
@@ -3573,6 +3574,11 @@ class CellStateGraph():
                 raise TypeError("The Type of 'y_position' should be string or dict.")
             if type(y_position) == str and y_position not in ["name", "weight"]:
                 raise ValueError("The parameter 'y_position' should be 'name', 'weight' or dictionary object.")
+        
+        if cluster_names is None:
+            cluster_names = self.cluster_names
+        else:
+            cluster_names = self._validate_cluster_names(cluster_names)
 
         if save and save_path is None:
             save_path = "./simple_cell_state_graph.png"
@@ -3649,7 +3655,7 @@ class CellStateGraph():
         for node in G.nodes():
             node_day = G.nodes[node]["day"]
             node_gmm = G.nodes[node]["cluster_gmm_list"][0]
-            node_name = self.cluster_names[node_day][node_gmm]
+            node_name = cluster_names[node_day][node_gmm]
             text_ = ax.text(
                 pos[node][0],
                 pos[node][1],
@@ -3800,14 +3806,16 @@ class CellStateGraph():
             if type(y_position) == str and y_position not in ["name", "weight"]:
                 raise ValueError("The parameter 'y_position' should be 'name', 'weight' or dictionary object.")
 
-        if save and save_path is None:
-            save_path = "./cell_state_graph.png"
+        if cluster_names is None:
+            cluster_names = self.cluster_names
+        else:
+            cluster_names = self._validate_cluster_names(cluster_names)
         
         if tf_gene_names is None:
             tf_gene_names = self.scegot.gene_names
 
-        if cluster_names is None:
-            cluster_names = self.cluster_names
+        if save and save_path is None:
+            save_path = "./cell_state_graph.png"        
 
         tf_nlargest, tf_nsmallest, tf_up_genes, tf_down_genes = self._get_tf_genes_info(tf_gene_names, tf_gene_pick_num)
 
