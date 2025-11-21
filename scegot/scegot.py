@@ -1018,10 +1018,10 @@ class scEGOT:
             )
         )
         if merge_same_cluster:
-            # targetが同じclusterをmerge
+            # targetが同じedgeをmerge
             cell_state_edges["target"] = [node_ids[i] for i in cell_state_edges["target_cluster"]]
             cell_state_edges = cell_state_edges.groupby(["source_cluster", "source_day", "target", "target_day"],as_index=False).agg({"edge_colors": "min", "edge_weights": "sum"})
-            # sourceが同じclusterをmerge
+            # sourceが同じedgeをmerge
             cell_state_edges["source"] = [node_ids[i] for i in cell_state_edges["source_cluster"]]
             cell_state_edges = cell_state_edges.groupby(["source", "source_day", "target", "target_day"], as_index=False).apply(self._calculate_source_merged_edge_weights)
             cell_state_edges["edge_colors"] = cell_state_edges["edge_colors"].astype(int)
@@ -1064,7 +1064,7 @@ class scEGOT:
             merge_method="pattern",
             threshold=0.05,
             n_clusters_list=None,
-            **kwargs
+            **kmeans_kwargs
         ):
         if not n_merge_iter in list(range(len(self.day_names) - 1)):
             raise ValueError("The parameter 'n_merge_iter' should be an integer in the range of the number of days.")
@@ -1131,7 +1131,7 @@ class scEGOT:
                 )
                 
                 # K-means法でクラスタリング
-                kmeans_model = KMeans(n_clusters=n_clusters_list[i], **kwargs).fit(source_target_df)
+                kmeans_model = KMeans(n_clusters=n_clusters_list[i], **kmeans_kwargs).fit(source_target_df)
                 node_id_base = min(source_node_ids)
                 new_source_cluster_ids = []
                 for group_num in kmeans_model.labels_:
@@ -1171,9 +1171,9 @@ class scEGOT:
 
     def make_cell_state_graph(
         self,
-        threshold=0.05,
-        mode="pca",
         cluster_names=None,
+        mode="pca",
+        threshold=0.05,
         merge_same_clusters=False,
         x_reverse=False,
         y_reverse=False,
@@ -1303,7 +1303,7 @@ class scEGOT:
             scegot=self,
             threshold=threshold,
             mode=mode,
-            cluster_names=cluster_names,
+            cluster_names=copy.deepcopy(cluster_names),
             node_ids=node_ids,
             merge_same_clusters=merge_same_clusters,
             x_reverse=x_reverse,
@@ -3305,7 +3305,8 @@ class scEGOT:
                                     small_cluster_names.append(cluster_names[day][cluster_index])
                             cluster_sizes.append(len(cluster_data))
                             means.append(cluster_data.mean().values)
-                            cov = np.cov(cluster_data.T)
+                            # cov = np.cov(cluster_data.T)
+                            cov = day_concated_gmm_model.covariances_[cluster_index]
                             covariances.append(cov)
                             if calculate_precisions_cholesky:
                                 cov_cholesky = np.linalg.cholesky(cov)
