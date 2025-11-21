@@ -3217,14 +3217,23 @@ class scEGOT:
         self.gmm_labels_modified = gmm_labels_modified
         self.gmm_label_converter = converter
 
-    def create_separated_data(self, data_names, min_cluster_size=2, return_cluster_names=False, cluster_names=None, calculate_precisions_cholesky=False):
+    def create_separated_data(
+            self,
+            data_names,
+            min_cluster_size=2,
+            return_cluster_names=False,
+            cluster_names=None,
+            use_original_covariances=False,
+            calculate_precisions_cholesky=False
+        ):
         separated_scegot_dict = {}
         separated_cluster_names_dict = {}
         umap_flag = self.X_umap is not None and self.umap_model is not None
         gmm_model_flag = self.gmm_models is not None
         gmm_label_flag = self.gmm_labels is not None
         return_cluster_names = gmm_label_flag and return_cluster_names
-        calculate_precisions_cholesky = gmm_label_flag and calculate_precisions_cholesky
+        calculate_precisions_cholesky = (not use_original_covariances) and calculate_precisions_cholesky
+        return_precisions_cholesky = calculate_precisions_cholesky or use_original_covariances
 
         if return_cluster_names and cluster_names is None:
             cluster_names = self.generate_cluster_names_with_day()
@@ -3264,7 +3273,7 @@ class scEGOT:
                         cluster_sizes = []
                         means = []
                         covariances = []
-                        if calculate_precisions_cholesky:
+                        if return_precisions_cholesky:
                             precisions = []
                             precisions_cholesky = []
                         removed_clusters_num = 0
@@ -3301,40 +3310,38 @@ class scEGOT:
                                         "The covariance matrix cannot be inverted accurately."
                                     )
                                     raise ValueError(msg)
-                                elif self.verbose:
+                                elif self.verbose and (not use_original_covariances):
                                     small_cluster_names.append(cluster_names[day][cluster_index])
                             cluster_sizes.append(len(cluster_data))
                             means.append(cluster_data.mean().values)
-                            # cov = np.cov(cluster_data.T)
-                            cov = day_concated_gmm_model.covariances_[cluster_index]
-                            covariances.append(cov)
-                            if calculate_precisions_cholesky:
-                                cov_cholesky = np.linalg.cholesky(cov)
-                                prec_cholesky = np.linalg.solve(cov_cholesky, np.eye(cov.shape[0], dtype=cov.dtype)).T
-                                precisions.append(np.dot(prec_cholesky, prec_cholesky.T))
-                                precisions_cholesky.append(prec_cholesky)
+                            if use_original_covariances:
+                                covariances.append(day_concated_gmm_model.covariances_[cluster_index])
+                                precisions.append(day_concated_gmm_model.precisions_[cluster_index])
+                                precisions_cholesky.append(day_concated_gmm_model.precisions_cholesky_[cluster_index])
+                            else: 
+                                cov = np.cov(cluster_data.T)
+                                covariances.append(cov)
+                                if calculate_precisions_cholesky:
+                                    cov_cholesky = np.linalg.cholesky(cov)
+                                    prec_cholesky = np.linalg.solve(cov_cholesky, np.eye(cov.shape[0], dtype=cov.dtype)).T
+                                    precisions.append(np.dot(prec_cholesky, prec_cholesky.T))
+                                    precisions_cholesky.append(prec_cholesky)
                         separated_gmm_labels.append(day_separated_gmm_label)
 
                         day_separated_gmm_model.weights_ = np.array(cluster_sizes) / len(day_separated_X_raw)
                         day_separated_gmm_model.means_ = np.array(means)
                         day_separated_gmm_model.covariances_ = np.array(covariances)
+                        if return_precisions_cholesky:
+                            day_separated_gmm_model.precisions_ = np.array(precisions)
+                            day_separated_gmm_model.precisions_cholesky_ = np.array(precisions_cholesky)
                         day_separated_gmm_model.converged_ = day_concated_gmm_model.converged_
                         day_separated_gmm_model.lower_bound_ = day_concated_gmm_model.lower_bound_
                         day_separated_gmm_model.lower_bounds_ = day_concated_gmm_model.lower_bounds_
                         day_separated_gmm_model.n_features_in_ = day_concated_gmm_model.n_features_in_
                         day_separated_gmm_model.n_iter_ = day_concated_gmm_model.n_iter_
-                        if calculate_precisions_cholesky:
-                            day_separated_gmm_model.precisions_ = np.array(precisions)
-                            day_separated_gmm_model.precisions_cholesky_ = np.array(precisions_cholesky)
 
                         separated_gmm_models.append(day_separated_gmm_model)
                     else:
-                    #     day_separated_gmm_model = GaussianMixture(**day_concated_gmm_model.get_params())
-                    #     day_separated_gmm_model.set_params(
-                    #         weights_init = day_concated_gmm_model.weights_,
-                    #         means_init = day_concated_gmm_model.means_,
-                    #         precisions_init = day_concated_gmm_model.precisions_
-                    #     )
                         separated_gmm_models.append(sklearn_clone(day_concated_gmm_model))
                 
                 separated_X_raw.append(day_separated_X_raw)
@@ -3350,7 +3357,7 @@ class scEGOT:
                 )
                 print("Info: \n" + msg)
 
-            if self.verbose and len(small_cluster_names) > 0:
+            if self.verbose and (not use_original_covariances) and len(small_cluster_names) > 0:
                 msg = (
                     f"The number of cells in the following clusters in {data_name} are "
                     f"less than or equal to the number of PCA components ({self.pca_model.n_components_}): \n"
