@@ -3471,13 +3471,21 @@ class CellStateGraph():
         new_cluster_names = self._validate_cluster_names(cluster_names)
         self.cluster_names = new_cluster_names
         return new_cluster_names
-
-    def update_cluster_names(self, day, cluster_names_map):
-        cluster_names = copy.deepcopy(self.cluster_names)
+    
+    def _day_update_cluster_names(self, cluster_names, cluster_names_map, day):
         for cluster_num in range(self.gmm_n_components_list[day]):
             old_name = cluster_names[day][cluster_num]
             if old_name in cluster_names_map.keys():
                 cluster_names[day][cluster_num] = cluster_names_map[old_name]
+        return cluster_names
+
+    def update_cluster_names(self, cluster_names_map, day=None):
+        cluster_names = copy.deepcopy(self.cluster_names)
+        if day is None:
+            for day in range(self.day_num):
+                cluster_names = self._day_update_cluster_names(cluster_names, cluster_names_map, day)
+        else:
+            cluster_names = self._day_update_cluster_names(cluster_names, cluster_names_map, day)
         new_cluster_names = self._validate_cluster_names(cluster_names)
         self.cluster_names = new_cluster_names
         return new_cluster_names
