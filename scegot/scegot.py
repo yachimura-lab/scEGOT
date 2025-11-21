@@ -3423,6 +3423,7 @@ class CellStateGraph():
         self.y_reverse = y_reverse
         self.require_parent = require_parent
         self.day_num = len(scegot.day_names)
+        self.gmm_n_components_list = scegot.gmm_n_components_list
         
     def reverse_graph(self, x=False, y=False):
         if x:
@@ -3440,14 +3441,13 @@ class CellStateGraph():
         day_num = self.day_num
         if len(cluster_names) != day_num:
             raise ValueError(f"The length of 'cluster_names' should be equal to the number of days ({day_num}).")
-        gmm_n_components_list = self.scegot.gmm_n_components_list
         for day in range(day_num):
             if type(cluster_names[day]) != list:
                 raise TypeError(f"The element located at index {day} in 'cluster_names' should be a list.")
-            if len(cluster_names[day]) != gmm_n_components_list[day]:
+            if len(cluster_names[day]) != self.gmm_n_components_list[day]:
                 raise ValueError(
                     f"The element located at index {day} in 'cluster_names' must contain the same number of elements as "
-                    f"the number of clusters of the {self.scegot.day_names[day]} (= {gmm_n_components_list[day]}), \n"
+                    f"the number of clusters of the {self.scegot.day_names[day]} (= {self.gmm_n_components_list[day]}), \n"
                     f"The actual length of the element at index {day} in 'cluster_names' was {len(cluster_names[day])}."
                 )
         if self.merge_same_clusters:
@@ -3468,8 +3468,19 @@ class CellStateGraph():
         return cluster_names
     
     def set_cluster_names(self, cluster_names):
-        cluster_names = self._validate_cluster_names(cluster_names)
-        self.cluster_names = cluster_names
+        new_cluster_names = self._validate_cluster_names(cluster_names)
+        self.cluster_names = new_cluster_names
+        return new_cluster_names
+
+    def update_cluster_names(self, day, cluster_names_map):
+        cluster_names = copy.deepcopy(self.cluster_names)
+        for cluster_num in range(self.gmm_n_components_list[day]):
+            old_name = cluster_names[day][cluster_num]
+            if old_name in cluster_names_map.keys():
+                cluster_names[day][cluster_num] = cluster_names_map[old_name]
+        new_cluster_names = self._validate_cluster_names(cluster_names)
+        self.cluster_names = new_cluster_names
+        return new_cluster_names
 
     def _get_day_node_dict(self):
         day_dict = dict(self.G.nodes(data="day"))
