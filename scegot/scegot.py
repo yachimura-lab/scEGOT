@@ -3073,7 +3073,7 @@ class scEGOT:
         self,
         gmm_models,
         reg=0.01,
-        numItermax=int(1e10),
+        numItermax=int(1e3),
         method="sinkhorn_epsilon_scaling",
         tau=1e8,
         stopThr=1e-9,
@@ -3099,7 +3099,7 @@ class scEGOT:
         self,
         gmm_models,
         reg=0.01,
-        numItermax=int(1e10),
+        numItermax=int(1e3),
         method="sinkhorn_epsilon_scaling",
         tau=1e8,
         stopThr=1e-9,
@@ -3224,7 +3224,8 @@ class scEGOT:
             return_cluster_names=False,
             cluster_names=None,
             use_original_covariances=False,
-            calculate_precisions_cholesky=False
+            calculate_precisions_cholesky=False,
+            use_original_precisions_cholesky=False,
         ):
         separated_scegot_dict = {}
         separated_cluster_names_dict = {}
@@ -3232,8 +3233,7 @@ class scEGOT:
         gmm_model_flag = self.gmm_models is not None
         gmm_label_flag = self.gmm_labels is not None
         return_cluster_names = gmm_label_flag and return_cluster_names
-        calculate_precisions_cholesky = (not use_original_covariances) and calculate_precisions_cholesky
-        return_precisions_cholesky = calculate_precisions_cholesky or use_original_covariances
+        return_precisions_cholesky = calculate_precisions_cholesky or use_original_precisions_cholesky
 
         if return_cluster_names and cluster_names is None:
             cluster_names = self.generate_cluster_names_with_day()
@@ -3301,8 +3301,9 @@ class scEGOT:
                                     del separated_cluster_names[day][cluster_index - removed_clusters_num]
                                 removed_clusters_num += 1
                                 continue
+
                             if n_cluster_data_rows <= self.pca_model.n_components_:
-                                if calculate_precisions_cholesky:
+                                if (not use_original_covariances) and calculate_precisions_cholesky and (not use_original_precisions_cholesky):
                                     msg = (
                                         f"The number of cells in the cluster {cluster_names[day][cluster_index]} "
                                         f"for {data_name} ({n_cluster_data_rows}) is less than or equal to "
@@ -3312,20 +3313,33 @@ class scEGOT:
                                     raise ValueError(msg)
                                 elif self.verbose and (not use_original_covariances):
                                     small_cluster_names.append(cluster_names[day][cluster_index])
+
                             cluster_sizes.append(len(cluster_data))
                             means.append(cluster_data.mean().values)
                             if use_original_covariances:
-                                covariances.append(day_concated_gmm_model.covariances_[cluster_index])
-                                precisions.append(day_concated_gmm_model.precisions_[cluster_index])
-                                precisions_cholesky.append(day_concated_gmm_model.precisions_cholesky_[cluster_index])
-                            else: 
+                                cov = day_concated_gmm_model.covariances_[cluster_index]
+                            else:
                                 cov = np.cov(cluster_data.T)
-                                covariances.append(cov)
+                            covariances.append(cov)
+
+                            if return_precisions_cholesky:
                                 if calculate_precisions_cholesky:
-                                    cov_cholesky = np.linalg.cholesky(cov)
-                                    prec_cholesky = np.linalg.solve(cov_cholesky, np.eye(cov.shape[0], dtype=cov.dtype)).T
-                                    precisions.append(np.dot(prec_cholesky, prec_cholesky.T))
-                                    precisions_cholesky.append(prec_cholesky)
+                                    if (n_cluster_data_rows <= self.pca_model.n_components_) and (not use_original_covariances):
+                                        if use_original_precisions_cholesky:
+                                            prec = day_concated_gmm_model.precisions_[cluster_index]
+                                            prec_cholesky = day_concated_gmm_model.precisions_cholesky_[cluster_index]
+                                        else:
+                                            raise ValueError("Cannot calculate precisions for small clusters.")
+                                    else:
+                                        cov_cholesky = np.linalg.cholesky(cov)
+                                        prec_cholesky = np.linalg.solve(cov_cholesky, np.eye(cov.shape[0], dtype=cov.dtype)).T
+                                        prec = np.dot(prec_cholesky, prec_cholesky.T)
+                                else:
+                                    prec = day_concated_gmm_model.precisions_[cluster_index]
+                                    prec_cholesky = day_concated_gmm_model.precisions_cholesky_[cluster_index]
+                                precisions.append(prec)
+                                precisions_cholesky.append(prec_cholesky)
+                                
                         separated_gmm_labels.append(day_separated_gmm_label)
 
                         day_separated_gmm_model.weights_ = np.array(cluster_sizes) / len(day_separated_X_raw)
