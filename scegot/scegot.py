@@ -1057,7 +1057,7 @@ class scEGOT:
         node_ids = [cluster_id_dict_list[day][name] for day, name in zip(cluster_days, cluster_names_flattened)]
         return node_ids
 
-    def merge_clusters_by_pathway(
+    def merge_cluster_names_by_pathway(
             self,
             last_day_cluster_names,
             n_merge_iter=1,
