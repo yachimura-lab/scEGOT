@@ -3224,8 +3224,8 @@ class scEGOT:
             return_cluster_names=False,
             cluster_names=None,
             use_original_covariances=False,
-            calculate_precisions_cholesky=False,
-            use_original_precisions_cholesky=False,
+            use_original_precisions=False,
+            allow_using_original_precisions=False,
         ):
         separated_scegot_dict = {}
         separated_cluster_names_dict = {}
@@ -3233,7 +3233,6 @@ class scEGOT:
         gmm_model_flag = self.gmm_models is not None
         gmm_label_flag = self.gmm_labels is not None
         return_cluster_names = gmm_label_flag and return_cluster_names
-        return_precisions_cholesky = calculate_precisions_cholesky or use_original_precisions_cholesky
 
         if return_cluster_names and cluster_names is None:
             cluster_names = self.generate_cluster_names_with_day()
@@ -3273,9 +3272,8 @@ class scEGOT:
                         cluster_sizes = []
                         means = []
                         covariances = []
-                        if return_precisions_cholesky:
-                            precisions = []
-                            precisions_cholesky = []
+                        precisions = []
+                        precisions_cholesky = []
                         removed_clusters_num = 0
                         for cluster_index in range(day_separated_gmm_model.n_components):
                             cluster_data = day_separated_X_pca[day_separated_gmm_label == (cluster_index - removed_clusters_num)]
@@ -3303,7 +3301,7 @@ class scEGOT:
                                 continue
 
                             if n_cluster_data_rows <= self.pca_model.n_components_:
-                                if (not use_original_covariances) and calculate_precisions_cholesky and (not use_original_precisions_cholesky):
+                                if (not use_original_covariances) and (not use_original_precisions) and (not allow_using_original_precisions):
                                     msg = (
                                         f"The number of cells in the cluster {cluster_names[day][cluster_index]} "
                                         f"for {data_name} ({n_cluster_data_rows}) is less than or equal to "
@@ -3322,32 +3320,31 @@ class scEGOT:
                                 cov = np.cov(cluster_data.T)
                             covariances.append(cov)
 
-                            if return_precisions_cholesky:
-                                if calculate_precisions_cholesky:
-                                    if (n_cluster_data_rows <= self.pca_model.n_components_) and (not use_original_covariances):
-                                        if use_original_precisions_cholesky:
-                                            prec = day_concated_gmm_model.precisions_[cluster_index]
-                                            prec_cholesky = day_concated_gmm_model.precisions_cholesky_[cluster_index]
-                                        else:
-                                            raise ValueError("Cannot calculate precisions for small clusters.")
+                            if use_original_precisions or use_original_covariances:
+                                prec = day_concated_gmm_model.precisions_[cluster_index]
+                                prec_cholesky = day_concated_gmm_model.precisions_cholesky_[cluster_index]
+                            else:
+                                if (n_cluster_data_rows <= self.pca_model.n_components_) and (not use_original_covariances):
+                                    if allow_using_original_precisions:
+                                        prec = day_concated_gmm_model.precisions_[cluster_index]
+                                        prec_cholesky = day_concated_gmm_model.precisions_cholesky_[cluster_index]
                                     else:
-                                        cov_cholesky = np.linalg.cholesky(cov)
-                                        prec_cholesky = np.linalg.solve(cov_cholesky, np.eye(cov.shape[0], dtype=cov.dtype)).T
-                                        prec = np.dot(prec_cholesky, prec_cholesky.T)
+                                        raise ValueError("Cannot calculate precisions for small clusters.")
                                 else:
-                                    prec = day_concated_gmm_model.precisions_[cluster_index]
-                                    prec_cholesky = day_concated_gmm_model.precisions_cholesky_[cluster_index]
-                                precisions.append(prec)
-                                precisions_cholesky.append(prec_cholesky)
+                                    cov_cholesky = np.linalg.cholesky(cov)
+                                    prec_cholesky = np.linalg.solve(cov_cholesky, np.eye(cov.shape[0], dtype=cov.dtype)).T
+                                    prec = np.dot(prec_cholesky, prec_cholesky.T)
+                        
+                            precisions.append(prec)
+                            precisions_cholesky.append(prec_cholesky)
                                 
                         separated_gmm_labels.append(day_separated_gmm_label)
 
                         day_separated_gmm_model.weights_ = np.array(cluster_sizes) / len(day_separated_X_raw)
                         day_separated_gmm_model.means_ = np.array(means)
                         day_separated_gmm_model.covariances_ = np.array(covariances)
-                        if return_precisions_cholesky:
-                            day_separated_gmm_model.precisions_ = np.array(precisions)
-                            day_separated_gmm_model.precisions_cholesky_ = np.array(precisions_cholesky)
+                        day_separated_gmm_model.precisions_ = np.array(precisions)
+                        day_separated_gmm_model.precisions_cholesky_ = np.array(precisions_cholesky)
                         day_separated_gmm_model.converged_ = day_concated_gmm_model.converged_
                         day_separated_gmm_model.lower_bound_ = day_concated_gmm_model.lower_bound_
                         day_separated_gmm_model.lower_bounds_ = day_concated_gmm_model.lower_bounds_
@@ -3385,13 +3382,13 @@ class scEGOT:
             separated_scegot.X_selected = separated_X_selected
             separated_scegot.X_pca = separated_X_pca
             
-            separated_scegot.pca_model = self.pca_model
-            separated_scegot.gene_names = self.gene_names
-            separated_scegot.gmm_label_converter = self.gmm_label_converter
+            separated_scegot.pca_model = sklearn_clone(self.pca_model)
+            separated_scegot.gene_names = self.gene_names.copy()
+            separated_scegot.gmm_label_converter = copy.deepcopy(self.gmm_label_converter)
 
             if umap_flag:
                 separated_scegot.X_umap = separated_X_umap
-                separated_scegot.umap_model = self.umap_model
+                separated_scegot.umap_model = sklearn_clone(self.umap_model)
 
             if gmm_model_flag:
                 separated_scegot.gmm_n_components_list = gmm_n_components_list
