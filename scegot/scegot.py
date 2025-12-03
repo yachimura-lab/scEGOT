@@ -3223,7 +3223,7 @@ class scEGOT:
             min_cluster_size=2,
             return_cluster_names=False,
             cluster_names=None,
-            original_covariance_weight = 0
+            original_covariances_weight = 0
         ):
         separated_scegot_dict = {}
         separated_cluster_names_dict = {}
@@ -3297,7 +3297,7 @@ class scEGOT:
                                 removed_clusters_num += 1
                                 continue
 
-                            if n_cluster_data_rows <= self.pca_model.n_components_ and original_covariance_weight == 0:
+                            if n_cluster_data_rows <= self.pca_model.n_components_ and original_covariances_weight == 0:
                                     msg = (
                                         f"The number of cells in the cluster {cluster_names[day][cluster_index]} "
                                         f"for {data_name} ({n_cluster_data_rows}) is less than or equal to "
@@ -3310,7 +3310,7 @@ class scEGOT:
                             means.append(cluster_data.mean().values)
                             
                             original_cov = day_concated_gmm_model.covariances_[cluster_index]
-                            cov = original_cov * original_covariance_weight + np.cov(cluster_data.T) * (1 - original_covariance_weight)
+                            cov = original_cov * original_covariances_weight + np.cov(cluster_data.T) * (1 - original_covariances_weight)
                             cov_cholesky = np.linalg.cholesky(cov)
                             prec_cholesky = np.linalg.solve(cov_cholesky, np.eye(cov.shape[0], dtype=cov.dtype)).T
                             prec = np.dot(prec_cholesky, prec_cholesky.T)
