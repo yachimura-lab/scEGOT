@@ -3223,9 +3223,7 @@ class scEGOT:
             min_cluster_size=2,
             return_cluster_names=False,
             cluster_names=None,
-            use_original_covariances=False,
-            use_original_precisions=False,
-            allow_using_original_precisions=False,
+            original_covariance_weight = 0
         ):
         separated_scegot_dict = {}
         separated_cluster_names_dict = {}
@@ -3249,7 +3247,6 @@ class scEGOT:
             if gmm_label_flag:
                 gmm_n_components_list = self.gmm_n_components_list.copy()
                 removed_cluster_names = []
-                small_cluster_names = []
             if return_cluster_names:
                 separated_cluster_names = copy.deepcopy(cluster_names) 
 
@@ -3300,8 +3297,7 @@ class scEGOT:
                                 removed_clusters_num += 1
                                 continue
 
-                            if n_cluster_data_rows <= self.pca_model.n_components_:
-                                if (not use_original_covariances) and (not use_original_precisions) and (not allow_using_original_precisions):
+                            if n_cluster_data_rows <= self.pca_model.n_components_ and original_covariance_weight == 0:
                                     msg = (
                                         f"The number of cells in the cluster {cluster_names[day][cluster_index]} "
                                         f"for {data_name} ({n_cluster_data_rows}) is less than or equal to "
@@ -3309,32 +3305,17 @@ class scEGOT:
                                         "The covariance matrix cannot be inverted accurately."
                                     )
                                     raise ValueError(msg)
-                                elif self.verbose and (not use_original_covariances):
-                                    small_cluster_names.append(cluster_names[day][cluster_index])
-
+                                
                             cluster_sizes.append(len(cluster_data))
                             means.append(cluster_data.mean().values)
-                            if use_original_covariances:
-                                cov = day_concated_gmm_model.covariances_[cluster_index]
-                            else:
-                                cov = np.cov(cluster_data.T)
-                            covariances.append(cov)
+                            
+                            original_cov = day_concated_gmm_model.covariances_[cluster_index]
+                            cov = original_cov * original_covariance_weight + np.cov(cluster_data.T) * (1 - original_covariance_weight)
+                            cov_cholesky = np.linalg.cholesky(cov)
+                            prec_cholesky = np.linalg.solve(cov_cholesky, np.eye(cov.shape[0], dtype=cov.dtype)).T
+                            prec = np.dot(prec_cholesky, prec_cholesky.T)
 
-                            if use_original_precisions or use_original_covariances:
-                                prec = day_concated_gmm_model.precisions_[cluster_index]
-                                prec_cholesky = day_concated_gmm_model.precisions_cholesky_[cluster_index]
-                            else:
-                                if (n_cluster_data_rows <= self.pca_model.n_components_) and (not use_original_covariances):
-                                    if allow_using_original_precisions:
-                                        prec = day_concated_gmm_model.precisions_[cluster_index]
-                                        prec_cholesky = day_concated_gmm_model.precisions_cholesky_[cluster_index]
-                                    else:
-                                        raise ValueError("Cannot calculate precisions for small clusters.")
-                                else:
-                                    cov_cholesky = np.linalg.cholesky(cov)
-                                    prec_cholesky = np.linalg.solve(cov_cholesky, np.eye(cov.shape[0], dtype=cov.dtype)).T
-                                    prec = np.dot(prec_cholesky, prec_cholesky.T)
-                        
+                            covariances.append(cov)
                             precisions.append(prec)
                             precisions_cholesky.append(prec_cholesky)
                                 
@@ -3368,27 +3349,18 @@ class scEGOT:
                 )
                 print("Info: \n" + msg)
 
-            if self.verbose and (not use_original_covariances) and len(small_cluster_names) > 0:
-                msg = (
-                    f"The number of cells in the following clusters in {data_name} are "
-                    f"less than or equal to the number of PCA components ({self.pca_model.n_components_}): \n"
-                    f"{', '.join(small_cluster_names)}. \n"
-                    "The covariance matrices of these clusters may not be inverted accurately."
-                )
-                print("Info: \n" + msg)
-
             separated_scegot = scEGOT(separated_X_raw, day_names=self.day_names, verbose=self.verbose)
             separated_scegot.X_normalized = separated_X_normalized
             separated_scegot.X_selected = separated_X_selected
             separated_scegot.X_pca = separated_X_pca
             
-            separated_scegot.pca_model = sklearn_clone(self.pca_model)
+            separated_scegot.pca_model = copy.deepcopy(self.pca_model)
             separated_scegot.gene_names = self.gene_names.copy()
             separated_scegot.gmm_label_converter = copy.deepcopy(self.gmm_label_converter)
 
             if umap_flag:
                 separated_scegot.X_umap = separated_X_umap
-                separated_scegot.umap_model = sklearn_clone(self.umap_model)
+                separated_scegot.umap_model = copy.deepcopy(self.umap_model)
 
             if gmm_model_flag:
                 separated_scegot.gmm_n_components_list = gmm_n_components_list
