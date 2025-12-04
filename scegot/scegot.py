@@ -1020,10 +1020,14 @@ class scEGOT:
         if merge_clusters_by_name:
             # targetが同じedgeをmerge
             cell_state_edges["target"] = [node_ids[i] for i in cell_state_edges["target_cluster"]]
-            cell_state_edges = cell_state_edges.groupby(["source_cluster", "source_day", "target", "target_day"],as_index=False).agg({"edge_colors": "min", "edge_weights": "sum"})
+            cell_state_edges = cell_state_edges.groupby(
+                ["source_cluster", "source_day", "target", "target_day"],as_index=False
+            ).agg({"edge_colors": "min", "edge_weights": "sum"})
             # sourceが同じedgeをmerge
             cell_state_edges["source"] = [node_ids[i] for i in cell_state_edges["source_cluster"]]
-            cell_state_edges = cell_state_edges.groupby(["source", "source_day", "target", "target_day"], as_index=False).apply(self._calculate_source_merged_edge_weights)
+            cell_state_edges = cell_state_edges.groupby(
+                ["source", "source_day", "target", "target_day"], as_index=False
+            ).apply(self._calculate_source_merged_edge_weights)
             cell_state_edges["edge_colors"] = cell_state_edges["edge_colors"].astype(int)
         else:
             cell_state_edges["source"] = [node_ids[i] for i in cell_state_edges["source_cluster"]]
@@ -1274,9 +1278,15 @@ class scEGOT:
 
         if cluster_names:
             if (len(cluster_names) != len(self.day_names)):
-                raise ValueError("Size of the first dimension of 'cluster_names' should be the same as the number of days.")
+                raise ValueError(
+                    "Size of the first dimension of 'cluster_names' should be the same "
+                    "as the number of days."
+                )
             if not [len(day_cluster_names) for day_cluster_names in cluster_names] == self.gmm_n_components_list:
-                raise ValueError("Size of the second dimension of 'cluster_names' should be the same as the number of GMM components in each day.")
+                raise ValueError(
+                    "Size of the second dimension of 'cluster_names' should be the same "
+                    "as the number of GMM components in each day."
+                )
         
         if cluster_names is None:
             cluster_names = self.generate_cluster_names_with_day()
@@ -1322,7 +1332,9 @@ class scEGOT:
 
         if self.gmm_label_converter is None:
             cluster_gmms = list(
-                itertools.chain.from_iterable([list(range(n_components)) for n_components in self.gmm_n_components_list])
+                itertools.chain.from_iterable(
+                    [list(range(n_components)) for n_components in self.gmm_n_components_list]
+                )
             )
         else:
             cluster_gmms = list(
@@ -1335,7 +1347,8 @@ class scEGOT:
         else:
             merged_node_info = node_info
 
-        merged_node_info["cluster_weight"] = merged_node_info.groupby("day")["weight"].rank(ascending=False).astype(int) - 1
+        cluster_weights = merged_node_info.groupby("day")["weight"].rank(ascending=False).astype(int) - 1
+        merged_node_info["cluster_weight"] = cluster_weights
 
         for row in merged_node_info.itertuples():
             G.add_node(
@@ -3711,7 +3724,9 @@ class CellStateGraph():
             if type(y_position) not in [str, dict]:
                 raise TypeError("The Type of 'y_position' should be string or dict.")
             if type(y_position) == str and y_position not in ["name", "weight"]:
-                raise ValueError("The parameter 'y_position' should be 'name', 'weight' or dictionary object.")
+                raise ValueError(
+                    "The parameter 'y_position' should be 'name', 'weight' or dictionary object."
+                )
         
         if cluster_names is None:
             cluster_names = self.cluster_names
@@ -4075,8 +4090,16 @@ class CellStateGraph():
             node_name = cluster_names[node_day][node_gmm]
             node_cluster_gmm_list = G.nodes[node]["cluster_gmm_list"]
             node_names.append(node_name)
-            node_names_with_gmm_numbers.append(f"<b>{node_name}</b><br>weight = {G.nodes[node]['weight']:.4f}<br>GMM cluster numbers = {', '.join(map(str, node_cluster_gmm_list))}")
-            node_gene_text = f"<b>{node_name}</b><br>largest_genes: {', '.join(tf_nlargest.T[node].values)}<br>smallest_genes: {', '.join(tf_nsmallest.T[node].values)}"
+            node_names_with_gmm_numbers.append(
+                f"<b>{node_name}</b><br>"
+                f"weight = {G.nodes[node]['weight']:.4f}<br>"
+                f"GMM cluster numbers = {', '.join(map(str, node_cluster_gmm_list))}"
+            )
+            node_gene_text = (
+                f"<b>{node_name}</b><br>"
+                f"largest_genes: {', '.join(tf_nlargest.T[node].values)}<br>"
+                f"smallest_genes: {', '.join(tf_nsmallest.T[node].values)}"
+            )
             node_gene_texts.append(node_gene_text)
 
         node_trace = go.Scatter(
