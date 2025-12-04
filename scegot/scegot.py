@@ -883,7 +883,7 @@ class scEGOT:
         save : bool, optional
             If True, save the output animation, by default False
 
-        save_path : _type_, optional
+        save_path : str, optional
             Path to save the output animation, by default None
             If None, the animation will be saved as './cell_state_video.gif'
         """
@@ -1058,16 +1058,60 @@ class scEGOT:
         return node_ids
 
     def merge_cluster_names_by_pathway(
-            self,
-            last_day_cluster_names,
-            n_merge_iter=1,
-            merge_method="pattern",
-            threshold=0.05,
-            n_clusters_list=None,
-            **kmeans_kwargs
-        ):
-        if not n_merge_iter in list(range(len(self.day_names) - 1)):
-            raise ValueError("The parameter 'n_merge_iter' should be an integer in the range of the number of days.")
+        self,
+        last_day_cluster_names,
+        n_merge_iter=1,
+        merge_method="pattern",
+        threshold=0.05,
+        n_clusters_list=None,
+        **kmeans_kwargs
+    ):
+        """Merge cluster names based on cell state graph pathways.
+
+        Parameters
+        ----------
+        last_day_cluster_names : list of str
+            Cluster names for the last day.
+            Clusters with the same name will be merged.
+            The length of the list should be equal to the number of clusters in the last day.
+        
+        n_merge_iter : int, optional
+            Number of preceding days to trace back and merge cluster names, starting from the last day, by default 1.
+            Must be an integer in the range from 1 to (the number of days - 1).
+
+        merge_method : {'pattern', 'kmeans'}, optional
+            Method to merge nodes, by default "pattern".
+            - 'pattern': Merges nodes that share the same connection pattern to the next day's nodes.
+            - 'kmeans': Merges nodes based on the edge weights to the next day's nodes using K-Means.
+        
+        threshold : float, optional
+            Threshold to filter edges, by default 0.05.
+            Edges with weights below this value are ignored.
+            This parameter is used only when `merge_method` is 'pattern'.
+
+        n_clusters_list : list of int, optional
+            List specifying the number of merged clusters for each day when `merge_method` is 'kmeans'.
+            The length of the list must equal to `n_merge_iter`.
+            If None, defaults to the minimum of (original cluster count, 4) for each day.
+
+        **kmeans_kwargs : dict
+            Arbitrary keyword arguments passed to sklearn.cluster.KMeans when merge_method is 'kmeans'.
+
+        Returns
+        -------
+        list of list of str
+            Merged cluster names for each day.
+
+        Raises
+        ------
+        ValueError
+            When `n_merge_iter` is not an integer within the valid range (1 to number of days - 1).
+        ValueError
+            When `merge_method` is not one of 'pattern' or 'kmeans'.
+        """
+
+        if not n_merge_iter in list(range(1, len(self.day_names))):
+            raise ValueError(f"The parameter 'n_merge_iter' should be an integer from 1 to {len(self.day_names) - 1}.")
 
         if not merge_method in ["pattern", "kmeans"]:
             raise ValueError("The parameter 'merge_method' should be 'pattern' or 'kmeans'")
@@ -1183,20 +1227,22 @@ class scEGOT:
 
         Parameters
         ----------
-        threshold : float, optional
-            Threshold to filter edges, by default 0.05
-            Only edges with edge_weights greater than this threshold will be included.
+        cluster_names : 2D list of str, optional
+            Cluster names for each GMM cluster in each day.
+            1st dimension is the number of days, 2nd dimension is the number of gmm components
+            in each day.
+            if merge_same_clusters is True, clusters with the same name will be merged.
+            Can be generaged by 'generate_cluster_names' method.
             
         mode : {'pca', 'umap'}, optional
             The space to build the cell state graph, by default "pca"
-            
-        cluster_names : 2D list of str
-            1st dimension is the number of days, 2nd dimension is the number of gmm components
-            in each day.
-            Can be generaged by 'generate_cluster_names' method.
+
+        threshold : float, optional
+            Threshold to filter edges, by default 0.05
+            Only edges with edge_weights greater than this threshold will be included.
 
         merge_same_clusters : bool, optional
-            If True, merge nodes with the same cluster names in different days, by default False
+            If True, clusters with the same name will be merged, by default False
         
         x_reverse : bool, optional
             If True, reverse the X axis direction, by default False
@@ -1205,7 +1251,8 @@ class scEGOT:
             If True, reverse the Y axis direction, by default False
         
         require_parent : bool, optional
-            If True, ensure that each cluster in the target day has at least one incoming edge from the source day, by default False
+            If True, ensure that each cluster in the target day has at least one incoming
+            edge from the source day, by default False
         
         Returns
         -------
@@ -1215,9 +1262,11 @@ class scEGOT:
         Raises
         ------
         ValueError
-            When 'mode' is not 'pca' or 'umap'.
-        ValueError
-            When the length of 'cluster_names' is not the same as the number of days.
+            This error is raised in the following cases:
+            - When 'mode' is not 'pca' or 'umap'.
+            - When the length of 'cluster_names' is not the same as the number of days.
+            - When the length of the second dimension of 'cluster_names' is not the same
+              as the number of GMM components in each day.
         """
 
         if mode not in ["pca", "umap"]:
@@ -1463,7 +1512,7 @@ class scEGOT:
         save : bool, optional
             If True, save the output image, by default False
 
-        save_path : _type_, optional
+        save_path : str, optional
             Path to save the output image, by default None
             If None, the image will be saved as './pathway_mean_var.png'
         """
@@ -1572,7 +1621,7 @@ class scEGOT:
         save : bool, optional
             If True, save the output image, by default False
 
-        save_path : _type_, optional
+        save_path : str, optional
             Path to save the output image, by default None
             If None, the image will be saved as './pathway_gene_expressions.png'
         """
@@ -1700,7 +1749,7 @@ class scEGOT:
         save : bool, optional
             If True, save the output image, by default False
 
-        save_path : _type_, optional
+        save_path : str, optional
             Path to save the output image, by default None
             If None, the image will be saved as './pathway_single_gene_3d.html'
         """
@@ -1848,7 +1897,7 @@ class scEGOT:
         x_col_name : str, optional
             Label of the x-axis, by default None
 
-        y_col_name : _type_, optional
+        y_col_name : str, optional
             Label of the y-axis, by default None
 
         x_range : list or tuple of float of shape (2,), optional
@@ -1862,7 +1911,7 @@ class scEGOT:
         save : bool, optional
             If True, save the output image, by default False
 
-        save_path : _type_, optional
+        save_path : str, optional
             Path to save the output image, by default None
 
         Raises
@@ -2022,7 +2071,7 @@ class scEGOT:
         save : bool, optional
             If True, save the output image, by default False
 
-        save_path : _type_, optional
+        save_path : str, optional
             Path to save the output image, by default None
             If None, the image will be saved as './interpolate_video.gif'
 
@@ -3218,13 +3267,52 @@ class scEGOT:
         self.gmm_label_converter = converter
 
     def create_separated_data(
-            self,
-            data_names,
-            min_cluster_size=2,
-            return_cluster_names=False,
-            cluster_names=None,
-            original_covariances_weight = 0
-        ):
+        self,
+        data_names,
+        min_cluster_size=2,
+        return_cluster_names=False,
+        cluster_names=None,
+        original_covariances_weight = 0
+    ):
+        """Create separated data for each data name.
+
+        Parameters
+        ----------
+        data_names : list of str
+            List of prefixes to identify datasets.
+            Cells with names starting with these strings will be extracted into separate scEGOT objects.
+
+        min_cluster_size : int, optional
+            Minimum number of cells required to retain a cluster, by default 2.
+            Clusters smaller than this threshold will be removed in the separated objects.
+
+        return_cluster_names : bool, optional
+            If True, also return the cluster names for each separated object, by default False.
+
+        cluster_names : list of list of str, optional
+            Custom names for the clusters in the original object, by default None.
+            1st dimension is the number of days, 2nd dimension is the number of gmm components
+            in each day.
+            If None, names are automatically generated by generate_cluster_names_with_day() method.
+            
+        original_covariances_weight : float, optional
+            Weight factor for blending the original GMM covariances with recalculated ones, by default 0.
+            The new covariance is calculated as:
+            new_cov = original_cov * weight + recalculated_cov * (1 - weight).
+            - 0.0: Use only covariances calculated from the separated data.
+            - 1.0: Use only covariances of the original object.
+
+        Returns
+        -------
+        dict
+            A dictionary where keys are `data_names` and values are the corresponding separated `scEGOT` objects.
+
+        dict
+            A dictionary where keys are `data_names` and values are lists of cluster names.
+            These names correspond to the cluster names of the original object.
+            This will be returned only when 'return_cluster_names' is True.
+        """
+
         separated_scegot_dict = {}
         separated_cluster_names_dict = {}
         umap_flag = self.X_umap is not None and self.umap_model is not None
@@ -3409,6 +3497,17 @@ class CellStateGraph():
         self.gmm_n_components_list = scegot.gmm_n_components_list
         
     def reverse_graph(self, x=False, y=False):
+        """Reverse the graph layout along the specified axes.
+
+        Parameters
+        ----------
+        x : bool, optional
+            If True, reverse the x-axis of the graph layout, by default False.
+        
+        y : bool, optional
+            If True, reverse the y-axis of the graph layout, by default False.
+        """
+
         if x:
             self.x_reverse = not self.x_reverse
             for node in self.G.nodes():
@@ -3443,14 +3542,31 @@ class CellStateGraph():
                 if id in id_name_dict:
                     if id_name_dict[id] != name:
                         raise ValueError(
-                            f"When merge_same_clusters = True, clusters that shared the same original name must be given the same new name.\n"
-                            f"Cluster '{old_cluster_names_flattened[i]}' has inconsistent names: '{id_name_dict[id]}' and '{name}'."
+                            f"When merge_same_clusters = True, clusters that shared "
+                            f"the same original name must be given the same new name.\n"
+                            f"Cluster '{old_cluster_names_flattened[i]}' has inconsistent "
+                            f"names: '{id_name_dict[id]}' and '{name}'."
                         )
                 else:
                     id_name_dict[id] = name
         return cluster_names
     
     def set_cluster_names(self, cluster_names):
+        """Set new cluster names for the cell state graph.  
+
+        Parameters
+        ----------
+        cluster_names : list of list of str
+            New names for the clusters.
+            1st dimension is the number of days, 2nd dimension is the number of gmm components
+            in each day.
+            Merged clusters must have the same name when 'merge_same_clusters' is True.
+        Returns
+        -------
+        list of list of str
+            The new cluster names.
+        """
+
         new_cluster_names = self._validate_cluster_names(cluster_names)
         self.cluster_names = new_cluster_names
         return new_cluster_names
@@ -3463,6 +3579,22 @@ class CellStateGraph():
         return cluster_names
 
     def update_cluster_names(self, cluster_names_map, day=None):
+        """Update cluster names for the cell state graph based on a mapping dictionary.
+
+        Parameters
+        ----------
+        cluster_names_map : dict
+            A dictionary mapping old cluster names to new cluster names.
+        day : int, optional
+            The specific day to update cluster names for, by default None.
+            If None, update cluster names for all days.
+        
+        Returns
+        -------
+        list of list of str
+            The updated cluster names.
+        """
+
         cluster_names = copy.deepcopy(self.cluster_names)
         if day is None:
             for day in range(self.day_num):
@@ -3531,19 +3663,30 @@ class CellStateGraph():
 
         Parameters
         ----------
-        G : nx.classes.digraph.DiGraph
-            Networkx graph object of the cell state graph.
-
         layout : {'normal', 'hierarchy'}, optional
             The layout of the graph, by default "normal"
             When 'normal', the graph is plotted the same layout as the self.plot_cell_state_graph method.
             When 'hierarchy', the graph is plotted with the day on the x-axis and the cluster on the y-axis.
 
-        order : {'weight', None}, optional
-            Order of nodes along the y-axis, by default None
-            This parameter is only used when 'layout' is 'hierarchy'.
-            When 'weight', the nodes are ordered by the size of the nodes.
-            When None, the nodes are ordered by the cluster number.
+        y_position : str or dict, optional
+            Determines the y-axis position of nodes when layout is 'hierarchy', by default "name".
+            - 'name': Sort nodes alphabetically by name.
+            - 'weight': Sort nodes by their weight.
+            - dict: A dictionary mapping node names to y-axis positions.
+            This parameter is ignored when layout is 'normal'.
+
+        cluster_names : list of list of str, optional
+            Custom names for the clusters, by default None.
+            1st dimension is the number of days, 2nd dimension is the number of gmm components
+            in each day.
+            Merged clusters must have the same name when 'merge_same_clusters' is True.
+            If None, self.cluster_names is used.
+
+        node_weight_annotation : bool, optional
+            If True, display the weight of each node, by default False.
+
+        edge_weight_annotation : bool, optional
+            If True, display the weight of each edge, by default False.
 
         save : bool, optional
             If True, save the output image, by default False
@@ -3555,7 +3698,11 @@ class CellStateGraph():
         Raises
         ------
         ValueError
-            When 'layout' is not 'normal' or 'hierarchy', or 'order' is not None or 'weight'.
+            This error is raised in the following cases:
+            - When 'layout' is not 'normal' or 'hierarchy'.
+            - When 'y_position' is a string but not 'name' or 'weight'.
+        TypeError
+            When 'y_position' is not a string or dict (if layout is 'hierarchy').
         """
         
         if layout not in ["normal", "hierarchy"]:
@@ -3765,12 +3912,22 @@ class CellStateGraph():
 
         Parameters
         ----------
-        G : nx.classes.digraph.DiGraph
-            Networkx graph object of the cell state graph.
+        layout : {'normal', 'hierarchy'}, optional
+            The layout of the graph, by default "normal"
+            When 'normal', the graph is plotted the same layout as the self.plot_cell_state_graph method.
+            When 'hierarchy', the graph is plotted with the day on the x-axis and the cluster on the y-axis.
+
+        y_position : str or dict, optional
+            Determines the y-axis position of nodes when layout is 'hierarchy', by default "name".
+            - 'name': Sort nodes alphabetically by name.
+            - 'weight': Sort nodes by their weight.
+            - dict: A dictionary mapping node names to y-axis positions.
+            This parameter is ignored when layout is 'normal'.
 
         cluster_names : list of list of str
             1st dimension is the number of days, 2nd dimension is the number of gmm components
-            of each day.
+            in each day.
+            Merged clusters must have the same name when 'merge_same_clusters' is True.
             Can be generaged by 'generate_cluster_names' method.
 
         tf_gene_names : list of str, optional
@@ -3780,11 +3937,14 @@ class CellStateGraph():
 
         tf_gene_pick_num : int, optional
             The number of genes to show in each node and edge, by default 5
+        
+        plot_title : str, optional
+            Title of the plot, by default "Cell State Graph"
 
         save : bool, optional
             If True, save the output image, by default False
 
-        save_path : _type_, optional
+        save_path : str, optional
             Path to save the output image, by default None
             If None, the image will be saved as './cell_state_graph.png'
         """
@@ -3959,38 +4119,3 @@ class CellStateGraph():
 
         if save:
             fig.write_image(save_path)
-        
-# def draw_multiple_graphs(
-#     scegot_list,
-#     G_list,
-#     plot_title="Cell State Graph",
-#     graph_titles=None,
-#     graph_col_num=None,
-#     graph_row_num=None,
-#     graph_places=None,
-#     save=False,
-#     save_path=None,
-#     **kwargs
-# ):
-#     graph_num = len(scegot_list)
-#     if graph_col_num == None:
-#         graph_col_num = min(graph_num, 3)
-#     if graph_row_num == None:
-#         graph_row_num = (graph_num + (graph_col_num-1)) // graph_col_num
-#     if graph_places == None:
-#         if graph_num <= graph_col_num:
-#             graph_places = list(range(graph_num))
-#         else:
-#             graph_places = [(i // graph_col_num, i % graph_col_num) for i in range(graph_num)]
-#     fig, axes = plt.subplots(graph_row_num, graph_col_num, figsize=(15*graph_col_num, 15*graph_row_num))
-#     plt.subplots_adjust(left=0, right=1, wspace=0, bottom=0)
-
-#     fig.suptitle(plot_title, weight="bold", fontsize=30)
-#     for i, (scegot, G) in enumerate(zip(scegot_list, G_list)):
-#         draw_graph(scegot, G, axes[graph_places[i]], graph_titles[i], **kwargs)
-
-#     if save:
-#         if save_path == None:
-#             save_path = "cell_state_graph"
-#         plt.savefig(save_path)
-
