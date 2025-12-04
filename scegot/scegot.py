@@ -985,7 +985,7 @@ class scEGOT:
             }
         )
 
-    def _get_edge_list(self, node_ids, merge_same_cluster, thresh, require_parent):
+    def _get_edge_list(self, node_ids, merge_clusters_by_name, thresh, require_parent):
         node_source_target_combinations = []
         day_source_target_combinations = []
         edge_colors_based_on_source = []
@@ -1017,7 +1017,7 @@ class scEGOT:
                 )
             )
         )
-        if merge_same_cluster:
+        if merge_clusters_by_name:
             # targetが同じedgeをmerge
             cell_state_edges["target"] = [node_ids[i] for i in cell_state_edges["target_cluster"]]
             cell_state_edges = cell_state_edges.groupby(["source_cluster", "source_day", "target", "target_day"],as_index=False).agg({"edge_colors": "min", "edge_weights": "sum"})
@@ -1218,7 +1218,7 @@ class scEGOT:
         cluster_names=None,
         mode="pca",
         threshold=0.05,
-        merge_same_clusters=False,
+        merge_clusters_by_name=False,
         x_reverse=False,
         y_reverse=False,
         require_parent=False,
@@ -1231,7 +1231,7 @@ class scEGOT:
             Cluster names for each GMM cluster in each day.
             1st dimension is the number of days, 2nd dimension is the number of gmm components
             in each day.
-            if merge_same_clusters is True, clusters with the same name will be merged.
+            if merge_clusters_by_name is True, clusters with the same name will be merged.
             Can be generaged by 'generate_cluster_names' method.
             
         mode : {'pca', 'umap'}, optional
@@ -1241,7 +1241,7 @@ class scEGOT:
             Threshold to filter edges, by default 0.05
             Only edges with edge_weights greater than this threshold will be included.
 
-        merge_same_clusters : bool, optional
+        merge_clusters_by_name : bool, optional
             If True, clusters with the same name will be merged, by default False
         
         x_reverse : bool, optional
@@ -1282,7 +1282,7 @@ class scEGOT:
             cluster_names = self.generate_cluster_names_with_day()
 
         # nodeにIDを振る
-        if merge_same_clusters:
+        if merge_clusters_by_name:
             node_ids = self._generate_merged_node_ids(cluster_names)
         else:
             node_ids = list(range(sum(self.gmm_n_components_list)))
@@ -1293,7 +1293,7 @@ class scEGOT:
         if mode == "umap":
             gmm_means_flattened = self.umap_model.transform(gmm_means_flattened)
 
-        cell_state_edge_list = self._get_edge_list(node_ids, merge_same_clusters, threshold, require_parent)
+        cell_state_edge_list = self._get_edge_list(node_ids, merge_clusters_by_name, threshold, require_parent)
         cell_state_edge_list.rename(columns={"edge_weights": "weight", "edge_colors": "color"}, inplace=True)
         G = nx.from_pandas_edgelist(
             cell_state_edge_list,
@@ -1330,7 +1330,7 @@ class scEGOT:
             )
         node_info["cluster_gmm_list"] = [[x] for x in cluster_gmms]
 
-        if merge_same_clusters:
+        if merge_clusters_by_name:
             merged_node_info = self._merge_nodes(node_info)
         else:
             merged_node_info = node_info
@@ -1354,7 +1354,7 @@ class scEGOT:
             mode=mode,
             cluster_names=copy.deepcopy(cluster_names),
             node_ids=node_ids,
-            merge_same_clusters=merge_same_clusters,
+            merge_clusters_by_name=merge_clusters_by_name,
             x_reverse=x_reverse,
             y_reverse=y_reverse,
             require_parent=require_parent,
@@ -3478,7 +3478,7 @@ class CellStateGraph():
         mode="pca",
         cluster_names=None,
         node_ids=None,
-        merge_same_clusters=False,
+        merge_clusters_by_name=False,
         x_reverse=False,
         y_reverse=False,
         require_parent=False
@@ -3489,7 +3489,7 @@ class CellStateGraph():
         self.mode = mode
         self.cluster_names = cluster_names
         self.node_ids = node_ids
-        self.merge_same_clusters = merge_same_clusters
+        self.merge_clusters_by_name = merge_clusters_by_name
         self.x_reverse = x_reverse
         self.y_reverse = y_reverse
         self.require_parent = require_parent
@@ -3532,7 +3532,7 @@ class CellStateGraph():
                     f"the number of clusters of the {self.scegot.day_names[day]} (= {self.gmm_n_components_list[day]}), \n"
                     f"The actual length of the element at index {day} in 'cluster_names' was {len(cluster_names[day])}."
                 )
-        if self.merge_same_clusters:
+        if self.merge_clusters_by_name:
             cluster_names_flattened = list(itertools.chain.from_iterable(cluster_names))
             old_cluster_names_flattened = list(itertools.chain.from_iterable(self.cluster_names))
             id_name_dict = {}
@@ -3542,7 +3542,7 @@ class CellStateGraph():
                 if id in id_name_dict:
                     if id_name_dict[id] != name:
                         raise ValueError(
-                            f"When merge_same_clusters = True, clusters that shared "
+                            f"When merge_clusters_by_name = True, clusters that shared "
                             f"the same original name must be given the same new name.\n"
                             f"Cluster '{old_cluster_names_flattened[i]}' has inconsistent "
                             f"names: '{id_name_dict[id]}' and '{name}'."
@@ -3560,7 +3560,7 @@ class CellStateGraph():
             New names for the clusters.
             1st dimension is the number of days, 2nd dimension is the number of gmm components
             in each day.
-            Merged clusters must have the same name when 'merge_same_clusters' is True.
+            Merged clusters must have the same name when 'merge_clusters_by_name' is True.
         Returns
         -------
         list of list of str
@@ -3679,7 +3679,7 @@ class CellStateGraph():
             Custom names for the clusters, by default None.
             1st dimension is the number of days, 2nd dimension is the number of gmm components
             in each day.
-            Merged clusters must have the same name when 'merge_same_clusters' is True.
+            Merged clusters must have the same name when 'merge_clusters_by_name' is True.
             If None, self.cluster_names is used.
 
         node_weight_annotation : bool, optional
@@ -3869,7 +3869,7 @@ class CellStateGraph():
                 self.node_ids,
             )
         )
-        if self.merge_same_clusters:
+        if self.merge_clusters_by_name:
             cluster_weights = pd.Series(scegot._get_gmm_node_weights_flattened(), index=mean_gene_values_per_cluster.index, name="weight")
             mean_gene_values_per_cluster["weights"] = cluster_weights
             mean_gene_values_per_cluster = mean_gene_values_per_cluster.groupby(level=0).apply(self._calculate_weighted_mean_of_gene_values)
@@ -3927,7 +3927,7 @@ class CellStateGraph():
         cluster_names : list of list of str
             1st dimension is the number of days, 2nd dimension is the number of gmm components
             in each day.
-            Merged clusters must have the same name when 'merge_same_clusters' is True.
+            Merged clusters must have the same name when 'merge_clusters_by_name' is True.
             Can be generaged by 'generate_cluster_names' method.
 
         tf_gene_names : list of str, optional
