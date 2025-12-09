@@ -3678,7 +3678,7 @@ class CellStateGraph():
         ----------
         layout : {'normal', 'hierarchy'}, optional
             The layout of the graph, by default "normal"
-            When 'normal', the graph is plotted the same layout as the self.plot_cell_state_graph method.
+            When 'normal', the graph is plotted in PCA or UMAP space.
             When 'hierarchy', the graph is plotted with the day on the x-axis and the cluster on the y-axis.
 
         y_position : str or dict, optional
@@ -3799,7 +3799,7 @@ class CellStateGraph():
                 pos,
                 edge_labels={edge: f"{G.edges[edge]['weight']:.3f}" for edge in G.edges()},
                 font_size=14,
-                label_pos=0.2,
+                label_pos=0.3,
                 ax=ax
             )
 
@@ -3929,7 +3929,7 @@ class CellStateGraph():
         ----------
         layout : {'normal', 'hierarchy'}, optional
             The layout of the graph, by default "normal"
-            When 'normal', the graph is plotted the same layout as the self.plot_cell_state_graph method.
+            When 'normal', the graph is plotted in PCA or UMAP space.
             When 'hierarchy', the graph is plotted with the day on the x-axis and the cluster on the y-axis.
 
         y_position : str or dict, optional
