@@ -945,6 +945,33 @@ class scEGOT:
             anim.save(save_path, writer="pillow")
 
         plt.close()
+    
+    def _get_cell_state_edge_list_old(self, cluster_names, thresh):
+        node_source_target_combinations, edge_colors_based_on_source = [], []
+        for i in range(len(self.gmm_n_components_list) - 1):
+            current_combinations = [
+                x for x in itertools.product(cluster_names[i], cluster_names[i + 1])
+            ]
+            node_source_target_combinations += current_combinations
+            edge_colors_based_on_source += [i for _ in range(len(current_combinations))]
+        cell_state_edge_list = pd.DataFrame(
+            node_source_target_combinations, columns=["source", "target"]
+        )
+        cell_state_edge_list["edge_colors"] = edge_colors_based_on_source
+        cell_state_edge_list["edge_weights"] = list(
+            itertools.chain.from_iterable(
+                list(
+                    itertools.chain.from_iterable(
+                        self.calculate_normalized_solutions(self.gmm_models)
+                    )
+                )
+            )
+        )
+        cell_state_edge_list = cell_state_edge_list[
+            cell_state_edge_list["edge_weights"] > thresh
+        ]
+
+        return cell_state_edge_list
 
     def _get_gmm_node_weights_flattened(self):
         node_weights = [
@@ -985,7 +1012,7 @@ class scEGOT:
             }
         )
 
-    def _get_edge_list(self, node_ids, merge_clusters_by_name, thresh, require_parent):
+    def _get_cell_state_edge_list(self, node_ids, merge_clusters_by_name, thresh, require_parent):
         node_source_target_combinations = []
         day_source_target_combinations = []
         edge_colors_based_on_source = []
@@ -1077,29 +1104,39 @@ class scEGOT:
         last_day_cluster_names : list of str
             Cluster names for the last day.
             Clusters with the same name will be merged.
+
             The length of the list should be equal to the number of clusters in the last day.
         
         n_merge_iter : int, optional
             Number of preceding days to trace back and merge cluster names, starting from the last day, by default 1.
+            
             Must be an integer in the range from 1 to (the number of days - 1).
 
         merge_method : {'pattern', 'kmeans'}, optional
-            Method to merge nodes, by default "pattern".
-            - 'pattern': Merges nodes that share the same connection pattern to the next day's nodes.
-            - 'kmeans': Merges nodes based on the edge weights to the next day's nodes using K-Means.
+            Method to merge nodes, by default 'pattern'.
+
+            * 'pattern': Merges nodes that share the same connection pattern to the next day's nodes.
+            * 'kmeans': Merges nodes based on the edge weights to the next day's nodes using K-Means.
         
         threshold : float, optional
             Threshold to filter edges, by default 0.05.
             Edges with weights below this value are ignored.
+
             This parameter is used only when `merge_method` is 'pattern'.
 
         n_clusters_list : list of int, optional
-            List specifying the number of merged clusters for each day when `merge_method` is 'kmeans'.
-            The length of the list must equal to `n_merge_iter`.
+            List specifying the number of merged clusters for each day.
+
+            The length of the list must equal to 'n_merge_iter'.
             If None, defaults to the minimum of (original cluster count, 4) for each day.
 
-        **kmeans_kwargs : dict
-            Arbitrary keyword arguments passed to sklearn.cluster.KMeans when merge_method is 'kmeans'.
+            This parameter is used only when `merge_method` is 'kmeans'.
+
+        \*\*kmeans_kwargs : dict
+            Arbitrary keyword arguments passed to sklearn.cluster.KMeans.
+
+            This parameter is used only when `merge_method` is 'kmeans'.
+
 
         Returns
         -------
@@ -1109,9 +1146,10 @@ class scEGOT:
         Raises
         ------
         ValueError
-            When `n_merge_iter` is not an integer within the valid range (1 to number of days - 1).
-        ValueError
-            When `merge_method` is not one of 'pattern' or 'kmeans'.
+            This error is raised in the following cases:
+
+            * When 'n_merge_iter' is not an integer within the valid range (1 to number of days - 1).
+            * When 'merge_method' is not one of 'pattern' or 'kmeans'.
         """
 
         if not n_merge_iter in list(range(1, len(self.day_names))):
@@ -1138,7 +1176,7 @@ class scEGOT:
             node_ids = list(itertools.chain.from_iterable(node_ids_by_day))
 
             if merge_method == "pattern":
-                cell_state_edges = self._get_edge_list(node_ids, True, threshold, False)
+                cell_state_edges = self._get_cell_state_edge_list(node_ids, True, threshold, False)
                 current_day_df = cell_state_edges[cell_state_edges["source"].isin(source_node_ids)]
 
                 # sourceとtargetの一覧のリストの組を表すdataframeを作る
@@ -1164,7 +1202,7 @@ class scEGOT:
                                 new_source_cluster_ids[index] = node_id_base + group_num
 
             if merge_method == "kmeans":
-                cell_state_edges = self._get_edge_list(node_ids, True, 0, False)
+                cell_state_edges = self._get_cell_state_edge_list(node_ids, True, 0, False)
                 current_day_df = cell_state_edges[cell_state_edges["source"].isin(source_node_ids)]
 
                 # sourceを行、targetを列とした重みのdataframeを作る
@@ -1217,7 +1255,153 @@ class scEGOT:
 
         return merged_df
 
+    def _get_up_regulated_genes(self, gene_values, G, num=10):
+        df_upgenes = pd.DataFrame([])
+        for edge in G.edges():
+            fold_change = self._get_fold_change(
+                gene_values,
+                edge[0],
+                edge[1],
+            )
+            upgenes = pd.DataFrame(
+                self._get_nlargest_gene_indices(fold_change, num=num).values,
+                columns=[f"{edge[0]}{edge[1]}"],
+            ).T
+            df_upgenes = pd.concat([df_upgenes, upgenes])
+        return df_upgenes
+
+    def _get_down_regulated_genes(self, gene_values, G, num=10):
+        df_downgenes = pd.DataFrame([])
+        for edge in G.edges():
+            fold_change = self._get_fold_change(
+                gene_values,
+                edge[0],
+                edge[1],
+            )
+            downgenes = pd.DataFrame(
+                self._get_nsmallest_gene_indices(fold_change, num=num).values,
+                columns=[f"{edge[0]}{edge[1]}"],
+            ).T
+            df_downgenes = pd.concat([df_downgenes, downgenes])
+        return df_downgenes
+    
     def make_cell_state_graph(
+        self,
+        cluster_names,
+        mode="pca",
+        threshold=0.05,
+    ):
+        """.. warning::
+            ``make_cell_state_graph()`` was deprecated in version 0.3.0 and will be removed in future versions.
+            Use ``make_cell_state_graph_object()`` instead.
+        
+        Compute cell state graph and build a networkx graph object.
+
+        Parameters
+        ----------
+        cluster_names : 2D list of str
+            1st dimension is the number of days, 2nd dimension is the number of gmm components
+            in each day.
+            Can be generaged by 'generate_cluster_names' method.
+
+        mode : {'pca', 'umap'}, optional
+            The space to build the cell state graph, by default "pca"
+            
+        threshold : float, optional
+            Threshold to filter edges, by default 0.05
+            Only edges with edge_weights greater than this threshold will be included.
+
+        Returns
+        -------
+        nx.classes.digraph.DiGraph
+            Networkx graph object of the cell state graph
+
+        Raises
+        ------
+        ValueError
+            When 'mode' is not 'pca' or 'umap'.
+        """
+
+        warnings.warn(
+            "'make_cell_state_graph()' was deprecated and will be removed in future versions.\n"
+            "Use 'make_cell_state_graph_object()' instead.",
+            FutureWarning,
+        )
+
+        if mode not in ["pca", "umap"]:
+            raise ValueError("The parameter 'mode' should be 'pca' or 'umap'.")
+
+        gmm_means_flattened = np.array(
+            list(itertools.chain.from_iterable(self.get_gmm_means()))
+        )
+        if mode == "umap":
+            gmm_means_flattened = self.umap_model.transform(gmm_means_flattened)
+
+        cell_state_edge_list = self._get_cell_state_edge_list_old(cluster_names, threshold)
+        G = nx.from_pandas_edgelist(
+            cell_state_edge_list,
+            source="source",
+            target="target",
+            edge_attr=["edge_weights", "edge_colors"],
+            create_using=nx.DiGraph,
+        )
+        node_info = pd.DataFrame(
+            self._get_gmm_node_weights_flattened(),
+            index=list(itertools.chain.from_iterable(cluster_names)),
+            columns=["node_weights"],
+        )
+        node_info["xpos"] = gmm_means_flattened.T[0]
+        node_info["ypos"] = gmm_means_flattened.T[1]
+        node_info["node_days"] = self._get_day_order_of_each_node()
+        if self.gmm_label_converter is None:
+            node_info["cluster_gmm"] = list(
+                itertools.chain.from_iterable(
+                    [
+                        list(range(n_components))
+                        for n_components in self.gmm_n_components_list
+                    ]
+                )
+            )
+        else:
+            node_info["cluster_gmm"] = list(
+                itertools.chain.from_iterable(self.gmm_label_converter)
+            )
+
+        node_sortby_weight = (
+            node_info.reset_index()
+            .groupby("node_days")
+            .apply(
+                lambda x: x.sort_values("node_weights", ascending=False),
+                include_groups=False,
+            )
+        )
+        node_sortby_weight = node_sortby_weight.reset_index()
+        node_info = pd.DataFrame(
+            node_sortby_weight.values, columns=node_sortby_weight.columns
+        )
+        node_info["cluster_weight"] = list(
+            itertools.chain.from_iterable(
+                [
+                    list(range(n_components))
+                    for n_components in self.gmm_n_components_list
+                ]
+            )
+        )
+        node_info.set_index("index", inplace=True)
+
+        for row in node_info.itertuples():
+            G.add_node(
+                row.Index,
+                weight=row.node_weights,
+                day=row.node_days,
+                pos=(row.xpos, row.ypos),
+                cluster_gmm=row.cluster_gmm,
+                cluster_weight=row.cluster_weight,
+            )
+
+        return G
+
+    def make_cell_state_graph_object(
         self,
         cluster_names=None,
         mode="pca",
@@ -1227,7 +1411,7 @@ class scEGOT:
         y_reverse=False,
         require_parent=False,
     ):
-        """Compute cell state graph and build a networkx graph object.
+        """Compute cell state graph and build a ``CellStateGraph`` object.
 
         Parameters
         ----------
@@ -1235,11 +1419,13 @@ class scEGOT:
             Cluster names for each GMM cluster in each day.
             1st dimension is the number of days, 2nd dimension is the number of gmm components
             in each day.
-            if merge_clusters_by_name is True, clusters with the same name will be merged.
-            Can be generaged by 'generate_cluster_names' method.
+
+            If merge_clusters_by_name is True, clusters with the same name will be merged.
+
+            If None, generated by ``generate_cluster_names_with_day()`` method.
             
         mode : {'pca', 'umap'}, optional
-            The space to build the cell state graph, by default "pca"
+            The space to build the cell state graph, by default 'pca'
 
         threshold : float, optional
             Threshold to filter edges, by default 0.05
@@ -1260,16 +1446,17 @@ class scEGOT:
         
         Returns
         -------
-        nx.classes.digraph.DiGraph
-            Networkx graph object of the cell state graph
+        scegot.CellStateGraph
+            ``scegot.CellStateGraph`` object of the cell state graph
 
         Raises
         ------
         ValueError
             This error is raised in the following cases:
-            - When 'mode' is not 'pca' or 'umap'.
-            - When the length of 'cluster_names' is not the same as the number of days.
-            - When the length of the second dimension of 'cluster_names' is not the same
+
+            * When 'mode' is not 'pca' or 'umap'.
+            * When the length of 'cluster_names' is not the same as the number of days.
+            * When the length of the second dimension of 'cluster_names' is not the same
               as the number of GMM components in each day.
         """
 
@@ -1303,7 +1490,7 @@ class scEGOT:
         if mode == "umap":
             gmm_means_flattened = self.umap_model.transform(gmm_means_flattened)
 
-        cell_state_edge_list = self._get_edge_list(node_ids, merge_clusters_by_name, threshold, require_parent)
+        cell_state_edge_list = self._get_cell_state_edge_list(node_ids, merge_clusters_by_name, threshold, require_parent)
         cell_state_edge_list.rename(columns={"edge_weights": "weight", "edge_colors": "color"}, inplace=True)
         G = nx.from_pandas_edgelist(
             cell_state_edge_list,
@@ -1375,6 +1562,375 @@ class scEGOT:
 
         return graph
 
+    def _plot_cell_state_graph(
+        self,
+        G,
+        nodes_up_gene,
+        nodes_down_gene,
+        edges_up_gene,
+        edges_down_gene,
+        save,
+        save_path,
+    ):
+        tail_list = []
+        head_list = []
+        color_list = []
+        trace_recode = []
+
+        day_num = len(self.day_names)
+
+        colors = plt.cm.inferno(np.linspace(0, 1, day_num + 2))
+        for edge in G.edges():
+            x_0, y_0 = G.nodes[edge[0]]["pos"]
+            x_1, y_1 = G.nodes[edge[1]]["pos"]
+            tail_list.append((x_0, y_0))
+            head_list.append((x_1, y_1))
+            weight = G.edges[edge]["edge_weights"] * 25
+            color = colors[G.edges[edge]["edge_colors"] + 1]
+
+            color_list.append(f"rgb({color[0]},{color[1]},{color[2]})")
+
+            edge_trace = go.Scatter(
+                x=tuple([x_0, x_1, None]),
+                y=tuple([y_0, y_1, None]),
+                mode="lines",
+                line={"width": weight},
+                line_color=f"rgb({color[0]},{color[1]},{color[2]})",
+                line_shape="spline",
+                opacity=0.4,
+            )
+
+            trace_recode.append(edge_trace)
+
+        middle_hover_trace = go.Scatter(
+            x=[],
+            y=[],
+            hovertext=[],
+            mode="markers",
+            textposition="top center",
+            hoverinfo="text",
+            marker={
+                "size": 20,
+                "color": [edge["edge_colors"] + 1 for edge in G.edges.values()],
+            },
+            opacity=0,
+        )
+
+        for edge in G.edges():
+            x_0, y_0 = G.nodes[edge[0]]["pos"]
+            x_1, y_1 = G.nodes[edge[1]]["pos"]
+            from_to = str(edge[0]) + str(edge[1])
+            hovertext = f"""up_genes: {', '.join(edges_up_gene.T[from_to].values)}<br>down_genes: {', '.join(edges_down_gene.T[from_to].values)}"""
+            middle_hover_trace["x"] += tuple([(x_0 + x_1) / 2])
+            middle_hover_trace["y"] += tuple([(y_0 + y_1) / 2])
+            middle_hover_trace["hovertext"] += tuple([hovertext])
+            trace_recode.append(middle_hover_trace)
+
+        arrows = [
+            go.layout.Annotation(
+                dict(
+                    x=head[0],
+                    y=head[1],
+                    showarrow=True,
+                    xref="x",
+                    yref="y",
+                    arrowcolor=color,
+                    arrowsize=2,
+                    arrowwidth=2,
+                    ax=tail[0],
+                    ay=tail[1],
+                    axref="x",
+                    ayref="y",
+                    arrowhead=1,
+                )
+            )
+            for head, tail, color in zip(head_list, tail_list, color_list)
+        ]
+
+        node_x = []
+        node_y = []
+        node_hover_trace = go.Scatter(
+            x=[],
+            y=[],
+            hovertext=[],
+            mode="markers",
+            textposition="top center",
+            hoverinfo="text",
+            marker={
+                "size": 20,
+                "color": [node["day"] + 1 for node in G.nodes.values()],
+            },
+            opacity=0,
+        )
+
+        for node in G.nodes():
+            x, y = G.nodes[node]["pos"]
+            node_x.append(x)
+            node_y.append(y)
+            hovertext = f"""largest_genes: {', '.join(nodes_up_gene.T[node].values)}<br>smallest_genes: {', '.join(nodes_down_gene.T[node].values)}"""
+            node_hover_trace["x"] += tuple([x])
+            node_hover_trace["y"] += tuple([y])
+            node_hover_trace["hovertext"] += tuple([hovertext])
+            trace_recode.append(node_hover_trace)
+
+        node_trace = go.Scatter(
+            x=node_x,
+            y=node_y,
+            text=list(G.nodes()),
+            textposition="top center",
+            mode="markers+text",
+            hoverinfo="text",
+            marker=dict(line_width=2),
+        )
+
+        node_trace.marker.color = [node["day"] for node in G.nodes.values()]
+        node_trace.marker.size = [node["weight"] * 140 for node in G.nodes.values()]
+        trace_recode.append(node_trace)
+
+        fig = go.Figure(
+            data=trace_recode, layout=go.Layout(showlegend=False, hovermode="closest")
+        )
+
+        fig.update_layout(annotations=arrows)
+
+        fig.update_layout(width=1000, height=800, title="Cell state graph")
+        fig.show()
+
+        if save:
+            fig.write_image(save_path)
+
+    def plot_cell_state_graph(
+        self,
+        G,
+        cluster_names,
+        tf_gene_names=None,
+        tf_gene_pick_num=5,
+        save=False,
+        save_path=None,
+    ):
+        """.. warning::
+            ``scEGOT.plot_cell_state_graph()`` was deprecated in version 0.3.0 and will be removed in future versions.
+            Use ``CellStateGraph.plot_cell_state_graph()`` instead.
+        
+        Plot the cell state graph with the given graph object.
+
+        Parameters
+        ----------
+        G : nx.classes.digraph.DiGraph
+            Networkx graph object of the cell state graph.
+
+        cluster_names : list of list of str
+            1st dimension is the number of days, 2nd dimension is the number of gmm components
+            of each day.
+            Can be generaged by 'generate_cluster_names' method.
+
+        tf_gene_names : list of str, optional
+            List of transcription factor gene names to use, by default None
+            If None, all gene names (self.gene_names) will be used.
+            You can pass on any list of gene names you want to use, not limited to TF genes.
+
+        tf_gene_pick_num : int, optional
+            The number of genes to show in each node and edge, by default 5
+
+        save : bool, optional
+            If True, save the output image, by default False
+
+        save_path : _type_, optional
+            Path to save the output image, by default None
+            If None, the image will be saved as './cell_state_graph.png'
+        """
+        
+        warnings.warn(
+            "'scEGOT.plot_cell_state_graph()' was deprecated and will be removed in future versions.\n"
+            "Use 'CellStateGraph.plot_cell_state_graph()' instead.",
+            FutureWarning,
+        )
+
+        if save and save_path is None:
+            save_path = "./cell_state_graph.png"
+
+        if tf_gene_names is None:
+            gene_names_to_use = self.gene_names
+        else:
+            gene_names_to_use = tf_gene_names
+
+        mean_gene_values_per_cluster = (
+            self.get_positive_gmm_mean_gene_values_per_cluster(
+                self.get_gmm_means(),
+                list(itertools.chain.from_iterable(cluster_names)),
+            )
+        )
+        mean_tf_gene_values_per_cluster = mean_gene_values_per_cluster.loc[
+            :, mean_gene_values_per_cluster.columns.isin(gene_names_to_use)
+        ]
+        # nodes
+        tf_nlargest = mean_tf_gene_values_per_cluster.T.apply(
+            self._get_nlargest_gene_indices, num=tf_gene_pick_num
+        ).T
+        tf_nsmallest = mean_tf_gene_values_per_cluster.T.apply(
+            self._get_nsmallest_gene_indices, num=tf_gene_pick_num
+        ).T
+        tf_nlargest.columns += 1
+        tf_nsmallest.columns += 1
+        # edges
+        tf_up_genes = self._get_up_regulated_genes(
+            mean_tf_gene_values_per_cluster, G, num=tf_gene_pick_num
+        )
+        tf_down_genes = self._get_down_regulated_genes(
+            mean_tf_gene_values_per_cluster, G, num=tf_gene_pick_num
+        )
+        tf_up_genes.columns += 1
+        tf_down_genes.columns += 1
+
+        self._plot_cell_state_graph(
+            G,
+            nodes_up_gene=tf_nlargest,
+            nodes_down_gene=tf_nsmallest,
+            edges_up_gene=tf_up_genes,
+            edges_down_gene=tf_down_genes,
+            save=save,
+            save_path=save_path,
+        )
+    
+    def plot_simple_cell_state_graph(
+        self, G, layout="normal", order=None, save=False, save_path=None
+    ):
+        """.. warning::
+            ``scEGOT.plot_simple_cell_state_graph()`` was deprecated in version 0.3.0 and will be removed in future versions.
+            Use ``CellStateGraph.plot_simple_cell_state_graph()`` instead.
+        
+        Plot the cell state graph with the given graph object in a simple way.
+
+        Parameters
+        ----------
+        G : nx.classes.digraph.DiGraph
+            Networkx graph object of the cell state graph.
+
+        layout : {'normal', 'hierarchy'}, optional
+            The layout of the graph, by default "normal"
+            When 'normal', the graph is plotted the same layout as the self.plot_cell_state_graph method.
+            When 'hierarchy', the graph is plotted with the day on the x-axis and the cluster on the y-axis.
+
+        order : {'weight', None}, optional
+            Order of nodes along the y-axis, by default None
+            This parameter is only used when 'layout' is 'hierarchy'.
+            When 'weight', the nodes are ordered by the size of the nodes.
+            When None, the nodes are ordered by the cluster number.
+
+        save : bool, optional
+            If True, save the output image, by default False
+
+        save_path : str, optional
+            Path to save the output image, by default None
+            If None, the image will be saved as './simple_cell_state_graph.png'
+
+        Raises
+        ------
+        ValueError
+            When 'layout' is not 'normal' or 'hierarchy', or 'order' is not None or 'weight'.
+        """
+
+        warnings.warn(
+            "'scEGOT.plot_simple_cell_state_graph()' was deprecated and will be removed in future versions.\n"
+            "Use 'CellStateGraph.plot_simple_cell_state_graph()' instead.",
+            FutureWarning,
+        )
+        
+        if layout not in ["normal", "hierarchy"]:
+            raise ValueError("The parameter 'layout' should be 'normal or 'hierarchy'.")
+        if order is not None and order != "weight":
+            raise ValueError("The parameter 'order' should be None or 'weight'.")
+
+        if save and save_path is None:
+            save_path = "./simple_cell_state_graph.png"
+
+        node_color = [node["day"] for node in G.nodes.values()]
+
+        color_data = np.array([G.edges[edge]["edge_weights"] for edge in G.edges()])
+
+        if layout == "normal":
+            pos = {node: G.nodes[node]["pos"] for node in G.nodes()}
+        else:
+            pos = {}
+            for node in G.nodes():
+                if order is None:
+                    pos[node] = (G.nodes[node]["day"], -G.nodes[node]["cluster_gmm"])
+                else:
+                    pos[node] = (G.nodes[node]["day"], -G.nodes[node]["cluster_weight"])
+        fig, ax = plt.subplots(figsize=(12, 10))
+
+        # draw edge border
+        nx.draw(
+            G,
+            pos,
+            node_size=[node["weight"] * 4500 for node in G.nodes.values()],
+            node_color="white",
+            edge_color="black",
+            arrows=True,
+            arrowsize=30,
+            linewidths=2,
+            ax=ax,
+            width=6.0,
+        )
+        nx.draw(
+            G,
+            pos,
+            node_size=[node["weight"] * 5000 for node in G.nodes.values()],
+            node_color="white",
+            edge_color="white",
+            arrows=True,
+            arrowsize=30,
+            linewidths=2,
+            ax=ax,
+            width=5.0,
+        )
+
+        # draw edges
+        node_cmap = (
+            plt.cm.tab10(np.arange(10))
+            if len(self.X_raw) <= 10
+            else plt.cm.tab20(np.arange(20))
+        )
+        nx.draw(
+            G,
+            pos,
+            node_size=[node["weight"] * 5000 for node in G.nodes.values()],
+            node_color=node_color,
+            edge_color=color_data,
+            edgecolors="white",
+            arrows=True,
+            arrowsize=30,
+            linewidths=2,
+            cmap=ListedColormap(node_cmap[: len(self.X_raw)]),
+            edge_cmap=plt.cm.Reds,
+            ax=ax,
+            alpha=1,
+            width=5.0,
+        )
+
+        texts = []
+        for node in G.nodes():
+            text_ = ax.text(
+                pos[node][0],
+                pos[node][1],
+                str(node),
+                fontsize=14,
+                fontweight="bold",
+                ha="center",
+                va="center",
+            )
+            text_.set_path_effects(
+                [patheffects.withStroke(linewidth=3, foreground="w")]
+            )
+            texts.append(text_)
+
+        if layout == "normal":
+            adjust_text(texts)
+
+        plt.show()
+
+        if save:
+            fig.savefig(save_path, dpi=200, bbox_inches="tight")
 
     def plot_fold_change(
         self,
@@ -1677,7 +2233,8 @@ class scEGOT:
         self, gene_name, mode="pca", col=None, save=False, save_path=None
     ):
         warnings.warn(
-            "scegot.plot_pathway_single_gene_2d() will be depricated. Use scegot.plot_gene_expression_2d() instead.",
+            "'plot_pathway_single_gene_2d()' was deprecated and will be removed in future versions.\n"
+            "Use 'plot_gene_expression_2d()' instead.",
             FutureWarning,
         )
         self.plot_gene_expression_2d(gene_name, mode, col, save, save_path)
@@ -1742,7 +2299,8 @@ class scEGOT:
         self, gene_name, col=None, save=False, save_path=None
     ):
         warnings.warn(
-            "scegot.plot_pathway_single_gene_3d() will be depricated. Use scegot.plot_gene_expression_3d() instead.",
+            "'plot_pathway_single_gene_3d()' was deprecated and will be removed in future versions.\n"
+            "Use 'plot_gene_expression_3d()' instead.",
             FutureWarning,
         )
         self.plot_gene_expression_3d(gene_name, col, save, save_path)
@@ -2446,9 +3004,10 @@ class scEGOT:
         save=False,
         save_path=None,
     ):
-        """Plot the interpolation of cell velocities. This mefhod could be depricated in the future
-        because 'plot_cell_velocity' method now supports plotting streamlines.
-
+        """.. warning::
+            ``plot_interpolation_of_cell_velocity()`` was deprecated in version 0.3.0 and will be removed in future versions.
+            Use ``plot_cell_velocity()`` instead.
+        
         Parameters
         ----------
         velocities : pd.DataFrame
@@ -2496,6 +3055,12 @@ class scEGOT:
             - When 'color_points' is not 'gmm' or 'day'.
             - When 'color_points' is 'gmm' and 'cluster_names' is None.
         """
+
+        warnings.warn(
+            "'plot_interpolation_of_cell_velocity()' was deprecated and will be removed in future versions.\n"
+            "Use 'plot_cell_velocity()' instead.",
+            FutureWarning,
+        )
 
         if mode not in ["pca", "umap"]:
             raise ValueError("The parameter 'mode' should be 'pca' or 'umap'.")
@@ -3677,23 +4242,29 @@ class CellStateGraph():
         Parameters
         ----------
         layout : {'normal', 'hierarchy'}, optional
-            The layout of the graph, by default "normal"
-            When 'normal', the graph is plotted in PCA or UMAP space.
-            When 'hierarchy', the graph is plotted with the day on the x-axis and the cluster on the y-axis.
+            The layout of the graph, by default "normal".
+
+            * When "normal", the graph is plotted in PCA or UMAP space.
+            * When "hierarchy", the graph is plotted with the day on the x-axis and the cluster on the y-axis.
 
         y_position : str or dict, optional
-            Determines the y-axis position of nodes when layout is 'hierarchy', by default "name".
-            - 'name': Sort nodes alphabetically by name.
-            - 'weight': Sort nodes by their weight.
-            - dict: A dictionary mapping node names to y-axis positions.
-            This parameter is ignored when layout is 'normal'.
+            Determines the y-axis position of nodes when layout is "hierarchy", by default "name".
+
+            * "name": Sort nodes alphabetically by name.
+            * "weight": Sort nodes by their weight.
+            * dict: A dictionary mapping node names to y-axis positions.
+
+            This parameter is ignored when layout is "normal".
 
         cluster_names : list of list of str, optional
             Custom names for the clusters, by default None.
+
             1st dimension is the number of days, 2nd dimension is the number of gmm components
             in each day.
-            Merged clusters must have the same name when 'merge_clusters_by_name' is True.
-            If None, self.cluster_names is used.
+            When the attribute ``merge_clusters_by_name`` is True, clusters to be merged must be given
+            the same new name.
+
+            If None, the attribute ``cluster_names`` is used.
 
         node_weight_annotation : bool, optional
             If True, display the weight of each node, by default False.
@@ -3702,11 +4273,11 @@ class CellStateGraph():
             If True, display the weight of each edge, by default False.
 
         save : bool, optional
-            If True, save the output image, by default False
+            If True, save the output image, by default False.
 
         save_path : str, optional
-            Path to save the output image, by default None
-            If None, the image will be saved as './simple_cell_state_graph.png'
+            Path to save the output image, by default None.
+            If None, the image will be saved as './simple_cell_state_graph.png'.
 
         Raises
         ------
@@ -3929,25 +4500,32 @@ class CellStateGraph():
         ----------
         layout : {'normal', 'hierarchy'}, optional
             The layout of the graph, by default "normal"
-            When 'normal', the graph is plotted in PCA or UMAP space.
-            When 'hierarchy', the graph is plotted with the day on the x-axis and the cluster on the y-axis.
+
+            * When 'normal', the graph is plotted in PCA or UMAP space.
+            * When 'hierarchy', the graph is plotted with the day on the x-axis and the cluster on the y-axis.
 
         y_position : str or dict, optional
             Determines the y-axis position of nodes when layout is 'hierarchy', by default "name".
-            - 'name': Sort nodes alphabetically by name.
-            - 'weight': Sort nodes by their weight.
-            - dict: A dictionary mapping node names to y-axis positions.
+
+            * 'name': Sort nodes alphabetically by name.
+            * 'weight': Sort nodes by their weight.
+            * dict: A dictionary mapping node names to y-axis positions.
+
             This parameter is ignored when layout is 'normal'.
 
         cluster_names : list of list of str
+            Custom names for the clusters, by default None.
+
             1st dimension is the number of days, 2nd dimension is the number of gmm components
             in each day.
-            Merged clusters must have the same name when 'merge_clusters_by_name' is True.
-            Can be generaged by 'generate_cluster_names' method.
+            When the attribute ``merge_clusters_by_name`` is True, clusters to be merged must be given
+            the same new name.
+
+            If None, the attribute ``cluster_names`` is used.
 
         tf_gene_names : list of str, optional
             List of transcription factor gene names to use, by default None
-            If None, all gene names (self.gene_names) will be used.
+            If None, all gene names (``self.scegot.gene_names``) will be used.
             You can pass on any list of gene names you want to use, not limited to TF genes.
 
         tf_gene_pick_num : int, optional
