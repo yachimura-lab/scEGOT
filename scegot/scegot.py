@@ -3633,7 +3633,7 @@ class scEGOT:
         S_0,
         S_1,
         reg=0.01,
-        numItermax=int(1e10),
+        numItermax=5000,
         method="sinkhorn_epsilon_scaling",
         tau=1e8,
         stopThr=1e-9,
@@ -3651,7 +3651,7 @@ class scEGOT:
                     mu_0[k, :], mu_1[l, :], S_0[k, :, :], S_1[l, :, :]
                 )
         with warnings.catch_warnings():
-            warnings.filterwarnings("ignore", category=UserWarning, module="ot")
+            warnings.filterwarnings("once", category=UserWarning, module="ot")
             solution = ot.sinkhorn(
                 pi_0,
                 pi_1,
@@ -3670,7 +3670,7 @@ class scEGOT:
         gmm_source,
         gmm_target,
         reg=0.01,
-        numItermax=int(1e10),
+        numItermax=5000,
         method="sinkhorn_epsilon_scaling",
         tau=1e8,
         stopThr=1e-9,
@@ -3700,7 +3700,7 @@ class scEGOT:
         self,
         gmm_models,
         reg=0.01,
-        numItermax=int(1e3),
+        numItermax=5000,
         method="sinkhorn_epsilon_scaling",
         tau=1e8,
         stopThr=1e-9,
@@ -3726,7 +3726,7 @@ class scEGOT:
         self,
         gmm_models,
         reg=0.01,
-        numItermax=int(1e3),
+        numItermax=5000,
         method="sinkhorn_epsilon_scaling",
         tau=1e8,
         stopThr=1e-9,
