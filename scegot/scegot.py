@@ -4446,7 +4446,7 @@ class CellStateGraph():
             df_downgenes = pd.concat([df_downgenes, downgenes])
         return df_downgenes
 
-    def _get_tf_genes_info(self, tf_gene_names, tf_gene_pick_num):
+    def _get_genes_info(self, gene_names, gene_pick_num):
         scegot = self.scegot
         
         mean_gene_values_per_cluster = (
@@ -4461,35 +4461,35 @@ class CellStateGraph():
             mean_gene_values_per_cluster = mean_gene_values_per_cluster.groupby(level=0).apply(self._calculate_weighted_mean_of_gene_values)
             mean_gene_values_per_cluster = mean_gene_values_per_cluster.reset_index(level=1, drop=True)
         
-        mean_tf_gene_values_per_cluster = mean_gene_values_per_cluster.loc[
-            :, mean_gene_values_per_cluster.columns.isin(tf_gene_names)
+        mean_gene_values_per_cluster = mean_gene_values_per_cluster.loc[
+            :, mean_gene_values_per_cluster.columns.isin(gene_names)
         ]
         # nodes
-        tf_nlargest = mean_tf_gene_values_per_cluster.T.apply(
-            scegot._get_nlargest_gene_indices, num=tf_gene_pick_num
+        nlargest_genes = mean_gene_values_per_cluster.T.apply(
+            scegot._get_nlargest_gene_indices, num=gene_pick_num
         ).T
-        tf_nsmallest = mean_tf_gene_values_per_cluster.T.apply(
-            scegot._get_nsmallest_gene_indices, num=tf_gene_pick_num
+        nsmallest_genes = mean_gene_values_per_cluster.T.apply(
+            scegot._get_nsmallest_gene_indices, num=gene_pick_num
         ).T
-        tf_nlargest.columns += 1
-        tf_nsmallest.columns += 1
+        nlargest_genes.columns += 1
+        nsmallest_genes.columns += 1
         # edges
-        tf_up_genes = self._get_up_regulated_genes(
-            mean_tf_gene_values_per_cluster, num=tf_gene_pick_num
+        up_genes = self._get_up_regulated_genes(
+            mean_gene_values_per_cluster, num=gene_pick_num
         )
-        tf_down_genes = self._get_down_regulated_genes(
-            mean_tf_gene_values_per_cluster, num=tf_gene_pick_num
+        down_genes = self._get_down_regulated_genes(
+            mean_gene_values_per_cluster, num=gene_pick_num
         )
 
-        return tf_nlargest, tf_nsmallest, tf_up_genes, tf_down_genes
+        return nlargest_genes, nsmallest_genes, up_genes, down_genes
 
     def plot_cell_state_graph(
         self,
         layout="normal",
         y_position="name",
         cluster_names=None,
-        tf_gene_names=None,
-        tf_gene_pick_num=5,
+        gene_names=None,
+        gene_pick_num=5,
         plot_title="Cell State Graph",
         save=False,
         save_path=None,
@@ -4523,12 +4523,12 @@ class CellStateGraph():
 
             If None, the attribute ``cluster_names`` is used.
 
-        tf_gene_names : list of str, optional
-            List of transcription factor gene names to use, by default None
+        gene_names : list of str, optional
+            List of gene names to use, by default None
             If None, all gene names (``self.scegot.gene_names``) will be used.
             You can pass on any list of gene names you want to use, not limited to TF genes.
 
-        tf_gene_pick_num : int, optional
+        gene_pick_num : int, optional
             The number of genes to show in each node and edge, by default 5
         
         plot_title : str, optional
@@ -4555,13 +4555,13 @@ class CellStateGraph():
         else:
             cluster_names = self._validate_cluster_names(cluster_names)
         
-        if tf_gene_names is None:
-            tf_gene_names = self.scegot.gene_names
+        if gene_names is None:
+            gene_names = self.scegot.gene_names
 
         if save and save_path is None:
             save_path = "./cell_state_graph.png"        
 
-        tf_nlargest, tf_nsmallest, tf_up_genes, tf_down_genes = self._get_tf_genes_info(tf_gene_names, tf_gene_pick_num)
+        nlargest_genes, nsmallest_genes, up_genes, down_genes = self._get_genes_info(gene_names, gene_pick_num)
 
         tail_list = []
         head_list = []
@@ -4613,7 +4613,7 @@ class CellStateGraph():
             target = G.nodes[edge[1]]
             x_0, y_0 = pos[edge[0]]
             x_1, y_1 = pos[edge[1]]
-            tf_genes_index = (str(edge[0]), str(edge[1]))
+            genes_index = (str(edge[0]), str(edge[1]))
             source_day = source["day"]
             source_gmm = source["cluster_gmm_list"][0]
             source_name = cluster_names[source_day][source_gmm]
@@ -4623,8 +4623,8 @@ class CellStateGraph():
             hovertext = (
                 f"<b>Edge from {source_name} to {target_name}</b><br>"
                 f"weight = {G.edges[edge]['weight']:.4f}<br>"
-                f"up_genes: {', '.join(tf_up_genes.T[tf_genes_index].values)}<br>"
-                f"down_genes: {', '.join(tf_down_genes.T[tf_genes_index].values)}"
+                f"up_genes: {', '.join(up_genes.T[genes_index].values)}<br>"
+                f"down_genes: {', '.join(down_genes.T[genes_index].values)}"
             )
             middle_hover_trace["x"] += tuple([(x_0 + x_1) / 2])
             middle_hover_trace["y"] += tuple([(y_0 + y_1) / 2])
@@ -4675,8 +4675,8 @@ class CellStateGraph():
             )
             node_gene_text = (
                 f"<b>{node_name}</b><br>"
-                f"largest_genes: {', '.join(tf_nlargest.T[node].values)}<br>"
-                f"smallest_genes: {', '.join(tf_nsmallest.T[node].values)}"
+                f"largest_genes: {', '.join(nlargest_genes.T[node].values)}<br>"
+                f"smallest_genes: {', '.join(nsmallest_genes.T[node].values)}"
             )
             node_gene_texts.append(node_gene_text)
 
