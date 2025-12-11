@@ -3994,9 +3994,10 @@ class scEGOT:
                         day_separated_gmm_model.precisions_cholesky_ = np.array(precisions_cholesky)
                         day_separated_gmm_model.converged_ = day_concated_gmm_model.converged_
                         day_separated_gmm_model.lower_bound_ = day_concated_gmm_model.lower_bound_
-                        day_separated_gmm_model.lower_bounds_ = day_concated_gmm_model.lower_bounds_
                         day_separated_gmm_model.n_features_in_ = day_concated_gmm_model.n_features_in_
                         day_separated_gmm_model.n_iter_ = day_concated_gmm_model.n_iter_
+                        if day_concated_gmm_model.lower_bounds_ is not None:
+                            day_separated_gmm_model.lower_bounds_ = day_concated_gmm_model.lower_bounds_
 
                         separated_gmm_models.append(day_separated_gmm_model)
                     else:
