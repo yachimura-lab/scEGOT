@@ -1091,7 +1091,7 @@ class scEGOT:
     def merge_cluster_names_by_pathway(
         self,
         last_day_cluster_names,
-        n_merge_iter=1,
+        n_merge_iter=None,
         merge_method="pattern",
         threshold=0.05,
         n_clusters_list=None,
@@ -1108,7 +1108,8 @@ class scEGOT:
             The length of the list should be equal to the number of clusters in the last day.
         
         n_merge_iter : int, optional
-            Number of preceding days to trace back and merge cluster names, starting from the last day, by default 1.
+            Number of preceding days to trace back and merge cluster names, starting from
+            the last day, by default (the number of days - 1).
             
             Must be an integer in the range from 1 to (the number of days - 1).
 
@@ -1127,7 +1128,7 @@ class scEGOT:
         n_clusters_list : list of int, optional
             List specifying the number of merged clusters for each day.
 
-            The length of the list must equal to 'n_merge_iter'.
+            The length of the list must equal to the number of days or (the number of days - 1).
             If None, defaults to the minimum of (original cluster count, 4) for each day.
 
             This parameter is used only when `merge_method` is 'kmeans'.
@@ -1136,7 +1137,6 @@ class scEGOT:
             Arbitrary keyword arguments passed to sklearn.cluster.KMeans.
 
             This parameter is used only when `merge_method` is 'kmeans'.
-
 
         Returns
         -------
@@ -1152,15 +1152,19 @@ class scEGOT:
             * When 'merge_method' is not one of 'pattern' or 'kmeans'.
         """
 
-        if not n_merge_iter in list(range(1, len(self.day_names))):
+        if (n_merge_iter is not None) and (not n_merge_iter in list(range(1, len(self.day_names)))):
             raise ValueError(f"The parameter 'n_merge_iter' should be an integer from 1 to {len(self.day_names) - 1}.")
 
         if not merge_method in ["pattern", "kmeans"]:
             raise ValueError("The parameter 'merge_method' should be 'pattern' or 'kmeans'")
         
-        if merge_method == "kmeans" and n_clusters_list == None:
-            n_clusters_list = [min(self.gmm_n_components_list[-(i+1)], 4) for i in range(n_merge_iter)]
+        if n_merge_iter is None:
+            n_merge_iter = len(self.day_names) - 1
 
+        if merge_method == "kmeans" and n_clusters_list == None:
+            n_clusters_list = [min(gmm_n_components, 4) for gmm_n_components in self.gmm_n_components_list]
+
+        n_days = len(self.day_names)
         cluster_names = self.generate_cluster_names_with_day()
         cluster_names[-1] = last_day_cluster_names
 
@@ -1217,7 +1221,7 @@ class scEGOT:
                 )
                 
                 # K-means法でクラスタリング
-                kmeans_model = KMeans(n_clusters=n_clusters_list[i], **kmeans_kwargs).fit(source_target_df)
+                kmeans_model = KMeans(n_clusters=n_clusters_list[n_days - (i+2)], **kmeans_kwargs).fit(source_target_df)
                 node_id_base = min(source_node_ids)
                 new_source_cluster_ids = []
                 for group_num in kmeans_model.labels_:
@@ -3650,8 +3654,13 @@ class scEGOT:
                 M[k, l] = self.bures_wasserstein_distance(
                     mu_0[k, :], mu_1[l, :], S_0[k, :, :], S_1[l, :, :]
                 )
-        with warnings.catch_warnings():
-            warnings.filterwarnings("once", category=UserWarning, module="ot")
+        with warnings.catch_warnings(record=True) as w:
+            warnings.filterwarnings(
+                "always",
+                message="Sinkhorn did not converge.",
+                category=UserWarning,
+                module="ot"    
+            )
             solution = ot.sinkhorn(
                 pi_0,
                 pi_1,
@@ -3663,6 +3672,14 @@ class scEGOT:
                 stopThr=stopThr,
                 **sinkhorn_other_params,
             )
+
+        if len(w):
+            warnings.warn(
+                "Warning: Sinkhorn did not converge.\n"
+                "You might want to increase the number of iterations `numItermax` or the regularization parameter `reg`.",
+                UserWarning
+            )
+
         return solution
 
     def calculate_solution(
@@ -3898,7 +3915,7 @@ class scEGOT:
         gmm_label_flag = self.gmm_labels is not None
         return_cluster_names = gmm_label_flag and return_cluster_names
 
-        if return_cluster_names and cluster_names is None:
+        if cluster_names is None:
             cluster_names = self.generate_cluster_names_with_day()
 
         for data_name in data_names:
@@ -3996,7 +4013,7 @@ class scEGOT:
                         day_separated_gmm_model.lower_bound_ = day_concated_gmm_model.lower_bound_
                         day_separated_gmm_model.n_features_in_ = day_concated_gmm_model.n_features_in_
                         day_separated_gmm_model.n_iter_ = day_concated_gmm_model.n_iter_
-                        if day_concated_gmm_model.lower_bounds_ is not None:
+                        if hasattr(day_concated_gmm_model, "lower_bounds_"):
                             day_separated_gmm_model.lower_bounds_ = day_concated_gmm_model.lower_bounds_
 
                         separated_gmm_models.append(day_separated_gmm_model)
