@@ -44,14 +44,14 @@ sns.set_style("whitegrid")
 
 
 def is_notebook():
-    """
-    Check if the code is running in a Jupyter notebook or not.
+    """Check if the code is running in a Jupyter notebook or not.
 
     Returns
     -------
     bool
         True if the code is running in a Jupyter notebook, False otherwise.
     """
+
     try:
         from IPython import get_ipython
 
@@ -71,8 +71,7 @@ def is_notebook():
 
 
 def _check_input_data(input_data, day_names, adata_day_key):
-    """
-    Check the input data and return the processed data.
+    """Check the input data and return the processed data.
 
     Parameters
     ----------
@@ -99,6 +98,7 @@ def _check_input_data(input_data, day_names, adata_day_key):
     list of pd.DataFrame
         List of DataFrames.
     """
+
     if isinstance(input_data, list):
         if day_names is None:
             raise ValueError(
@@ -145,8 +145,7 @@ def integrate_data(
     recode_params={},
     recode_integration_params={},    
 ):
-    """
-    Integrate multiple data using iRECODE.
+    """Integrate multiple data using iRECODE.
 
     Parameters
     ----------
@@ -255,8 +254,7 @@ class scEGOT:
         verbose=True,
         adata_day_key=None,
     ):
-        """
-        Initialize the scEGOT object.
+        """Initialize the scEGOT object.
 
         Parameters
         ----------
@@ -619,6 +617,7 @@ class scEGOT:
         umap.umap\_.UMAP
             UMAP instance fitted to the input data.
         """
+
         X_concated = pd.concat(self.X_pca)
         X_concated, umap_model = self._apply_umap_to_concated_data(
             X_concated,
@@ -713,6 +712,7 @@ class scEGOT:
             List of GMM labels.
             Each element is the predicted labels for the corresponding day's data.
         """
+
         if self.verbose:
             print(
                 "Fitting GMM models with each day's data and predicting labels for them..."
@@ -840,6 +840,7 @@ class scEGOT:
         ValueError
             When 'mode' is not 'pca' or 'umap'.
         """
+
         if mode not in ["pca", "umap"]:
             raise ValueError("The parameter 'mode' should be 'pca' or 'umap'.")
 
@@ -995,6 +996,7 @@ class scEGOT:
             Path to save the output animation, by default None
             If None, the animation will be saved as './cell_state_video.gif'
         """
+
         if save and save_path is None:
             save_path = "./cell_state_video.gif"
 
@@ -1732,7 +1734,10 @@ class scEGOT:
             x_0, y_0 = G.nodes[edge[0]]["pos"]
             x_1, y_1 = G.nodes[edge[1]]["pos"]
             from_to = str(edge[0]) + str(edge[1])
-            hovertext = f"""up_genes: {', '.join(edges_up_gene.T[from_to].values)}<br>down_genes: {', '.join(edges_down_gene.T[from_to].values)}"""
+            hovertext = (
+                f"up_genes: {', '.join(edges_up_gene.T[from_to].values)}<br>"
+                f"down_genes: {', '.join(edges_down_gene.T[from_to].values)}"
+            )
             middle_hover_trace["x"] += tuple([(x_0 + x_1) / 2])
             middle_hover_trace["y"] += tuple([(y_0 + y_1) / 2])
             middle_hover_trace["hovertext"] += tuple([hovertext])
@@ -1779,7 +1784,10 @@ class scEGOT:
             x, y = G.nodes[node]["pos"]
             node_x.append(x)
             node_y.append(y)
-            hovertext = f"""largest_genes: {', '.join(nodes_up_gene.T[node].values)}<br>smallest_genes: {', '.join(nodes_down_gene.T[node].values)}"""
+            hovertext = (
+                f"largest_genes: {', '.join(nodes_up_gene.T[node].values)}<br>"
+                f"smallest_genes: {', '.join(nodes_down_gene.T[node].values)}"
+            )
             node_hover_trace["x"] += tuple([x])
             node_hover_trace["y"] += tuple([y])
             node_hover_trace["hovertext"] += tuple([hovertext])
@@ -2436,6 +2444,7 @@ class scEGOT:
             Path to save the output image, by default None
             If None, the image will be saved as './pathway_single_gene_3d.html'
         """
+
         if save and save_path is None:
             save_path = "./pathway_single_gene_3d.html"
 
@@ -2763,6 +2772,7 @@ class scEGOT:
         ValueError
             When 'mode' is not 'pca' or 'umap'.
         """
+
         if mode not in ["pca", "umap"]:
             raise ValueError("The parameter 'mode' should be 'pca' or 'umap'.")
 
@@ -3333,6 +3343,7 @@ class scEGOT:
             RidgeCV objects used to calculate GRNs.
             Each element of the list corresponds to the RidgeCV object between day i and day i + 1.
         """
+
         grns, ridge_cvs = [], []
 
         if self.solutions is None:
