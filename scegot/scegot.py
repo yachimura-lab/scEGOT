@@ -44,7 +44,8 @@ sns.set_style("whitegrid")
 
 
 def is_notebook():
-    """Check if the code is running in a Jupyter notebook or not.
+    """
+    Check if the code is running in a Jupyter notebook or not.
 
     Returns
     -------
@@ -71,7 +72,8 @@ def is_notebook():
 
 
 def _check_input_data(input_data, day_names, adata_day_key):
-    """Check the input data and return the processed data.
+    """
+    Check the input data and return the processed data.
 
     Parameters
     ----------
@@ -145,7 +147,8 @@ def integrate_data(
     recode_params={},
     recode_fit_transform_params={},    
 ):
-    """Integrate multiple data using iRECODE.
+    """
+    Integrate multiple data using iRECODE.
 
     Parameters
     ----------
@@ -254,7 +257,8 @@ class scEGOT:
         verbose=True,
         adata_day_key=None,
     ):
-        """Initialize the scEGOT object.
+        """
+        Initialize the scEGOT object.
 
         Parameters
         ----------
@@ -456,7 +460,8 @@ class scEGOT:
         select_genes=True,
         n_select_genes=2000,
     ):
-        """Preprocess the input data. 
+        """
+        Preprocess the input data. 
         
         Apply scRECODE, normalize, select highly variable genes, and apply PCA.
 
@@ -502,7 +507,7 @@ class scEGOT:
             
         sklearn.decomposition.PCA
             PCA instance fitted to the input data.
-        """        
+        """
         
         X_concated = pd.concat(self.X_raw)
 
@@ -586,7 +591,8 @@ class scEGOT:
         min_dist=0.1,
         umap_other_params={},
     ):
-        """Fit self.X_pca to UMAP and return the transformed data.
+        """
+        Fit self.X_pca to UMAP and return the transformed data.
 
         Parameters
         ----------
@@ -675,7 +681,8 @@ class scEGOT:
         random_state=None,
         gmm_other_params={},
     ):
-        """Fit GMM models with each day's data and predict labels for them.
+        """
+        Fit GMM models with each day's data and predict labels for them.
 
         Parameters
         ----------
@@ -794,7 +801,8 @@ class scEGOT:
         save=False,
         save_paths=None,
     ):
-        """Plot GMM predictions.
+        """
+        Plot GMM predictions.
         Output images for the number of days.
         Each image contains two subplots: left one is in one color and right one is 
         colored by GMM labels.
@@ -970,7 +978,8 @@ class scEGOT:
         save=False,
         save_path=None,
     ):
-        """Export an animation of the interpolated distribution between GMM models.
+        """
+        Export an animation of the interpolated distribution between GMM models.
 
         Parameters
         ----------
@@ -1207,7 +1216,8 @@ class scEGOT:
         n_clusters_list=None,
         **kmeans_kwargs
     ):
-        """Merge cluster names based on cell state graph pathways.
+        """
+        Merge cluster names based on cell state graph pathways.
 
         Parameters
         ----------
@@ -1405,7 +1415,8 @@ class scEGOT:
         mode="pca",
         threshold=0.05,
     ):
-        """.. warning::
+        """
+        .. warning::
             ``make_cell_state_graph()`` was deprecated in version 0.3.0 and will be removed in future versions.
             Use ``make_cell_state_graph_object()`` instead.
         
@@ -1525,7 +1536,8 @@ class scEGOT:
         y_reverse=False,
         require_parent=False,
     ):
-        """Compute cell state graph and build a ``CellStateGraph`` object.
+        """
+        Compute cell state graph and build a ``CellStateGraph`` object.
 
         Parameters
         ----------
@@ -1828,7 +1840,8 @@ class scEGOT:
         save=False,
         save_path=None,
     ):
-        """.. warning::
+        """
+        .. warning::
             ``scEGOT.plot_cell_state_graph()`` was deprecated in version 0.3.0 and will be removed in future versions.
             Use ``CellStateGraph.plot_cell_state_graph()`` instead.
         
@@ -1915,7 +1928,8 @@ class scEGOT:
     def plot_simple_cell_state_graph(
         self, G, layout="normal", order=None, save=False, save_path=None
     ):
-        """.. warning::
+        """
+        .. warning::
             ``scEGOT.plot_simple_cell_state_graph()`` was deprecated in version 0.3.0 and will be removed in future versions.
             Use ``CellStateGraph.plot_simple_cell_state_graph()`` instead.
         
@@ -2062,7 +2076,8 @@ class scEGOT:
         save=False,
         save_path=None,
     ):
-        """Plot fold change between two clusters.
+        """
+        Plot fold change between two clusters.
 
         Parameters
         ----------
@@ -2176,7 +2191,8 @@ class scEGOT:
         save=False,
         save_path=None,
     ):
-        """Plot mean and variance of gene expression levels within a pathway.
+        """
+        Plot mean and variance of gene expression levels within a pathway.
 
         Parameters
         ----------
@@ -2290,7 +2306,8 @@ class scEGOT:
         save=False,
         save_path=None,
     ):
-        """Plot gene expression levels within a pathway.
+        """
+        Plot gene expression levels within a pathway.
 
         Parameters
         ----------
@@ -2362,7 +2379,8 @@ class scEGOT:
     def plot_gene_expression_2d(
         self, gene_name, mode="pca", col=None, save=False, save_path=None
     ):
-        """Plot gene expression levels in 2D space.
+        """
+        Plot gene expression levels in 2D space.
 
         Parameters
         ----------
@@ -2426,7 +2444,8 @@ class scEGOT:
         self.plot_gene_expression_3d(gene_name, col, save, save_path)
 
     def plot_gene_expression_3d(self, gene_name, col=None, save=False, save_path=None):
-        """Plot gene expression levels in 3D space.
+        """
+        Plot gene expression levels in 3D space.
 
         Parameters
         ----------
@@ -2477,7 +2496,8 @@ class scEGOT:
     def make_interpolation_data(
         self, gmm_source, gmm_target, t, columns=None, n_samples=2000, seed=0
     ):
-        """Make interpolation data between two timepoints.
+        """
+        Make interpolation data between two timepoints.
 
         Parameters
         ----------
@@ -2561,7 +2581,8 @@ class scEGOT:
         save=False,
         save_path=None,
     ):
-        """Compare the true and interpolation distributions by plotting them.
+        """
+        Compare the true and interpolation distributions by plotting them.
 
         Parameters
         ----------
@@ -2725,7 +2746,8 @@ class scEGOT:
         save=False,
         save_path=None,
     ):
-        """Calculate interpolation between all timepoints and create animation colored by gene expression level. 
+        """
+        Calculate interpolation between all timepoints and create animation colored by gene expression level. 
 
         Parameters
         ----------
@@ -2918,7 +2940,8 @@ class scEGOT:
         return velo
 
     def calculate_cell_velocities(self):
-        """Calculate cell velocities between each day.
+        """
+        Calculate cell velocities between each day.
 
         Returns
         -------
@@ -2971,7 +2994,8 @@ class scEGOT:
         save=False,
         save_path=None,
     ):
-        """Plot cell velocities in 2D space.
+        """
+        Plot cell velocities in 2D space.
 
         Parameters
         ----------
@@ -3126,7 +3150,8 @@ class scEGOT:
         save=False,
         save_path=None,
     ):
-        """.. warning::
+        """
+        .. warning::
             ``plot_interpolation_of_cell_velocity()`` was deprecated in version 0.3.0 and will be removed in future versions.
             Use ``plot_cell_velocity()`` instead.
         
@@ -3307,7 +3332,8 @@ class scEGOT:
         ridge_cv_fit_intercept=False,
         ridge_fit_intercept=False,
     ):
-        """Calculate gene regulatory networks (GRNs) between each day.
+        """
+        Calculate gene regulatory networks (GRNs) between each day.
 
         Parameters
         ----------
@@ -3427,7 +3453,8 @@ class scEGOT:
         save_paths=None,
         save_format="png",
     ):
-        """Plot gene regulatory networks (GRNs) between each day.
+        """
+        Plot gene regulatory networks (GRNs) between each day.
 
         Parameters
         ----------
@@ -3476,7 +3503,8 @@ class scEGOT:
         n_neighbors=100,
         knn_other_params={},
     ):
-        """Calculate Waddington potential of each sample.
+        """
+        Calculate Waddington potential of each sample.
         
         Parameters
         ----------
@@ -3609,7 +3637,8 @@ class scEGOT:
         save=False,
         save_path=None,
     ):
-        """Plot Waddington potential in 3D space.
+        """
+        Plot Waddington potential in 3D space.
 
         Parameters
         ----------
@@ -3677,7 +3706,8 @@ class scEGOT:
         save=False,
         save_path=None,
     ):
-        """Plot Waddington's landscape in 3D space by using cellmap.
+        """
+        Plot Waddington's landscape in 3D space by using cellmap.
 
         Parameters
         ----------
@@ -3988,7 +4018,8 @@ class scEGOT:
         cluster_names=None,
         original_covariances_weight = 0
     ):
-        """Create separated data for each data name.
+        """
+        Create separated data for each data name.
 
         Parameters
         ----------
@@ -4212,7 +4243,8 @@ class CellStateGraph():
         self.gmm_n_components_list = scegot.gmm_n_components_list
         
     def reverse_graph(self, x=False, y=False):
-        """Reverse the graph layout along the specified axes.
+        """
+        Reverse the graph layout along the specified axes.
 
         Parameters
         ----------
@@ -4267,7 +4299,8 @@ class CellStateGraph():
         return cluster_names
     
     def set_cluster_names(self, cluster_names):
-        """Set new cluster names for the cell state graph.  
+        """
+        Set new cluster names for the cell state graph.  
 
         Parameters
         ----------
@@ -4294,7 +4327,8 @@ class CellStateGraph():
         return cluster_names
 
     def update_cluster_names(self, cluster_names_map, day=None):
-        """Update cluster names for the cell state graph based on a mapping dictionary.
+        """
+        Update cluster names for the cell state graph based on a mapping dictionary.
 
         Parameters
         ----------
@@ -4374,7 +4408,8 @@ class CellStateGraph():
         save=False,
         save_path=None
     ):
-        """Plot the cell state graph with the given graph object in a simple way.
+        """
+        Plot the cell state graph with the given graph object in a simple way.
 
         Parameters
         ----------
@@ -4631,7 +4666,8 @@ class CellStateGraph():
         save=False,
         save_path=None,
     ):
-        """Plot the cell state graph with the given graph object.
+        """
+        Plot the cell state graph with the given graph object.
 
         Parameters
         ----------
