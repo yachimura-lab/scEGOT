@@ -139,6 +139,114 @@ def _check_input_data(input_data, day_names, adata_day_key):
         raise TypeError("'X' should be AnnData or an array of DataFrames.")
 
 
+def integrate_data(
+    input_data_dict,
+    adata_day_key=None,
+    recode_params={},
+    recode_integration_params={},    
+):
+    """
+    Integrate multiple data using iRECODE.
+
+    Parameters
+    ----------
+    input_data_dict : dict
+        A dictionary where keys are data names and values are
+        input data (list of pd.DataFrame or AnnData).  
+
+    adata_day_key : str, optional
+        Name of the key in AnnData.obs for day names, by default None.
+        Should be specified when values of input_data_dict are AnnData.
+
+    recode_params : dict, optional
+        paramaters passed to the screcode.RECODE constructor, by default {}
+
+    recode_integration_params : dict, optional
+        paramaters for RECODE.fit_transform(), by default {}
+
+    Raises
+    ------
+    ValueError 
+        When 'X' is AnnData and 'adata_day_key' is not specified.
+    
+    TypeError
+        This error is raised in the following cases:
+        
+        * When input_data_dict is not a dict.
+        * When values of input_data_dict is neither list of pd.DataFrame nor AnnData.  
+        
+    Returns
+    -------
+    (list of pd.DataFrame) or AnnData
+        Integrated data.
+    """
+
+    input_type_error_msg = (
+        "input_data_dict must be a dict with values as a list of AnnData or a list of list of DataFrame."
+    )
+
+    if not isinstance(input_data_dict, dict):
+        raise TypeError(input_type_error_msg)
+
+    input_data_list = input_data_dict.values()
+
+    if all(isinstance(data, anndata.AnnData) for data in input_data_list):
+        if adata_day_key is None:
+            raise ValueError("When 'X' is AnnData, 'adata_day_key' should be specified.")
+        for data_name, adata in input_data_dict.items():
+            adata.obs.index = data_name + "_" + adata.obs.index
+            adata.obs["batch"] = data_name + "_" + adata.obs[adata_day_key].astype(str)
+        concated_adata = anndata.concat(input_data_list)
+        recode = screcode.RECODE(**recode_params)
+        integrated_adata = recode.fit_transform(
+            concated_adata,
+            batch_key="batch",
+            **recode_integration_params
+        )
+        integrated_adata.X = integrated_adata.layers["RECODE"]
+        return integrated_adata
+
+    elif all(isinstance(data, list) for data in input_data_list):
+        metadata_df_list = []
+        for data_name, df_list in input_data_dict.items():
+            if not all(isinstance(df, pd.DataFrame) for df in df_list):
+                raise TypeError(input_type_error_msg)
+            for day_index, day_df in enumerate(df_list):
+                day_df.rename(index= lambda s: f"{data_name}_{s}", inplace=True)
+                n_day_data = len(day_df)
+                metadata_df = pd.DataFrame(
+                    [f"{data_name}_{day_index}"]*n_day_data,
+                    columns=["batch"],
+                    index=day_df.index
+                )
+                metadata_df_list.append(metadata_df)
+        concated_df = pd.concat(list(itertools.chain.from_iterable(input_data_list)))
+        concated_metadata_df = pd.concat(metadata_df_list)
+
+        recode = screcode.RECODE(**recode_params)
+        integrated_array = recode.fit_transform(
+            concated_df.values,
+            meta_data=concated_metadata_df,
+            batch_key="batch",
+            **recode_integration_params
+        )
+        integrated_df = pd.DataFrame(
+            integrated_array,
+            columns=concated_df.columns,
+            index=concated_df.index
+        )
+
+        new_df_list = []
+        day_num = max([len(df_list) for df_list in input_data_list])
+        for i in range(day_num):
+            day_mask = concated_metadata_df["batch"].str.endswith(f"_{i}")
+            new_df_list.append(integrated_df[day_mask])
+        return new_df_list
+
+    else:
+        raise TypeError(input_type_error_msg)
+
+
 class scEGOT:
     def __init__(
         self,
