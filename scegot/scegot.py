@@ -143,7 +143,7 @@ def integrate_data(
     input_data_dict,
     adata_day_key=None,
     recode_params={},
-    recode_integration_params={},    
+    recode_fit_transform_params={},    
 ):
     """Integrate multiple data using iRECODE.
 
@@ -160,7 +160,7 @@ def integrate_data(
     recode_params : dict, optional
         paramaters passed to the screcode.RECODE constructor, by default {}
 
-    recode_integration_params : dict, optional
+    recode_fit_transform_params : dict, optional
         paramaters for RECODE.fit_transform(), by default {}
 
     Raises
@@ -200,7 +200,7 @@ def integrate_data(
         integrated_adata = recode.fit_transform(
             concated_adata,
             batch_key="batch",
-            **recode_integration_params
+            **recode_fit_transform_params
         )
         integrated_adata.X = integrated_adata.layers["RECODE"]
         return integrated_adata
@@ -227,7 +227,7 @@ def integrate_data(
             concated_df.values,
             meta_data=concated_metadata_df,
             batch_key="batch",
-            **recode_integration_params
+            **recode_fit_transform_params
         )
         integrated_df = pd.DataFrame(
             integrated_array,
