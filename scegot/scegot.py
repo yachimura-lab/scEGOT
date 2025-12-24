@@ -1164,17 +1164,17 @@ class scEGOT:
             )
         )
         if merge_clusters_by_name:
-            # targetが同じedgeをmerge
             cell_state_edges["target"] = [node_ids[i] for i in cell_state_edges["target_cluster"]]
             cell_state_edges = cell_state_edges.groupby(
                 ["source_cluster", "source_day", "target", "target_day"],as_index=False
             ).agg({"edge_colors": "min", "edge_weights": "sum"})
-            # sourceが同じedgeをmerge
+
             cell_state_edges["source"] = [node_ids[i] for i in cell_state_edges["source_cluster"]]
             cell_state_edges = cell_state_edges.groupby(
                 ["source", "source_day", "target", "target_day"], as_index=False
             ).apply(self._calculate_source_merged_edge_weights)
             cell_state_edges["edge_colors"] = cell_state_edges["edge_colors"].astype(int)
+
         else:
             cell_state_edges["source"] = [node_ids[i] for i in cell_state_edges["source_cluster"]]
             cell_state_edges["target"] = [node_ids[i] for i in cell_state_edges["target_cluster"]]
@@ -1303,7 +1303,6 @@ class scEGOT:
                 cell_state_edges = self._get_cell_state_edge_list(node_ids, True, threshold, False)
                 current_day_df = cell_state_edges[cell_state_edges["source"].isin(source_node_ids)]
 
-                # sourceとtargetの一覧のリストの組を表すdataframeを作る
                 target_combination_df = current_day_df.groupby("source", as_index=False).apply(
                     lambda df: pd.Series(
                         [(target in df["target"].tolist()) for target in unique_target_node_ids],
@@ -1311,7 +1310,6 @@ class scEGOT:
                     )
                 )
 
-                # targetの組み合わせごとに分類
                 clusters_groupby_target = []
                 target_combination_df.groupby(unique_target_node_ids, as_index=False).apply(
                     lambda df: clusters_groupby_target.append(df["source"].tolist())
@@ -1329,7 +1327,6 @@ class scEGOT:
                 cell_state_edges = self._get_cell_state_edge_list(node_ids, True, 0, False)
                 current_day_df = cell_state_edges[cell_state_edges["source"].isin(source_node_ids)]
 
-                # sourceを行、targetを列とした重みのdataframeを作る
                 source_target_df = pd.DataFrame(
                     [
                         [current_day_df[(current_day_df["source"] == source) & (current_day_df["target"] == target)]["edge_weights"].values[0]
@@ -1340,7 +1337,6 @@ class scEGOT:
                     index=source_node_ids
                 )
                 
-                # K-means法でクラスタリング
                 kmeans_model = KMeans(n_clusters=n_clusters_list[n_days - (i+2)], **kmeans_kwargs).fit(source_target_df)
                 node_id_base = min(source_node_ids)
                 new_source_cluster_ids = []
@@ -1604,7 +1600,6 @@ class scEGOT:
         if cluster_names is None:
             cluster_names = self.generate_cluster_names_with_day()
 
-        # nodeにIDを振る
         if merge_clusters_by_name:
             node_ids = self._generate_merged_node_ids(cluster_names)
         else:
@@ -1896,7 +1891,7 @@ class scEGOT:
         mean_tf_gene_values_per_cluster = mean_gene_values_per_cluster.loc[
             :, mean_gene_values_per_cluster.columns.isin(gene_names_to_use)
         ]
-        # nodes
+
         tf_nlargest = mean_tf_gene_values_per_cluster.T.apply(
             self._get_nlargest_gene_indices, num=tf_gene_pick_num
         ).T
@@ -1905,7 +1900,7 @@ class scEGOT:
         ).T
         tf_nlargest.columns += 1
         tf_nsmallest.columns += 1
-        # edges
+
         tf_up_genes = self._get_up_regulated_genes(
             mean_tf_gene_values_per_cluster, G, num=tf_gene_pick_num
         )
@@ -1993,7 +1988,6 @@ class scEGOT:
                     pos[node] = (G.nodes[node]["day"], -G.nodes[node]["cluster_weight"])
         fig, ax = plt.subplots(figsize=(12, 10))
 
-        # draw edge border
         nx.draw(
             G,
             pos,
@@ -2019,7 +2013,6 @@ class scEGOT:
             width=5.0,
         )
 
-        # draw edges
         node_cmap = (
             plt.cm.tab10(np.arange(10))
             if len(self.X_raw) <= 10
@@ -4486,7 +4479,6 @@ class CellStateGraph():
         pos = self._get_node_position_dict(layout, y_position)
         fig, ax = plt.subplots(figsize=(12, 10))
         
-        # draw edge border
         nx.draw(
             G,
             pos,
@@ -4512,7 +4504,6 @@ class CellStateGraph():
             width=5.0,
         )
 
-        # draw edges
         node_cmap = (
             plt.cm.tab10(np.arange(10))
             if self.day_num <= 10
@@ -4535,7 +4526,6 @@ class CellStateGraph():
             width=5.0,
         )
 
-        # edge annotations
         if edge_weight_annotation: 
             nx.draw_networkx_edge_labels(
                 G,
@@ -4546,7 +4536,6 @@ class CellStateGraph():
                 ax=ax
             )
 
-        # node annotations
         texts = []
         for node in G.nodes():
             node_day = G.nodes[node]["day"]
@@ -4636,7 +4625,7 @@ class CellStateGraph():
         mean_gene_values_per_cluster = mean_gene_values_per_cluster.loc[
             :, mean_gene_values_per_cluster.columns.isin(gene_names)
         ]
-        # nodes
+
         nlargest_genes = mean_gene_values_per_cluster.T.apply(
             scegot._get_nlargest_gene_indices, num=gene_pick_num
         ).T
@@ -4645,7 +4634,7 @@ class CellStateGraph():
         ).T
         nlargest_genes.columns += 1
         nsmallest_genes.columns += 1
-        # edges
+
         up_genes = self._get_up_regulated_genes(
             mean_gene_values_per_cluster, num=gene_pick_num
         )
