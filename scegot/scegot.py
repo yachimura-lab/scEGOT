@@ -459,6 +459,7 @@ class scEGOT:
         apply_normalization_umi=True,
         select_genes=True,
         n_select_genes=2000,
+        hvg_method="dispersion",
     ):
         """
         Preprocess the input data. 
@@ -499,6 +500,16 @@ class scEGOT:
         n_select_genes : int, optional
             Number of highly variable genes to select, by default 2000
             Used only when 'select_genes' is True.
+        
+        hvg_method : {'dispersion', 'RECODE'}, optional
+            Method to select highly variable genes, by default 'dispersion'
+            * 'dispersion': select genes based on dispersion.
+            * 'RECODE': select genes based on scRECODE.
+        
+        Raises
+        ------
+        ValueError
+            If 'hvg_method' is not 'dispersion' or 'RECODE'.
 
         Returns
         -------
@@ -508,6 +519,9 @@ class scEGOT:
         sklearn.decomposition.PCA
             PCA instance fitted to the input data.
         """
+
+        if hvg_method not in ["dispersion", "RECODE"]:
+            raise ValueError("The parameter 'hvg_method' should be 'dispersion' or 'RECODE'.")
         
         X_concated = pd.concat(self.X_raw)
 
@@ -534,7 +548,11 @@ class scEGOT:
         )
 
         if select_genes:
-            X_concated = self._select_highly_variable_genes(X_concated, n_select_genes)
+            X_concated = self._select_highly_variable_genes(
+                X_concated,
+                n_select_genes=n_select_genes,
+                hvg_method=hvg_method
+            )
 
         self.gene_names = X_concated.columns
 
