@@ -20,11 +20,11 @@ Github Project is here: `yachimura-lab/scEGOT <https://github.com/yachimura-lab/
    README
 
 .. toctree::
-   :maxdepth: 2
-   :caption: Tutorials:
-
-   tutorial
-
+	:maxdepth: 2
+	:caption: Contents:
+	
+	tutorial
+	reference/index
 
 
 Indices and tables
