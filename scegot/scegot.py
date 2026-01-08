@@ -1,5 +1,7 @@
+import copy
 import itertools
 import warnings
+from collections import defaultdict
 from io import BytesIO
 
 import anndata
@@ -15,7 +17,9 @@ import plotly.express as px
 import plotly.graph_objects as go
 import pydotplus
 import scipy.linalg as spl
+import scipy.sparse.linalg as spl_sparse
 import screcode
+import scvelo as scv
 import seaborn as sns
 import umap.umap_ as umap
 from adjustText import adjust_text
@@ -23,12 +27,13 @@ from IPython.display import HTML, Image, display
 from matplotlib import patheffects
 from matplotlib.colors import ListedColormap
 from PIL import Image as PILImage
-import scvelo as scv
 from scanpy.pp import neighbors
 from scipy import interpolate
-from scipy.sparse import csc_matrix, issparse, lil_matrix, linalg
+from scipy.sparse import csc_matrix, issparse, lil_matrix
 from scipy.stats import multivariate_normal, zscore
 from sklearn import linear_model
+from sklearn.base import clone as sklearn_clone
+from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA
 from sklearn.mixture import GaussianMixture
 from sklearn.neighbors import kneighbors_graph
@@ -47,6 +52,7 @@ def is_notebook():
     bool
         True if the code is running in a Jupyter notebook, False otherwise.
     """
+
     try:
         from IPython import get_ipython
 
@@ -94,6 +100,7 @@ def _check_input_data(input_data, day_names, adata_day_key):
     list of pd.DataFrame
         List of DataFrames.
     """
+
     if isinstance(input_data, list):
         if day_names is None:
             raise ValueError(
@@ -132,6 +139,114 @@ def _check_input_data(input_data, day_names, adata_day_key):
 
     else:
         raise TypeError("'X' should be AnnData or an array of DataFrames.")
+
+
+def integrate_data(
+    input_data_dict,
+    adata_day_key=None,
+    recode_params={},
+    recode_fit_transform_params={},    
+):
+    """
+    Integrate multiple data using iRECODE.
+
+    Parameters
+    ----------
+    input_data_dict : dict
+        A dictionary where keys are data names and values are
+        input data (list of pd.DataFrame or AnnData).  
+
+    adata_day_key : str, optional
+        Name of the key in AnnData.obs for day names, by default None.
+        Should be specified when values of input_data_dict are AnnData.
+
+    recode_params : dict, optional
+        paramaters passed to the screcode.RECODE constructor, by default {}
+
+    recode_fit_transform_params : dict, optional
+        paramaters for RECODE.fit_transform(), by default {}
+
+    Raises
+    ------
+    ValueError 
+        When 'X' is AnnData and 'adata_day_key' is not specified.
+    
+    TypeError
+        This error is raised in the following cases:
+        
+        * When input_data_dict is not a dict.
+        * When values of input_data_dict is neither list of pd.DataFrame nor AnnData.  
+        
+    Returns
+    -------
+    (list of pd.DataFrame) or AnnData
+        Integrated data.
+    """
+
+    input_type_error_msg = (
+        "input_data_dict must be a dict with values as a list of AnnData or a list of list of DataFrame."
+    )
+
+    if not isinstance(input_data_dict, dict):
+        raise TypeError(input_type_error_msg)
+
+    input_data_list = input_data_dict.values()
+
+    if all(isinstance(data, anndata.AnnData) for data in input_data_list):
+        if adata_day_key is None:
+            raise ValueError("When 'X' is AnnData, 'adata_day_key' should be specified.")
+        for data_name, adata in input_data_dict.items():
+            adata.obs.index = data_name + "_" + adata.obs.index
+            adata.obs["batch"] = data_name + "_" + adata.obs[adata_day_key].astype(str)
+        concated_adata = anndata.concat(input_data_list)
+        recode = screcode.RECODE(**recode_params)
+        integrated_adata = recode.fit_transform(
+            concated_adata,
+            batch_key="batch",
+            **recode_fit_transform_params
+        )
+        integrated_adata.X = integrated_adata.layers["RECODE"]
+        return integrated_adata
+
+    elif all(isinstance(data, list) for data in input_data_list):
+        metadata_df_list = []
+        for data_name, df_list in input_data_dict.items():
+            if not all(isinstance(df, pd.DataFrame) for df in df_list):
+                raise TypeError(input_type_error_msg)
+            for day_index, day_df in enumerate(df_list):
+                day_df.rename(index= lambda s: f"{data_name}_{s}", inplace=True)
+                n_day_data = len(day_df)
+                metadata_df = pd.DataFrame(
+                    [f"{data_name}_{day_index}"]*n_day_data,
+                    columns=["batch"],
+                    index=day_df.index
+                )
+                metadata_df_list.append(metadata_df)
+        concated_df = pd.concat(list(itertools.chain.from_iterable(input_data_list)))
+        concated_metadata_df = pd.concat(metadata_df_list)
+
+        recode = screcode.RECODE(**recode_params)
+        integrated_array = recode.fit_transform(
+            concated_df.values,
+            meta_data=concated_metadata_df,
+            batch_key="batch",
+            **recode_fit_transform_params
+        )
+        integrated_df = pd.DataFrame(
+            integrated_array,
+            columns=concated_df.columns,
+            index=concated_df.index
+        )
+
+        new_df_list = []
+        day_num = max([len(df_list) for df_list in input_data_list])
+        for i in range(day_num):
+            day_mask = concated_metadata_df["batch"].str.endswith(f"_{i}")
+            new_df_list.append(integrated_df[day_mask])
+        return new_df_list
+
+    else:
+        raise TypeError(input_type_error_msg)
 
 
 class scEGOT:
@@ -327,7 +442,7 @@ class scEGOT:
     def _split_dataframe_by_row(self, df, row_counts):
         split_indices = list(itertools.accumulate(row_counts))
         df_list = [
-            df.iloc[split_indices[i - 1] if i > 0 else 0 : split_indices[i]]
+            df.iloc[(split_indices[i - 1] if i > 0 else 0) : split_indices[i]]
             for i in range(len(split_indices))
         ]
         return df_list
@@ -344,8 +459,10 @@ class scEGOT:
         apply_normalization_umi=True,
         select_genes=True,
         n_select_genes=2000,
+        hvg_method="dispersion",
     ):
-        """Preprocess the input data. 
+        """
+        Preprocess the input data. 
         
         Apply scRECODE, normalize, select highly variable genes, and apply PCA.
 
@@ -383,6 +500,16 @@ class scEGOT:
         n_select_genes : int, optional
             Number of highly variable genes to select, by default 2000
             Used only when 'select_genes' is True.
+        
+        hvg_method : {'dispersion', 'RECODE'}, optional
+            Method to select highly variable genes, by default 'dispersion'
+            * 'dispersion': select genes based on dispersion.
+            * 'RECODE': select genes based on scRECODE.
+        
+        Raises
+        ------
+        ValueError
+            If 'hvg_method' is not 'dispersion' or 'RECODE'.
 
         Returns
         -------
@@ -391,7 +518,10 @@ class scEGOT:
             
         sklearn.decomposition.PCA
             PCA instance fitted to the input data.
-        """        
+        """
+
+        if hvg_method not in ["dispersion", "RECODE"]:
+            raise ValueError("The parameter 'hvg_method' should be 'dispersion' or 'RECODE'.")
         
         X_concated = pd.concat(self.X_raw)
 
@@ -418,7 +548,11 @@ class scEGOT:
         )
 
         if select_genes:
-            X_concated = self._select_highly_variable_genes(X_concated, n_select_genes)
+            X_concated = self._select_highly_variable_genes(
+                X_concated,
+                n_select_genes=n_select_genes,
+                hvg_method=hvg_method
+            )
 
         self.gene_names = X_concated.columns
 
@@ -475,7 +609,8 @@ class scEGOT:
         min_dist=0.1,
         umap_other_params={},
     ):
-        """Fit self.X_pca to UMAP and return the transformed data.
+        """
+        Fit self.X_pca to UMAP and return the transformed data.
 
         Parameters
         ----------
@@ -506,6 +641,7 @@ class scEGOT:
         umap.umap\_.UMAP
             UMAP instance fitted to the input data.
         """
+
         X_concated = pd.concat(self.X_pca)
         X_concated, umap_model = self._apply_umap_to_concated_data(
             X_concated,
@@ -563,7 +699,8 @@ class scEGOT:
         random_state=None,
         gmm_other_params={},
     ):
-        """Fit GMM models with each day's data and predict labels for them.
+        """
+        Fit GMM models with each day's data and predict labels for them.
 
         Parameters
         ----------
@@ -600,6 +737,7 @@ class scEGOT:
             List of GMM labels.
             Each element is the predicted labels for the corresponding day's data.
         """
+
         if self.verbose:
             print(
                 "Fitting GMM models with each day's data and predicting labels for them..."
@@ -681,7 +819,8 @@ class scEGOT:
         save=False,
         save_paths=None,
     ):
-        """Plot GMM predictions.
+        """
+        Plot GMM predictions.
         Output images for the number of days.
         Each image contains two subplots: left one is in one color and right one is 
         colored by GMM labels.
@@ -727,6 +866,7 @@ class scEGOT:
         ValueError
             When 'mode' is not 'pca' or 'umap'.
         """
+
         if mode not in ["pca", "umap"]:
             raise ValueError("The parameter 'mode' should be 'pca' or 'umap'.")
 
@@ -856,7 +996,8 @@ class scEGOT:
         save=False,
         save_path=None,
     ):
-        """Export an animation of the interpolated distribution between GMM models.
+        """
+        Export an animation of the interpolated distribution between GMM models.
 
         Parameters
         ----------
@@ -878,10 +1019,11 @@ class scEGOT:
         save : bool, optional
             If True, save the output animation, by default False
 
-        save_path : _type_, optional
+        save_path : str, optional
             Path to save the output animation, by default None
             If None, the animation will be saved as './cell_state_video.gif'
         """
+
         if save and save_path is None:
             save_path = "./cell_state_video.gif"
 
@@ -940,8 +1082,8 @@ class scEGOT:
             anim.save(save_path, writer="pillow")
 
         plt.close()
-
-    def _get_cell_state_edge_list(self, cluster_names, thresh):
+    
+    def _get_cell_state_edge_list_old(self, cluster_names, thresh):
         node_source_target_combinations, edge_colors_based_on_source = [], []
         for i in range(len(self.gmm_n_components_list) - 1):
             current_combinations = [
@@ -995,6 +1137,261 @@ class scEGOT:
         )
         fold_change = fold_change.sort_values(ascending=False)
         return fold_change
+    
+    def _calculate_source_merged_edge_weights(self, df):
+        node_weights = self._get_gmm_node_weights_flattened()
+        source_node_weights = df.apply(lambda row: node_weights[int(row["source_cluster"])], axis=1)
+        edge_weights_weighted_by_source = source_node_weights * df["edge_weights"]
+        return pd.Series(
+            {
+                "edge_colors": df["edge_colors"].min(),
+                "edge_weights": sum(edge_weights_weighted_by_source) / sum(source_node_weights)
+            }
+        )
+
+    def _get_cell_state_edge_list(self, node_ids, merge_clusters_by_name, thresh, require_parent):
+        node_source_target_combinations = []
+        day_source_target_combinations = []
+        edge_colors_based_on_source = []
+
+        cluster_nums = self.gmm_n_components_list
+        cluster_start_indexes = [0] + [sum(cluster_nums[:i+1]) for i in range(len(cluster_nums))] + [sum(cluster_nums)]
+        
+        for i in range(len(cluster_nums) - 1):
+            current_combinations = list(itertools.product(
+                list(range(cluster_start_indexes[i], cluster_start_indexes[i+1])),
+                list(range(cluster_start_indexes[i+1], cluster_start_indexes[i+2]))
+            ))            
+            node_source_target_combinations += current_combinations
+            day_source_target_combinations += [(i, i+1)] * len(current_combinations)
+            edge_colors_based_on_source += [i for _ in range(len(current_combinations))]
+
+        cell_state_edges = pd.DataFrame(
+            node_source_target_combinations, 
+            columns=["source_cluster", "target_cluster"]
+        ).join(pd.DataFrame(
+            day_source_target_combinations,
+            columns=["source_day", "target_day"]
+        ))
+        cell_state_edges["edge_colors"] = edge_colors_based_on_source
+        cell_state_edges["edge_weights"] = list(
+            itertools.chain.from_iterable(
+                itertools.chain.from_iterable(
+                    self.calculate_normalized_solutions(self.gmm_models)
+                )
+            )
+        )
+        if merge_clusters_by_name:
+            cell_state_edges["target"] = [node_ids[i] for i in cell_state_edges["target_cluster"]]
+            cell_state_edges = cell_state_edges.groupby(
+                ["source_cluster", "source_day", "target", "target_day"],as_index=False
+            ).agg({"edge_colors": "min", "edge_weights": "sum"})
+
+            cell_state_edges["source"] = [node_ids[i] for i in cell_state_edges["source_cluster"]]
+            cell_state_edges = cell_state_edges.groupby(
+                ["source", "source_day", "target", "target_day"], as_index=False
+            ).apply(self._calculate_source_merged_edge_weights)
+            cell_state_edges["edge_colors"] = cell_state_edges["edge_colors"].astype(int)
+
+        else:
+            cell_state_edges["source"] = [node_ids[i] for i in cell_state_edges["source_cluster"]]
+            cell_state_edges["target"] = [node_ids[i] for i in cell_state_edges["target_cluster"]]
+
+        filtered_cell_state_edges = cell_state_edges[cell_state_edges["edge_weights"] >= thresh]
+
+        if require_parent:
+            unique_target_node_ids_flattened = node_ids[1:]
+            for id in unique_target_node_ids_flattened:
+                if not id in filtered_cell_state_edges["target"].values:
+                    current_df = cell_state_edges[cell_state_edges["target"] == id]
+                    max_weight = current_df["edge_weights"].max()
+                    additional_rows = current_df[current_df["edge_weights"] == max_weight]
+                    filtered_cell_state_edges = pd.concat([filtered_cell_state_edges, additional_rows])
+                    
+        return filtered_cell_state_edges
+    
+    def _generate_merged_node_ids(self, cluster_names):
+        cluster_days = self._get_day_order_of_each_node()
+        cluster_names_flattened = list(itertools.chain.from_iterable(cluster_names))
+        node_ids = []
+        cluster_id_dict_list = []
+        accum_n_node = 0
+        for day_cluster_names in cluster_names:
+            day_cluster_set = sorted(list(set(day_cluster_names)), key=day_cluster_names.index)
+            n_day_node = len(day_cluster_set)
+            cluster_id_dict = dict(zip(day_cluster_set, range(accum_n_node, accum_n_node + n_day_node)))
+            cluster_id_dict_list.append(cluster_id_dict)
+            accum_n_node += n_day_node
+        node_ids = [cluster_id_dict_list[day][name] for day, name in zip(cluster_days, cluster_names_flattened)]
+        return node_ids
+
+    def merge_cluster_names_by_pathway(
+        self,
+        last_day_cluster_names,
+        n_merge_iter=None,
+        merge_method="pattern",
+        threshold=0.05,
+        n_clusters_list=None,
+        **kmeans_kwargs
+    ):
+        """
+        Merge cluster names based on cell state graph pathways.
+
+        Parameters
+        ----------
+        last_day_cluster_names : list of str
+            Cluster names for the last day.
+            Clusters with the same name will be merged.
+
+            The length of the list should be equal to the number of clusters in the last day.
+        
+        n_merge_iter : int, optional
+            Number of preceding days to trace back and merge cluster names, starting from
+            the last day, by default (the number of days - 1).
+            
+            Must be an integer in the range from 1 to (the number of days - 1).
+
+        merge_method : {'pattern', 'kmeans'}, optional
+            Method to merge nodes, by default 'pattern'.
+
+            * 'pattern': Merges nodes that share the same connection pattern to the next day's nodes.
+            * 'kmeans': Merges nodes based on the edge weights to the next day's nodes using K-Means.
+        
+        threshold : float, optional
+            Threshold to filter edges, by default 0.05.
+            Edges with weights below this value are ignored.
+
+            This parameter is used only when `merge_method` is 'pattern'.
+
+        n_clusters_list : list of int, optional
+            List specifying the number of merged clusters for each day.
+
+            The length of the list must equal to the number of days or (the number of days - 1).
+            If None, defaults to the minimum of (original cluster count, 4) for each day.
+
+            This parameter is used only when `merge_method` is 'kmeans'.
+
+        \*\*kmeans_kwargs : dict
+            Arbitrary keyword arguments passed to sklearn.cluster.KMeans.
+
+            This parameter is used only when `merge_method` is 'kmeans'.
+
+        Returns
+        -------
+        list of list of str
+            Merged cluster names for each day.
+
+        Raises
+        ------
+        ValueError
+            This error is raised in the following cases:
+
+            * When 'n_merge_iter' is not an integer within the valid range (1 to number of days - 1).
+            * When 'merge_method' is not one of 'pattern' or 'kmeans'.
+        """
+
+        if (n_merge_iter is not None) and (not n_merge_iter in list(range(1, len(self.day_names)))):
+            raise ValueError(f"The parameter 'n_merge_iter' should be an integer from 1 to {len(self.day_names) - 1}.")
+
+        if not merge_method in ["pattern", "kmeans"]:
+            raise ValueError("The parameter 'merge_method' should be 'pattern' or 'kmeans'")
+        
+        if n_merge_iter is None:
+            n_merge_iter = len(self.day_names) - 1
+
+        if merge_method == "kmeans" and n_clusters_list == None:
+            n_clusters_list = [min(gmm_n_components, 4) for gmm_n_components in self.gmm_n_components_list]
+
+        n_days = len(self.day_names)
+        cluster_names = self.generate_cluster_names_with_day()
+        cluster_names[-1] = last_day_cluster_names
+
+        node_ids = self._generate_merged_node_ids(cluster_names)
+        cluster_days = self._get_day_order_of_each_node()
+        node_ids_by_day = [[] for _ in range(len(self.day_names))]
+        for day, node_id in zip(cluster_days, node_ids):
+            node_ids_by_day[day].append(node_id)
+
+        for i in range(n_merge_iter):    
+            source_node_ids = node_ids_by_day[-(i+2)]
+            unique_target_node_ids = list(set(node_ids_by_day[-(i+1)]))
+            node_ids = list(itertools.chain.from_iterable(node_ids_by_day))
+
+            if merge_method == "pattern":
+                cell_state_edges = self._get_cell_state_edge_list(node_ids, True, threshold, False)
+                current_day_df = cell_state_edges[cell_state_edges["source"].isin(source_node_ids)]
+
+                target_combination_df = current_day_df.groupby("source", as_index=False).apply(
+                    lambda df: pd.Series(
+                        [(target in df["target"].tolist()) for target in unique_target_node_ids],
+                        index=unique_target_node_ids
+                    )
+                )
+
+                clusters_groupby_target = []
+                target_combination_df.groupby(unique_target_node_ids, as_index=False).apply(
+                    lambda df: clusters_groupby_target.append(df["source"].tolist())
+                )
+
+                new_source_cluster_ids = [None] * len(source_node_ids)
+                node_id_base = min(source_node_ids)
+                for group_num, group in enumerate(clusters_groupby_target):
+                    for cluster in group:
+                        for index, id in enumerate(source_node_ids):
+                            if cluster == id:
+                                new_source_cluster_ids[index] = node_id_base + group_num
+
+            if merge_method == "kmeans":
+                cell_state_edges = self._get_cell_state_edge_list(node_ids, True, 0, False)
+                current_day_df = cell_state_edges[cell_state_edges["source"].isin(source_node_ids)]
+
+                source_target_df = pd.DataFrame(
+                    [
+                        [current_day_df[(current_day_df["source"] == source) & (current_day_df["target"] == target)]["edge_weights"].values[0]
+                        for target in unique_target_node_ids]
+                        for source in source_node_ids
+                    ],
+                    columns=unique_target_node_ids,
+                    index=source_node_ids
+                )
+                
+                kmeans_model = KMeans(n_clusters=n_clusters_list[n_days - (i+2)], **kmeans_kwargs).fit(source_target_df)
+                node_id_base = min(source_node_ids)
+                new_source_cluster_ids = []
+                for group_num in kmeans_model.labels_:
+                    new_source_cluster_ids.append(node_id_base + group_num)
+
+            node_ids_by_day[-(i+2)] = new_source_cluster_ids
+
+        day_names = self.day_names
+        new_cluster_names = []
+        for day_name, day_node_ids in zip(day_names[:-1], node_ids_by_day[:-1]):
+            node_id_base = min(day_node_ids)
+            new_day_cluster_names = []
+            for node_id in day_node_ids:
+                new_day_cluster_names.append(f"{day_name}-{node_id - node_id_base}")
+            new_cluster_names.append(new_day_cluster_names)
+        new_cluster_names.append(last_day_cluster_names)
+
+        return new_cluster_names
+
+    def _merge_nodes(self, node_info_df):
+        node_info_df = node_info_df.set_index("id")
+
+        merged_df = node_info_df.groupby(level=0).agg({
+            "day": "min",
+            "weight": "sum",
+            "cluster_gmm_list": lambda x: sum(x.values.tolist(), start=[])
+        })
+
+        xpos = node_info_df["xpos"]
+        ypos = node_info_df["ypos"]
+        weights = node_info_df["weight"]
+
+        merged_df["xpos"] = (xpos * weights).groupby(level=0).sum() / weights.groupby(level=0).sum()
+        merged_df["ypos"] = (ypos * weights).groupby(level=0).sum() / weights.groupby(level=0).sum()
+
+        return merged_df
 
     def _get_up_regulated_genes(self, gene_values, G, num=10):
         df_upgenes = pd.DataFrame([])
@@ -1025,14 +1422,19 @@ class scEGOT:
             ).T
             df_downgenes = pd.concat([df_downgenes, downgenes])
         return df_downgenes
-
+    
     def make_cell_state_graph(
         self,
         cluster_names,
         mode="pca",
         threshold=0.05,
     ):
-        """Compute cell state graph and build a networkx graph object.
+        """
+        .. warning::
+            ``make_cell_state_graph()`` was deprecated in version 0.3.0 and will be removed in future versions.
+            Use ``make_cell_state_graph_object()`` instead.
+        
+        Compute cell state graph and build a networkx graph object.
 
         Parameters
         ----------
@@ -1058,6 +1460,13 @@ class scEGOT:
         ValueError
             When 'mode' is not 'pca' or 'umap'.
         """
+
+        warnings.warn(
+            "'make_cell_state_graph()' was deprecated and will be removed in future versions.\n"
+            "Use 'make_cell_state_graph_object()' instead.",
+            FutureWarning,
+        )
+
         if mode not in ["pca", "umap"]:
             raise ValueError("The parameter 'mode' should be 'pca' or 'umap'.")
 
@@ -1067,7 +1476,7 @@ class scEGOT:
         if mode == "umap":
             gmm_means_flattened = self.umap_model.transform(gmm_means_flattened)
 
-        cell_state_edge_list = self._get_cell_state_edge_list(cluster_names, threshold)
+        cell_state_edge_list = self._get_cell_state_edge_list_old(cluster_names, threshold)
         G = nx.from_pandas_edgelist(
             cell_state_edge_list,
             source="source",
@@ -1131,6 +1540,167 @@ class scEGOT:
 
         return G
 
+    def make_cell_state_graph_object(
+        self,
+        cluster_names=None,
+        mode="pca",
+        threshold=0.05,
+        merge_clusters_by_name=False,
+        x_reverse=False,
+        y_reverse=False,
+        require_parent=False,
+    ):
+        """
+        Compute cell state graph and build a ``CellStateGraph`` object.
+
+        Parameters
+        ----------
+        cluster_names : 2D list of str, optional
+            Cluster names for each GMM cluster in each day.
+            1st dimension is the number of days, 2nd dimension is the number of gmm components
+            in each day.
+
+            If merge_clusters_by_name is True, clusters with the same name will be merged.
+
+            If None, generated by ``generate_cluster_names_with_day()`` method.
+            
+        mode : {'pca', 'umap'}, optional
+            The space to build the cell state graph, by default 'pca'
+
+        threshold : float, optional
+            Threshold to filter edges, by default 0.05
+            Only edges with edge_weights greater than this threshold will be included.
+
+        merge_clusters_by_name : bool, optional
+            If True, clusters with the same name will be merged, by default False
+        
+        x_reverse : bool, optional
+            If True, reverse the X axis direction, by default False
+
+        y_reverse : bool, optional
+            If True, reverse the Y axis direction, by default False
+        
+        require_parent : bool, optional
+            If True, ensure that each cluster in the target day has at least one incoming
+            edge from the source day, by default False
+        
+        Returns
+        -------
+        scegot.CellStateGraph
+            ``scegot.CellStateGraph`` object of the cell state graph
+
+        Raises
+        ------
+        ValueError
+            This error is raised in the following cases:
+
+            * When 'mode' is not 'pca' or 'umap'.
+            * When the length of 'cluster_names' is not the same as the number of days.
+            * When the length of the second dimension of 'cluster_names' is not the same
+              as the number of GMM components in each day.
+        """
+
+        if mode not in ["pca", "umap"]:
+            raise ValueError("The parameter 'mode' should be 'pca' or 'umap'.")
+
+        if cluster_names:
+            if (len(cluster_names) != len(self.day_names)):
+                raise ValueError(
+                    "Size of the first dimension of 'cluster_names' should be the same "
+                    "as the number of days."
+                )
+            if not [len(day_cluster_names) for day_cluster_names in cluster_names] == self.gmm_n_components_list:
+                raise ValueError(
+                    "Size of the second dimension of 'cluster_names' should be the same "
+                    "as the number of GMM components in each day."
+                )
+        
+        if cluster_names is None:
+            cluster_names = self.generate_cluster_names_with_day()
+
+        if merge_clusters_by_name:
+            node_ids = self._generate_merged_node_ids(cluster_names)
+        else:
+            node_ids = list(range(sum(self.gmm_n_components_list)))
+
+        gmm_means_flattened = np.array(
+            list(itertools.chain.from_iterable(self.get_gmm_means()))
+        )
+        if mode == "umap":
+            gmm_means_flattened = self.umap_model.transform(gmm_means_flattened)
+
+        cell_state_edge_list = self._get_cell_state_edge_list(node_ids, merge_clusters_by_name, threshold, require_parent)
+        cell_state_edge_list.rename(columns={"edge_weights": "weight", "edge_colors": "color"}, inplace=True)
+        G = nx.from_pandas_edgelist(
+            cell_state_edge_list,
+            source="source",
+            target="target",
+            edge_attr=["weight", "color"],
+            create_using=nx.DiGraph,
+        )
+
+        node_info = pd.DataFrame()
+
+        cluster_days = self._get_day_order_of_each_node()
+
+        node_info["id"] = node_ids
+        node_info["day"] = cluster_days
+        node_info["weight"] = self._get_gmm_node_weights_flattened()
+
+        if x_reverse:
+            node_info["xpos"] = gmm_means_flattened.T[0] * (-1)
+        else:
+            node_info["xpos"] = gmm_means_flattened.T[0]
+        if y_reverse:
+            node_info["ypos"] = gmm_means_flattened.T[1] * (-1)
+        else: 
+            node_info["ypos"] = gmm_means_flattened.T[1]
+
+        if self.gmm_label_converter is None:
+            cluster_gmms = list(
+                itertools.chain.from_iterable(
+                    [list(range(n_components)) for n_components in self.gmm_n_components_list]
+                )
+            )
+        else:
+            cluster_gmms = list(
+                itertools.chain.from_iterable(self.gmm_label_converter)
+            )
+        node_info["cluster_gmm_list"] = [[x] for x in cluster_gmms]
+
+        if merge_clusters_by_name:
+            merged_node_info = self._merge_nodes(node_info)
+        else:
+            merged_node_info = node_info
+
+        cluster_weights = merged_node_info.groupby("day")["weight"].rank(ascending=False).astype(int) - 1
+        merged_node_info["cluster_weight"] = cluster_weights
+
+        for row in merged_node_info.itertuples():
+            G.add_node(
+                row.Index,
+                weight=row.weight,
+                day=row.day,
+                pos=(row.xpos, row.ypos),
+                cluster_gmm_list=row.cluster_gmm_list,
+                cluster_weight=row.cluster_weight,
+            )
+
+        graph = CellStateGraph(
+            G,
+            scegot=self,
+            threshold=threshold,
+            mode=mode,
+            cluster_names=copy.deepcopy(cluster_names),
+            node_ids=node_ids,
+            merge_clusters_by_name=merge_clusters_by_name,
+            x_reverse=x_reverse,
+            y_reverse=y_reverse,
+            require_parent=require_parent,
+        )
+
+        return graph
+
     def _plot_cell_state_graph(
         self,
         G,
@@ -1189,7 +1759,10 @@ class scEGOT:
             x_0, y_0 = G.nodes[edge[0]]["pos"]
             x_1, y_1 = G.nodes[edge[1]]["pos"]
             from_to = str(edge[0]) + str(edge[1])
-            hovertext = f"""up_genes: {', '.join(edges_up_gene.T[from_to].values)}<br>down_genes: {', '.join(edges_down_gene.T[from_to].values)}"""
+            hovertext = (
+                f"up_genes: {', '.join(edges_up_gene.T[from_to].values)}<br>"
+                f"down_genes: {', '.join(edges_down_gene.T[from_to].values)}"
+            )
             middle_hover_trace["x"] += tuple([(x_0 + x_1) / 2])
             middle_hover_trace["y"] += tuple([(y_0 + y_1) / 2])
             middle_hover_trace["hovertext"] += tuple([hovertext])
@@ -1236,7 +1809,10 @@ class scEGOT:
             x, y = G.nodes[node]["pos"]
             node_x.append(x)
             node_y.append(y)
-            hovertext = f"""largest_genes: {', '.join(nodes_up_gene.T[node].values)}<br>smallest_genes: {', '.join(nodes_down_gene.T[node].values)}"""
+            hovertext = (
+                f"largest_genes: {', '.join(nodes_up_gene.T[node].values)}<br>"
+                f"smallest_genes: {', '.join(nodes_down_gene.T[node].values)}"
+            )
             node_hover_trace["x"] += tuple([x])
             node_hover_trace["y"] += tuple([y])
             node_hover_trace["hovertext"] += tuple([hovertext])
@@ -1277,7 +1853,12 @@ class scEGOT:
         save=False,
         save_path=None,
     ):
-        """Plot the cell state graph with the given graph object.
+        """
+        .. warning::
+            ``scEGOT.plot_cell_state_graph()`` was deprecated in version 0.3.0 and will be removed in future versions.
+            Use ``CellStateGraph.plot_cell_state_graph()`` instead.
+        
+        Plot the cell state graph with the given graph object.
 
         Parameters
         ----------
@@ -1305,6 +1886,12 @@ class scEGOT:
             If None, the image will be saved as './cell_state_graph.png'
         """
         
+        warnings.warn(
+            "'scEGOT.plot_cell_state_graph()' was deprecated and will be removed in future versions.\n"
+            "Use 'CellStateGraph.plot_cell_state_graph()' instead.",
+            FutureWarning,
+        )
+
         if save and save_path is None:
             save_path = "./cell_state_graph.png"
 
@@ -1322,7 +1909,7 @@ class scEGOT:
         mean_tf_gene_values_per_cluster = mean_gene_values_per_cluster.loc[
             :, mean_gene_values_per_cluster.columns.isin(gene_names_to_use)
         ]
-        # nodes
+
         tf_nlargest = mean_tf_gene_values_per_cluster.T.apply(
             self._get_nlargest_gene_indices, num=tf_gene_pick_num
         ).T
@@ -1331,7 +1918,7 @@ class scEGOT:
         ).T
         tf_nlargest.columns += 1
         tf_nsmallest.columns += 1
-        # edges
+
         tf_up_genes = self._get_up_regulated_genes(
             mean_tf_gene_values_per_cluster, G, num=tf_gene_pick_num
         )
@@ -1350,11 +1937,16 @@ class scEGOT:
             save=save,
             save_path=save_path,
         )
-
+    
     def plot_simple_cell_state_graph(
         self, G, layout="normal", order=None, save=False, save_path=None
     ):
-        """Plot the cell state graph with the given graph object in a simple way.
+        """
+        .. warning::
+            ``scEGOT.plot_simple_cell_state_graph()`` was deprecated in version 0.3.0 and will be removed in future versions.
+            Use ``CellStateGraph.plot_simple_cell_state_graph()`` instead.
+        
+        Plot the cell state graph with the given graph object in a simple way.
 
         Parameters
         ----------
@@ -1384,6 +1976,12 @@ class scEGOT:
         ValueError
             When 'layout' is not 'normal' or 'hierarchy', or 'order' is not None or 'weight'.
         """
+
+        warnings.warn(
+            "'scEGOT.plot_simple_cell_state_graph()' was deprecated and will be removed in future versions.\n"
+            "Use 'CellStateGraph.plot_simple_cell_state_graph()' instead.",
+            FutureWarning,
+        )
         
         if layout not in ["normal", "hierarchy"]:
             raise ValueError("The parameter 'layout' should be 'normal or 'hierarchy'.")
@@ -1408,7 +2006,6 @@ class scEGOT:
                     pos[node] = (G.nodes[node]["day"], -G.nodes[node]["cluster_weight"])
         fig, ax = plt.subplots(figsize=(12, 10))
 
-        # draw edge border
         nx.draw(
             G,
             pos,
@@ -1434,7 +2031,6 @@ class scEGOT:
             width=5.0,
         )
 
-        # draw edges
         node_cmap = (
             plt.cm.tab10(np.arange(10))
             if len(self.X_raw) <= 10
@@ -1491,7 +2087,8 @@ class scEGOT:
         save=False,
         save_path=None,
     ):
-        """Plot fold change between two clusters.
+        """
+        Plot fold change between two clusters.
 
         Parameters
         ----------
@@ -1605,7 +2202,8 @@ class scEGOT:
         save=False,
         save_path=None,
     ):
-        """Plot mean and variance of gene expression levels within a pathway.
+        """
+        Plot mean and variance of gene expression levels within a pathway.
 
         Parameters
         ----------
@@ -1630,7 +2228,7 @@ class scEGOT:
         save : bool, optional
             If True, save the output image, by default False
 
-        save_path : _type_, optional
+        save_path : str, optional
             Path to save the output image, by default None
             If None, the image will be saved as './pathway_mean_var.png'
         """
@@ -1719,7 +2317,8 @@ class scEGOT:
         save=False,
         save_path=None,
     ):
-        """Plot gene expression levels within a pathway.
+        """
+        Plot gene expression levels within a pathway.
 
         Parameters
         ----------
@@ -1739,7 +2338,7 @@ class scEGOT:
         save : bool, optional
             If True, save the output image, by default False
 
-        save_path : _type_, optional
+        save_path : str, optional
             Path to save the output image, by default None
             If None, the image will be saved as './pathway_gene_expressions.png'
         """
@@ -1782,7 +2381,8 @@ class scEGOT:
         self, gene_name, mode="pca", col=None, save=False, save_path=None
     ):
         warnings.warn(
-            "scegot.plot_pathway_single_gene_2d() will be depricated. Use scegot.plot_gene_expression_2d() instead.",
+            "'plot_pathway_single_gene_2d()' was deprecated and will be removed in future versions.\n"
+            "Use 'plot_gene_expression_2d()' instead.",
             FutureWarning,
         )
         self.plot_gene_expression_2d(gene_name, mode, col, save, save_path)
@@ -1790,7 +2390,8 @@ class scEGOT:
     def plot_gene_expression_2d(
         self, gene_name, mode="pca", col=None, save=False, save_path=None
     ):
-        """Plot gene expression levels in 2D space.
+        """
+        Plot gene expression levels in 2D space.
 
         Parameters
         ----------
@@ -1847,13 +2448,15 @@ class scEGOT:
         self, gene_name, col=None, save=False, save_path=None
     ):
         warnings.warn(
-            "scegot.plot_pathway_single_gene_3d() will be depricated. Use scegot.plot_gene_expression_3d() instead.",
+            "'plot_pathway_single_gene_3d()' was deprecated and will be removed in future versions.\n"
+            "Use 'plot_gene_expression_3d()' instead.",
             FutureWarning,
         )
         self.plot_gene_expression_3d(gene_name, col, save, save_path)
 
     def plot_gene_expression_3d(self, gene_name, col=None, save=False, save_path=None):
-        """Plot gene expression levels in 3D space.
+        """
+        Plot gene expression levels in 3D space.
 
         Parameters
         ----------
@@ -1867,10 +2470,11 @@ class scEGOT:
         save : bool, optional
             If True, save the output image, by default False
 
-        save_path : _type_, optional
+        save_path : str, optional
             Path to save the output image, by default None
             If None, the image will be saved as './pathway_single_gene_3d.html'
         """
+
         if save and save_path is None:
             save_path = "./pathway_single_gene_3d.html"
 
@@ -1903,7 +2507,8 @@ class scEGOT:
     def make_interpolation_data(
         self, gmm_source, gmm_target, t, columns=None, n_samples=2000, seed=0
     ):
-        """Make interpolation data between two timepoints.
+        """
+        Make interpolation data between two timepoints.
 
         Parameters
         ----------
@@ -1987,7 +2592,8 @@ class scEGOT:
         save=False,
         save_path=None,
     ):
-        """Compare the true and interpolation distributions by plotting them.
+        """
+        Compare the true and interpolation distributions by plotting them.
 
         Parameters
         ----------
@@ -2015,7 +2621,7 @@ class scEGOT:
         x_col_name : str, optional
             Label of the x-axis, by default None
 
-        y_col_name : _type_, optional
+        y_col_name : str, optional
             Label of the y-axis, by default None
 
         x_range : list or tuple of float of shape (2,), optional
@@ -2029,7 +2635,7 @@ class scEGOT:
         save : bool, optional
             If True, save the output image, by default False
 
-        save_path : _type_, optional
+        save_path : str, optional
             Path to save the output image, by default None
 
         Raises
@@ -2151,7 +2757,8 @@ class scEGOT:
         save=False,
         save_path=None,
     ):
-        """Calculate interpolation between all timepoints and create animation colored by gene expression level. 
+        """
+        Calculate interpolation between all timepoints and create animation colored by gene expression level. 
 
         Parameters
         ----------
@@ -2189,7 +2796,7 @@ class scEGOT:
         save : bool, optional
             If True, save the output image, by default False
 
-        save_path : _type_, optional
+        save_path : str, optional
             Path to save the output image, by default None
             If None, the image will be saved as './interpolate_video.gif'
 
@@ -2198,6 +2805,7 @@ class scEGOT:
         ValueError
             When 'mode' is not 'pca' or 'umap'.
         """
+
         if mode not in ["pca", "umap"]:
             raise ValueError("The parameter 'mode' should be 'pca' or 'umap'.")
 
@@ -2343,7 +2951,8 @@ class scEGOT:
         return velo
 
     def calculate_cell_velocities(self):
-        """Calculate cell velocities between each day.
+        """
+        Calculate cell velocities between each day.
 
         Returns
         -------
@@ -2396,7 +3005,8 @@ class scEGOT:
         save=False,
         save_path=None,
     ):
-        """Plot cell velocities in 2D space.
+        """
+        Plot cell velocities in 2D space.
 
         Parameters
         ----------
@@ -2551,9 +3161,11 @@ class scEGOT:
         save=False,
         save_path=None,
     ):
-        """Plot the interpolation of cell velocities. This mefhod could be depricated in the future
-        because 'plot_cell_velocity' method now supports plotting streamlines.
-
+        """
+        .. warning::
+            ``plot_interpolation_of_cell_velocity()`` was deprecated in version 0.3.0 and will be removed in future versions.
+            Use ``plot_cell_velocity()`` instead.
+        
         Parameters
         ----------
         velocities : pd.DataFrame
@@ -2601,6 +3213,12 @@ class scEGOT:
             - When 'color_points' is not 'gmm' or 'day'.
             - When 'color_points' is 'gmm' and 'cluster_names' is None.
         """
+
+        warnings.warn(
+            "'plot_interpolation_of_cell_velocity()' was deprecated and will be removed in future versions.\n"
+            "Use 'plot_cell_velocity()' instead.",
+            FutureWarning,
+        )
 
         if mode not in ["pca", "umap"]:
             raise ValueError("The parameter 'mode' should be 'pca' or 'umap'.")
@@ -2725,7 +3343,8 @@ class scEGOT:
         ridge_cv_fit_intercept=False,
         ridge_fit_intercept=False,
     ):
-        """Calculate gene regulatory networks (GRNs) between each day.
+        """
+        Calculate gene regulatory networks (GRNs) between each day.
 
         Parameters
         ----------
@@ -2761,6 +3380,7 @@ class scEGOT:
             RidgeCV objects used to calculate GRNs.
             Each element of the list corresponds to the RidgeCV object between day i and day i + 1.
         """
+
         grns, ridge_cvs = [], []
 
         if self.solutions is None:
@@ -2844,7 +3464,8 @@ class scEGOT:
         save_paths=None,
         save_format="png",
     ):
-        """Plot gene regulatory networks (GRNs) between each day.
+        """
+        Plot gene regulatory networks (GRNs) between each day.
 
         Parameters
         ----------
@@ -2893,7 +3514,8 @@ class scEGOT:
         n_neighbors=100,
         knn_other_params={},
     ):
-        """Calculate Waddington potential of each sample.
+        """
+        Calculate Waddington potential of each sample.
         
         Parameters
         ----------
@@ -3012,7 +3634,7 @@ class scEGOT:
         )
         lap = dia - sim
         lap = csc_matrix(np.array(lap))
-        waddington_potential, *_ = linalg.lsqr(lap, F_all)
+        waddington_potential, *_ = spl_sparse.lsqr(lap, F_all)
 
         waddington_potential = zscore(waddington_potential)
 
@@ -3026,7 +3648,8 @@ class scEGOT:
         save=False,
         save_path=None,
     ):
-        """Plot Waddington potential in 3D space.
+        """
+        Plot Waddington potential in 3D space.
 
         Parameters
         ----------
@@ -3094,7 +3717,8 @@ class scEGOT:
         save=False,
         save_path=None,
     ):
-        """Plot Waddington's landscape in 3D space by using cellmap.
+        """
+        Plot Waddington's landscape in 3D space by using cellmap.
 
         Parameters
         ----------
@@ -3173,7 +3797,7 @@ class scEGOT:
         S_0,
         S_1,
         reg=0.01,
-        numItermax=int(1e10),
+        numItermax=5000,
         method="sinkhorn_epsilon_scaling",
         tau=1e8,
         stopThr=1e-9,
@@ -3190,8 +3814,13 @@ class scEGOT:
                 M[k, l] = self.bures_wasserstein_distance(
                     mu_0[k, :], mu_1[l, :], S_0[k, :, :], S_1[l, :, :]
                 )
-        with warnings.catch_warnings():
-            warnings.filterwarnings("ignore", category=UserWarning, module="ot")
+        with warnings.catch_warnings(record=True) as w:
+            warnings.filterwarnings(
+                "always",
+                message="Sinkhorn did not converge.",
+                category=UserWarning,
+                module="ot"    
+            )
             solution = ot.sinkhorn(
                 pi_0,
                 pi_1,
@@ -3203,6 +3832,14 @@ class scEGOT:
                 stopThr=stopThr,
                 **sinkhorn_other_params,
             )
+
+        if len(w):
+            warnings.warn(
+                "Warning: Sinkhorn did not converge.\n"
+                "You might want to increase the number of iterations `numItermax` or the regularization parameter `reg`.",
+                UserWarning
+            )
+
         return solution
 
     def calculate_solution(
@@ -3210,7 +3847,7 @@ class scEGOT:
         gmm_source,
         gmm_target,
         reg=0.01,
-        numItermax=int(1e10),
+        numItermax=5000,
         method="sinkhorn_epsilon_scaling",
         tau=1e8,
         stopThr=1e-9,
@@ -3240,7 +3877,7 @@ class scEGOT:
         self,
         gmm_models,
         reg=0.01,
-        numItermax=int(1e10),
+        numItermax=5000,
         method="sinkhorn_epsilon_scaling",
         tau=1e8,
         stopThr=1e-9,
@@ -3266,7 +3903,7 @@ class scEGOT:
         self,
         gmm_models,
         reg=0.01,
-        numItermax=int(1e10),
+        numItermax=5000,
         method="sinkhorn_epsilon_scaling",
         tau=1e8,
         stopThr=1e-9,
@@ -3365,7 +4002,7 @@ class scEGOT:
         return gmm_mean_gene_values_per_cluster
 
     def get_positive_gmm_mean_gene_values_per_cluster(
-        self, gmm_means, cluster_names=None
+        self, gmm_means, cluster_names=None,
     ):
         gmm_mean_gene_values_per_cluster = self._get_gmm_mean_gene_values_per_cluster(
             gmm_means, cluster_names
@@ -3383,3 +4020,883 @@ class scEGOT:
             )
         self.gmm_labels_modified = gmm_labels_modified
         self.gmm_label_converter = converter
+
+    def create_separated_data(
+        self,
+        data_names,
+        min_cluster_size=2,
+        return_cluster_names=False,
+        cluster_names=None,
+        original_covariances_weight = 0
+    ):
+        """
+        Create separated data for each data name.
+
+        Parameters
+        ----------
+        data_names : list of str
+            List of prefixes to identify datasets.
+            Cells with names starting with these strings will be extracted into separate scEGOT objects.
+
+        min_cluster_size : int, optional
+            Minimum number of cells required to retain a cluster, by default 2.
+            Clusters smaller than this threshold will be removed in the separated objects.
+
+        return_cluster_names : bool, optional
+            If True, also return the cluster names for each separated object, by default False.
+
+        cluster_names : list of list of str, optional
+            Custom names for the clusters in the original object, by default None.
+            1st dimension is the number of days, 2nd dimension is the number of gmm components
+            in each day.
+            If None, names are automatically generated by generate_cluster_names_with_day() method.
+            
+        original_covariances_weight : float, optional
+            Weight factor for blending the original GMM covariances with recalculated ones, by default 0.
+            The new covariance is calculated as:
+            new_cov = original_cov * weight + recalculated_cov * (1 - weight).
+            - 0.0: Use only covariances calculated from the separated data.
+            - 1.0: Use only covariances of the original object.
+
+        Returns
+        -------
+        dict
+            A dictionary where keys are `data_names` and values are the corresponding separated `scEGOT` objects.
+
+        dict
+            A dictionary where keys are `data_names` and values are lists of cluster names.
+            These names correspond to the cluster names of the original object.
+            This will be returned only when 'return_cluster_names' is True.
+        """
+
+        separated_scegot_dict = {}
+        separated_cluster_names_dict = {}
+        umap_flag = self.X_umap is not None and self.umap_model is not None
+        gmm_model_flag = self.gmm_models is not None
+        gmm_label_flag = self.gmm_labels is not None
+        return_cluster_names = gmm_label_flag and return_cluster_names
+
+        if cluster_names is None:
+            cluster_names = self.generate_cluster_names_with_day()
+
+        for data_name in data_names:
+            separated_X_raw = []
+            separated_X_normalized = []
+            separated_X_selected = []
+            separated_X_pca = []
+            separated_gmm_models = []
+            separated_gmm_labels = []
+            if umap_flag:
+                separated_X_umap = []
+            if gmm_label_flag:
+                gmm_n_components_list = self.gmm_n_components_list.copy()
+                removed_cluster_names = []
+            if return_cluster_names:
+                separated_cluster_names = copy.deepcopy(cluster_names) 
+
+            for day in range(len(self.day_names)):
+                day_separated_X_raw = self.X_raw[day].loc[self.X_raw[day].index.str.startswith(data_name)]
+                day_separated_X_normalized = self.X_normalized[day].loc[self.X_normalized[day].index.str.startswith(data_name)]
+                day_separated_X_selected = self.X_selected[day].loc[self.X_selected[day].index.str.startswith(data_name)]
+                day_separated_X_pca = self.X_pca[day].loc[self.X_pca[day].index.str.startswith(data_name)]
+
+                if umap_flag:
+                    day_separated_X_umap = self.X_umap[day].loc[self.X_umap[day].index.str.startswith(data_name)]
+                    separated_X_umap.append(day_separated_X_umap)
+                
+                if gmm_model_flag:
+                    day_concated_gmm_model = self.gmm_models[day]
+
+                    if gmm_label_flag:
+                        day_separated_gmm_label = self.gmm_labels[day][self.X_raw[day].index.str.startswith(data_name)]
+                        day_separated_gmm_model = sklearn_clone(day_concated_gmm_model)
+                        cluster_sizes = []
+                        means = []
+                        covariances = []
+                        precisions = []
+                        precisions_cholesky = []
+                        removed_clusters_num = 0
+                        for cluster_index in range(day_separated_gmm_model.n_components):
+                            cluster_data = day_separated_X_pca[day_separated_gmm_label == (cluster_index - removed_clusters_num)]
+                            n_cluster_data_rows = cluster_data.shape[0]
+                            if n_cluster_data_rows < min_cluster_size:
+                                if self.verbose:
+                                    removed_cluster_names.append(cluster_names[day][cluster_index])
+                                gmm_n_components_list[day] -= 1
+                                day_separated_gmm_model.n_components -= 1
+                                if n_cluster_data_rows >= 1:
+                                    not_removed_cell_mask = day_separated_gmm_label != (cluster_index - removed_clusters_num)
+                                    day_separated_X_raw = day_separated_X_raw.loc[not_removed_cell_mask]
+                                    day_separated_X_normalized = day_separated_X_normalized.loc[not_removed_cell_mask]
+                                    day_separated_X_selected = day_separated_X_selected.loc[not_removed_cell_mask]
+                                    day_separated_X_pca = day_separated_X_pca.loc[not_removed_cell_mask]
+                                    day_separated_gmm_label = day_separated_gmm_label[not_removed_cell_mask]
+                                    if umap_flag:
+                                        day_separated_X_umap = day_separated_X_umap.loc[not_removed_cell_mask]
+                                day_separated_gmm_label = np.where(
+                                    day_separated_gmm_label > cluster_index, day_separated_gmm_label - 1, day_separated_gmm_label
+                                )
+                                if return_cluster_names:
+                                    del separated_cluster_names[day][cluster_index - removed_clusters_num]
+                                removed_clusters_num += 1
+                                continue
+
+                            if n_cluster_data_rows <= self.pca_model.n_components_ and original_covariances_weight == 0:
+                                    msg = (
+                                        f"The number of cells in the cluster {cluster_names[day][cluster_index]} "
+                                        f"for {data_name} ({n_cluster_data_rows}) is less than or equal to "
+                                        f"the number of PCA components ({self.pca_model.n_components_}). "
+                                        "The covariance matrix cannot be inverted accurately."
+                                    )
+                                    raise ValueError(msg)
+                                
+                            cluster_sizes.append(len(cluster_data))
+                            means.append(cluster_data.mean().values)
+                            
+                            original_cov = day_concated_gmm_model.covariances_[cluster_index]
+                            cov = original_cov * original_covariances_weight + np.cov(cluster_data.T) * (1 - original_covariances_weight)
+                            cov_cholesky = np.linalg.cholesky(cov)
+                            prec_cholesky = np.linalg.solve(cov_cholesky, np.eye(cov.shape[0], dtype=cov.dtype)).T
+                            prec = np.dot(prec_cholesky, prec_cholesky.T)
+
+                            covariances.append(cov)
+                            precisions.append(prec)
+                            precisions_cholesky.append(prec_cholesky)
+                                
+                        separated_gmm_labels.append(day_separated_gmm_label)
+
+                        day_separated_gmm_model.weights_ = np.array(cluster_sizes) / len(day_separated_X_raw)
+                        day_separated_gmm_model.means_ = np.array(means)
+                        day_separated_gmm_model.covariances_ = np.array(covariances)
+                        day_separated_gmm_model.precisions_ = np.array(precisions)
+                        day_separated_gmm_model.precisions_cholesky_ = np.array(precisions_cholesky)
+                        day_separated_gmm_model.converged_ = day_concated_gmm_model.converged_
+                        day_separated_gmm_model.lower_bound_ = day_concated_gmm_model.lower_bound_
+                        day_separated_gmm_model.n_features_in_ = day_concated_gmm_model.n_features_in_
+                        day_separated_gmm_model.n_iter_ = day_concated_gmm_model.n_iter_
+                        if hasattr(day_concated_gmm_model, "lower_bounds_"):
+                            day_separated_gmm_model.lower_bounds_ = day_concated_gmm_model.lower_bounds_
+
+                        separated_gmm_models.append(day_separated_gmm_model)
+                    else:
+                        separated_gmm_models.append(sklearn_clone(day_concated_gmm_model))
+                
+                separated_X_raw.append(day_separated_X_raw)
+                separated_X_normalized.append(day_separated_X_normalized)
+                separated_X_selected.append(day_separated_X_selected)
+                separated_X_pca.append(day_separated_X_pca)
+            
+            if len(removed_cluster_names) > 0:
+                msg = (
+                    f"The following clusters in {data_name} have been removed because "
+                    f"the number of cells is less than the minimum cluster size ({min_cluster_size}): \n"
+                    f"{', '.join(removed_cluster_names)}."
+                )
+                print("Info: \n" + msg)
+
+            separated_scegot = scEGOT(separated_X_raw, day_names=self.day_names, verbose=self.verbose)
+            separated_scegot.X_normalized = separated_X_normalized
+            separated_scegot.X_selected = separated_X_selected
+            separated_scegot.X_pca = separated_X_pca
+            
+            separated_scegot.pca_model = copy.deepcopy(self.pca_model)
+            separated_scegot.gene_names = self.gene_names.copy()
+            separated_scegot.gmm_label_converter = copy.deepcopy(self.gmm_label_converter)
+
+            if umap_flag:
+                separated_scegot.X_umap = separated_X_umap
+                separated_scegot.umap_model = copy.deepcopy(self.umap_model)
+
+            if gmm_model_flag:
+                separated_scegot.gmm_n_components_list = gmm_n_components_list
+                separated_scegot.gmm_models = separated_gmm_models
+            
+            if gmm_label_flag:
+                separated_scegot.gmm_labels = separated_gmm_labels
+                separated_scegot.gmm_labels_modified = separated_gmm_labels
+
+            separated_scegot_dict[data_name] = separated_scegot
+
+            if return_cluster_names:
+                separated_cluster_names_dict[data_name] = separated_cluster_names
+
+        if return_cluster_names:
+            return separated_scegot_dict, separated_cluster_names_dict
+        else:
+            return separated_scegot_dict
+
+
+class CellStateGraph():
+    def __init__(
+        self,
+        G, 
+        scegot,
+        threshold=0.05,
+        mode="pca",
+        cluster_names=None,
+        node_ids=None,
+        merge_clusters_by_name=False,
+        x_reverse=False,
+        y_reverse=False,
+        require_parent=False
+    ):
+        self.G = G
+        self.scegot = scegot
+        self.threshold = threshold
+        self.mode = mode
+        self.cluster_names = cluster_names
+        self.node_ids = node_ids
+        self.merge_clusters_by_name = merge_clusters_by_name
+        self.x_reverse = x_reverse
+        self.y_reverse = y_reverse
+        self.require_parent = require_parent
+        self.day_num = len(scegot.day_names)
+        self.gmm_n_components_list = scegot.gmm_n_components_list
+        
+    def reverse_graph(self, x=False, y=False):
+        """
+        Reverse the graph layout along the specified axes.
+
+        Parameters
+        ----------
+        x : bool, optional
+            If True, reverse the x-axis of the graph layout, by default False.
+        
+        y : bool, optional
+            If True, reverse the y-axis of the graph layout, by default False.
+        """
+
+        if x:
+            self.x_reverse = not self.x_reverse
+            for node in self.G.nodes():
+                self.G.nodes[node]["pos"] = (-1 * self.G.nodes[node]["pos"][0], self.G.nodes[node]["pos"][1])
+        if y:
+            self.y_reverse = not self.y_reverse
+            for node in self.G.nodes():
+                self.G.nodes[node]["pos"] = (self.G.nodes[node]["pos"][0], -1 * self.G.nodes[node]["pos"][1])
+    
+    def _validate_cluster_names(self, cluster_names):
+        if type(cluster_names) != list:
+            raise TypeError("The type of 'cluster_names' should be list.")
+        day_num = self.day_num
+        if len(cluster_names) != day_num:
+            raise ValueError(f"The length of 'cluster_names' should be equal to the number of days ({day_num}).")
+        for day in range(day_num):
+            if type(cluster_names[day]) != list:
+                raise TypeError(f"The element located at index {day} in 'cluster_names' should be a list.")
+            if len(cluster_names[day]) != self.gmm_n_components_list[day]:
+                raise ValueError(
+                    f"The element located at index {day} in 'cluster_names' must contain the same number of elements as "
+                    f"the number of clusters of the {self.scegot.day_names[day]} (= {self.gmm_n_components_list[day]}), \n"
+                    f"The actual length of the element at index {day} in 'cluster_names' was {len(cluster_names[day])}."
+                )
+        if self.merge_clusters_by_name:
+            cluster_names_flattened = list(itertools.chain.from_iterable(cluster_names))
+            old_cluster_names_flattened = list(itertools.chain.from_iterable(self.cluster_names))
+            id_name_dict = {}
+            for i in range(len(self.node_ids)):
+                id = self.node_ids[i]
+                name = cluster_names_flattened[i]
+                if id in id_name_dict:
+                    if id_name_dict[id] != name:
+                        raise ValueError(
+                            f"When merge_clusters_by_name = True, clusters that shared "
+                            f"the same original name must be given the same new name.\n"
+                            f"Cluster '{old_cluster_names_flattened[i]}' has inconsistent "
+                            f"names: '{id_name_dict[id]}' and '{name}'."
+                        )
+                else:
+                    id_name_dict[id] = name
+        return cluster_names
+    
+    def set_cluster_names(self, cluster_names):
+        """
+        Set new cluster names for the cell state graph.  
+
+        Parameters
+        ----------
+        cluster_names : list of list of str
+            New names for the clusters.
+            1st dimension is the number of days, 2nd dimension is the number of gmm components
+            in each day.
+            Merged clusters must have the same name when 'merge_clusters_by_name' is True.
+        Returns
+        -------
+        list of list of str
+            The new cluster names.
+        """
+
+        new_cluster_names = self._validate_cluster_names(cluster_names)
+        self.cluster_names = new_cluster_names
+        return new_cluster_names
+    
+    def _day_update_cluster_names(self, cluster_names, cluster_names_map, day):
+        for cluster_num in range(self.gmm_n_components_list[day]):
+            old_name = cluster_names[day][cluster_num]
+            if old_name in cluster_names_map.keys():
+                cluster_names[day][cluster_num] = cluster_names_map[old_name]
+        return cluster_names
+
+    def update_cluster_names(self, cluster_names_map, day=None):
+        """
+        Update cluster names for the cell state graph based on a mapping dictionary.
+
+        Parameters
+        ----------
+        cluster_names_map : dict
+            A dictionary mapping old cluster names to new cluster names.
+        day : int, optional
+            The specific day to update cluster names for, by default None.
+            If None, update cluster names for all days.
+        
+        Returns
+        -------
+        list of list of str
+            The updated cluster names.
+        """
+
+        cluster_names = copy.deepcopy(self.cluster_names)
+        if day is None:
+            for day in range(self.day_num):
+                cluster_names = self._day_update_cluster_names(cluster_names, cluster_names_map, day)
+        else:
+            cluster_names = self._day_update_cluster_names(cluster_names, cluster_names_map, day)
+        new_cluster_names = self._validate_cluster_names(cluster_names)
+        self.cluster_names = new_cluster_names
+        return new_cluster_names
+
+    def _get_day_node_dict(self):
+        day_dict = dict(self.G.nodes(data="day"))
+        day_node_dict = defaultdict(list)
+
+        for cluster, day in day_dict.items():
+            day_node_dict[day].append(cluster)
+
+        return day_node_dict
+
+    def _get_node_name_alphabetical_order_dict(self):
+        cluster_alphabetical_order = {}
+        for day_cluster_names in self.cluster_names:
+            sorted_day_cluster_names = sorted(set(day_cluster_names))
+            for order, name in enumerate(sorted_day_cluster_names):
+                cluster_alphabetical_order[name] = order
+        return cluster_alphabetical_order
+    
+    def _get_node_position_dict(self, layout, y_position):
+        G = self.G
+        pos = {}
+
+        if layout == "normal":
+            pos = {node: G.nodes[node]["pos"] for node in G.nodes()}
+        else:
+            if y_position == "weight":
+                for node in G.nodes():
+                    pos[node] = (G.nodes[node]["day"], -G.nodes[node]["cluster_weight"])
+            else:
+                if y_position == "name":
+                    ypos_dict = self._get_node_name_alphabetical_order_dict()
+                else:
+                    ypos_dict = y_position
+                for node in G.nodes():
+                    node_day = G.nodes[node]["day"]
+                    node_gmm = G.nodes[node]["cluster_gmm_list"][0]
+                    node_name = self.cluster_names[node_day][node_gmm]
+                    try:
+                        ypos = -ypos_dict[node_name]
+                    except:
+                        raise ValueError(f"The node name '{node_name}' does not exist in 'y_position'.")
+                    pos[node] = (G.nodes[node]["day"], ypos)
+
+        return pos
+
+    def plot_simple_cell_state_graph(
+        self,
+        layout="normal",
+        y_position="name",
+        cluster_names=None,
+        node_weight_annotation=False,
+        edge_weight_annotation=False,
+        save=False,
+        save_path=None
+    ):
+        """
+        Plot the cell state graph with the given graph object in a simple way.
+
+        Parameters
+        ----------
+        layout : {'normal', 'hierarchy'}, optional
+            The layout of the graph, by default "normal".
+
+            * When "normal", the graph is plotted in PCA or UMAP space.
+            * When "hierarchy", the graph is plotted with the day on the x-axis and the cluster on the y-axis.
+
+        y_position : str or dict, optional
+            Determines the y-axis position of nodes when layout is "hierarchy", by default "name".
+
+            * "name": Sort nodes alphabetically by name.
+            * "weight": Sort nodes by their weight.
+            * dict: A dictionary mapping node names to y-axis positions.
+
+            This parameter is ignored when layout is "normal".
+
+        cluster_names : list of list of str, optional
+            Custom names for the clusters, by default None.
+
+            1st dimension is the number of days, 2nd dimension is the number of gmm components
+            in each day.
+            When the attribute ``merge_clusters_by_name`` is True, clusters to be merged must be given
+            the same new name.
+
+            If None, the attribute ``cluster_names`` is used.
+
+        node_weight_annotation : bool, optional
+            If True, display the weight of each node, by default False.
+
+        edge_weight_annotation : bool, optional
+            If True, display the weight of each edge, by default False.
+
+        save : bool, optional
+            If True, save the output image, by default False.
+
+        save_path : str, optional
+            Path to save the output image, by default None.
+            If None, the image will be saved as './simple_cell_state_graph.png'.
+
+        Raises
+        ------
+        ValueError
+            This error is raised in the following cases:
+            - When 'layout' is not 'normal' or 'hierarchy'.
+            - When 'y_position' is a string but not 'name' or 'weight'.
+        TypeError
+            When 'y_position' is not a string or dict (if layout is 'hierarchy').
+        """
+        
+        if layout not in ["normal", "hierarchy"]:
+            raise ValueError("The parameter 'layout' should be 'normal or 'hierarchy'.")
+        if layout == "hierarchy":
+            if type(y_position) not in [str, dict]:
+                raise TypeError("The Type of 'y_position' should be string or dict.")
+            if type(y_position) == str and y_position not in ["name", "weight"]:
+                raise ValueError(
+                    "The parameter 'y_position' should be 'name', 'weight' or dictionary object."
+                )
+        
+        if cluster_names is None:
+            cluster_names = self.cluster_names
+        else:
+            cluster_names = self._validate_cluster_names(cluster_names)
+
+        if save and save_path is None:
+            save_path = "./simple_cell_state_graph.png"
+
+        G = self.G
+
+        node_color = [node["day"] for node in G.nodes.values()]
+        edge_color = np.array([G.edges[edge]["weight"] for edge in G.edges()])
+        pos = self._get_node_position_dict(layout, y_position)
+        fig, ax = plt.subplots(figsize=(12, 10))
+        
+        nx.draw(
+            G,
+            pos,
+            node_size=[node["weight"] * 4500 for node in G.nodes.values()],
+            node_color="white",
+            edge_color="black",
+            arrows=True,
+            arrowsize=30,
+            linewidths=2,
+            ax=ax,
+            width=6.0,
+        )
+        nx.draw(
+            G,
+            pos,
+            node_size=[node["weight"] * 5000 for node in G.nodes.values()],
+            node_color="white",
+            edge_color="white",
+            arrows=True,
+            arrowsize=30,
+            linewidths=2,
+            ax=ax,
+            width=5.0,
+        )
+
+        node_cmap = (
+            plt.cm.tab10(np.arange(10))
+            if self.day_num <= 10
+            else plt.cm.tab20(np.arange(20))
+        )
+        nx.draw(
+            G,
+            pos,
+            node_size=[node["weight"] * 5000 for node in G.nodes.values()],
+            node_color=node_color,
+            edge_color=edge_color,
+            edgecolors="white",
+            arrows=True,
+            arrowsize=30,
+            linewidths=2,
+            cmap=ListedColormap(node_cmap[: self.day_num]),
+            edge_cmap=plt.cm.Reds,
+            ax=ax,
+            alpha=1,
+            width=5.0,
+        )
+
+        if edge_weight_annotation: 
+            nx.draw_networkx_edge_labels(
+                G,
+                pos,
+                edge_labels={edge: f"{G.edges[edge]['weight']:.3f}" for edge in G.edges()},
+                font_size=14,
+                label_pos=0.3,
+                ax=ax
+            )
+
+        texts = []
+        for node in G.nodes():
+            node_day = G.nodes[node]["day"]
+            node_gmm = G.nodes[node]["cluster_gmm_list"][0]
+            node_name = cluster_names[node_day][node_gmm]
+            text_ = ax.text(
+                pos[node][0],
+                pos[node][1],
+                f'{node_name}\n{G.nodes[node]["weight"]:.3f}' if node_weight_annotation else node_name,
+                fontsize=14,
+                fontweight="bold",
+                ha="center",
+                va="center",
+            )
+            text_.set_path_effects(
+                [patheffects.withStroke(linewidth=3, foreground="w")]
+            )
+            texts.append(text_)
+
+        if layout == "normal":
+            adjust_text(texts)
+
+        plt.show()
+
+        if save:
+            fig.savefig(save_path, dpi=200, bbox_inches="tight")
+
+
+    def _calculate_weighted_mean_of_gene_values(self, df):
+        if len(df) == 1:
+            return df.drop("weights", axis=1)
+        else:
+            weighted_df = df.drop("weights", axis=1).mul(df["weights"], axis=0)
+            return (weighted_df.sum() / df["weights"].sum()).to_frame(name=df.index[0]).T
+        
+    def _get_up_regulated_genes(self, gene_values, num=10):
+        scegot = self.scegot
+        columns = [f"up_gene_{i+1}" for i in range(num)]
+        df_upgenes = pd.DataFrame(columns=columns, index=pd.MultiIndex.from_tuples([], names=["source", "target"]))
+        for edge in self.G.edges():
+            fold_change = scegot._get_fold_change(
+                gene_values,
+                edge[0],
+                edge[1],
+            )
+            upgenes = pd.DataFrame(
+                [scegot._get_nlargest_gene_indices(fold_change, num=num).values],
+                columns=columns,
+                index=pd.MultiIndex.from_tuples([(str(edge[0]), str(edge[1]))], names=["source", "target"])
+            )
+            df_upgenes = pd.concat([df_upgenes, upgenes])
+        return df_upgenes
+
+    def _get_down_regulated_genes(self, gene_values, num=10):
+        scegot = self.scegot
+        columns = [f"down_gene_{i+1}" for i in range(num)]
+        df_downgenes = pd.DataFrame(columns=columns, index=pd.MultiIndex.from_tuples([], names=["source", "target"]))
+        for edge in self.G.edges():
+            fold_change = scegot._get_fold_change(
+                gene_values,
+                edge[0],
+                edge[1],
+            )
+            downgenes = pd.DataFrame(
+                [scegot._get_nsmallest_gene_indices(fold_change, num=num).values],
+                columns=columns,
+                index=pd.MultiIndex.from_tuples([(str(edge[0]), str(edge[1]))], names=["source", "target"])
+            )
+            df_downgenes = pd.concat([df_downgenes, downgenes])
+        return df_downgenes
+
+    def _get_genes_info(self, gene_names, gene_pick_num):
+        scegot = self.scegot
+        
+        mean_gene_values_per_cluster = (
+            scegot.get_positive_gmm_mean_gene_values_per_cluster(
+                scegot.get_gmm_means(),
+                self.node_ids,
+            )
+        )
+        if self.merge_clusters_by_name:
+            cluster_weights = pd.Series(scegot._get_gmm_node_weights_flattened(), index=mean_gene_values_per_cluster.index, name="weight")
+            mean_gene_values_per_cluster["weights"] = cluster_weights
+            mean_gene_values_per_cluster = mean_gene_values_per_cluster.groupby(level=0).apply(self._calculate_weighted_mean_of_gene_values)
+            mean_gene_values_per_cluster = mean_gene_values_per_cluster.reset_index(level=1, drop=True)
+        
+        mean_gene_values_per_cluster = mean_gene_values_per_cluster.loc[
+            :, mean_gene_values_per_cluster.columns.isin(gene_names)
+        ]
+
+        nlargest_genes = mean_gene_values_per_cluster.T.apply(
+            scegot._get_nlargest_gene_indices, num=gene_pick_num
+        ).T
+        nsmallest_genes = mean_gene_values_per_cluster.T.apply(
+            scegot._get_nsmallest_gene_indices, num=gene_pick_num
+        ).T
+        nlargest_genes.columns += 1
+        nsmallest_genes.columns += 1
+
+        up_genes = self._get_up_regulated_genes(
+            mean_gene_values_per_cluster, num=gene_pick_num
+        )
+        down_genes = self._get_down_regulated_genes(
+            mean_gene_values_per_cluster, num=gene_pick_num
+        )
+
+        return nlargest_genes, nsmallest_genes, up_genes, down_genes
+
+    def plot_cell_state_graph(
+        self,
+        layout="normal",
+        y_position="name",
+        cluster_names=None,
+        gene_names=None,
+        gene_pick_num=5,
+        plot_title="Cell State Graph",
+        save=False,
+        save_path=None,
+    ):
+        """
+        Plot the cell state graph with the given graph object.
+
+        Parameters
+        ----------
+        layout : {'normal', 'hierarchy'}, optional
+            The layout of the graph, by default "normal"
+
+            * When 'normal', the graph is plotted in PCA or UMAP space.
+            * When 'hierarchy', the graph is plotted with the day on the x-axis and the cluster on the y-axis.
+
+        y_position : str or dict, optional
+            Determines the y-axis position of nodes when layout is 'hierarchy', by default "name".
+
+            * 'name': Sort nodes alphabetically by name.
+            * 'weight': Sort nodes by their weight.
+            * dict: A dictionary mapping node names to y-axis positions.
+
+            This parameter is ignored when layout is 'normal'.
+
+        cluster_names : list of list of str
+            Custom names for the clusters, by default None.
+
+            1st dimension is the number of days, 2nd dimension is the number of gmm components
+            in each day.
+            When the attribute ``merge_clusters_by_name`` is True, clusters to be merged must be given
+            the same new name.
+
+            If None, the attribute ``cluster_names`` is used.
+
+        gene_names : list of str, optional
+            List of gene names to use, by default None
+            If None, all gene names (``self.scegot.gene_names``) will be used.
+            You can pass on any list of gene names you want to use, not limited to TF genes.
+
+        gene_pick_num : int, optional
+            The number of genes to show in each node and edge, by default 5
+        
+        plot_title : str, optional
+            Title of the plot, by default "Cell State Graph"
+
+        save : bool, optional
+            If True, save the output image, by default False
+
+        save_path : str, optional
+            Path to save the output image, by default None
+            If None, the image will be saved as './cell_state_graph.png'
+        """
+
+        if layout not in ["normal", "hierarchy"]:
+            raise ValueError("The parameter 'layout' should be 'normal or 'hierarchy'.")
+        if layout == "hierarchy":
+            if type(y_position) not in [str, dict]:
+                raise TypeError("The Type of 'y_position' should be string or dict.")
+            if type(y_position) == str and y_position not in ["name", "weight"]:
+                raise ValueError("The parameter 'y_position' should be 'name', 'weight' or dictionary object.")
+
+        if cluster_names is None:
+            cluster_names = self.cluster_names
+        else:
+            cluster_names = self._validate_cluster_names(cluster_names)
+        
+        if gene_names is None:
+            gene_names = self.scegot.gene_names
+
+        if save and save_path is None:
+            save_path = "./cell_state_graph.png"        
+
+        nlargest_genes, nsmallest_genes, up_genes, down_genes = self._get_genes_info(gene_names, gene_pick_num)
+
+        tail_list = []
+        head_list = []
+        color_list = []
+        trace_recode = []
+
+        G = self.G
+        colors = plt.cm.inferno(np.linspace(0, 1, self.day_num + 2))
+        pos = self._get_node_position_dict(layout, y_position)
+
+        for edge in G.edges():
+            x_0, y_0 = pos[edge[0]]
+            x_1, y_1 = pos[edge[1]]
+            tail_list.append((x_0, y_0))
+            head_list.append((x_1, y_1))
+            weight = G.edges[edge]["weight"] * 25
+            color = colors[G.edges[edge]["color"] + 1]
+
+            color_list.append(f"rgb({color[0]},{color[1]},{color[2]})")
+
+            edge_trace = go.Scatter(
+                x=tuple([x_0, x_1, None]),
+                y=tuple([y_0, y_1, None]),
+                mode="lines",
+                line={"width": weight},
+                line_color=f"rgb({color[0]},{color[1]},{color[2]})",
+                line_shape="spline",
+                opacity=0.4,
+            )
+
+            trace_recode.append(edge_trace)
+
+        middle_hover_trace = go.Scatter(
+            x=[],
+            y=[],
+            hovertext=[],
+            mode="markers",
+            textposition="top center",
+            hoverinfo="text",
+            marker={
+                "size": 20,
+                "color": [edge["color"] + 1 for edge in G.edges.values()],
+            },
+            opacity=0,
+        )
+
+        for edge in G.edges():
+            source = G.nodes[edge[0]]
+            target = G.nodes[edge[1]]
+            x_0, y_0 = pos[edge[0]]
+            x_1, y_1 = pos[edge[1]]
+            genes_index = (str(edge[0]), str(edge[1]))
+            source_day = source["day"]
+            source_gmm = source["cluster_gmm_list"][0]
+            source_name = cluster_names[source_day][source_gmm]
+            target_day = target["day"]
+            target_gmm = target["cluster_gmm_list"][0]
+            target_name = cluster_names[target_day][target_gmm]
+            hovertext = (
+                f"<b>Edge from {source_name} to {target_name}</b><br>"
+                f"weight = {G.edges[edge]['weight']:.4f}<br>"
+                f"up_genes: {', '.join(up_genes.T[genes_index].values)}<br>"
+                f"down_genes: {', '.join(down_genes.T[genes_index].values)}"
+            )
+            middle_hover_trace["x"] += tuple([(x_0 + x_1) / 2])
+            middle_hover_trace["y"] += tuple([(y_0 + y_1) / 2])
+            middle_hover_trace["hovertext"] += tuple([hovertext])
+        
+        trace_recode.append(middle_hover_trace)
+
+        arrows = [
+            go.layout.Annotation(
+                dict(
+                    x=head[0],
+                    y=head[1],
+                    showarrow=True,
+                    xref="x",
+                    yref="y",
+                    arrowcolor=color,
+                    arrowsize=2,
+                    arrowwidth=2,
+                    ax=tail[0],
+                    ay=tail[1],
+                    axref="x",
+                    ayref="y",
+                    arrowhead=1,
+                )
+            )
+            for head, tail, color in zip(head_list, tail_list, color_list)
+        ]
+        
+        node_x = []
+        node_y = []
+        node_names = []
+        node_names_with_gmm_numbers = []
+        node_gene_texts = []
+
+        for node in G.nodes():
+            x, y = pos[node]
+            node_x.append(x)
+            node_y.append(y)
+            node_day = G.nodes[node]["day"]
+            node_gmm = G.nodes[node]["cluster_gmm_list"][0]
+            node_name = cluster_names[node_day][node_gmm]
+            node_cluster_gmm_list = G.nodes[node]["cluster_gmm_list"]
+            node_names.append(node_name)
+            node_names_with_gmm_numbers.append(
+                f"<b>{node_name}</b><br>"
+                f"weight = {G.nodes[node]['weight']:.4f}<br>"
+                f"GMM cluster numbers = {', '.join(map(str, node_cluster_gmm_list))}"
+            )
+            node_gene_text = (
+                f"<b>{node_name}</b><br>"
+                f"largest_genes: {', '.join(nlargest_genes.T[node].values)}<br>"
+                f"smallest_genes: {', '.join(nsmallest_genes.T[node].values)}"
+            )
+            node_gene_texts.append(node_gene_text)
+
+        node_trace = go.Scatter(
+            x=node_x,
+            y=node_y,
+            text=node_names,
+            hovertext=node_names_with_gmm_numbers,
+            textposition="top center",
+            mode="markers+text",
+            hoverinfo="text",
+            marker=dict(line_width=2),
+        )
+        node_trace.marker.color = [node["day"] for node in G.nodes.values()]
+        node_trace.marker.size = [node["weight"] * 140 for node in G.nodes.values()]
+        trace_recode.append(node_trace)
+
+        node_gene_trace = go.Scatter(
+            x=node_x,
+            y=node_y,
+            hovertext=node_gene_texts,
+            mode="markers",
+            textposition="top center",
+            hoverinfo="text",
+            marker={
+                "size": 20,
+                "color": [node["day"] + 1 for node in G.nodes.values()],
+            },
+            opacity=0,
+        )
+        trace_recode.append(node_gene_trace)
+
+        fig = go.Figure(
+            data=trace_recode, layout=go.Layout(showlegend=False, hovermode="closest")
+        )
+
+        fig.update_layout(annotations=arrows)
+
+        fig.update_layout(width=1000, height=800, title=plot_title)
+        fig.show()
+
+        if save:
+            fig.write_image(save_path)
