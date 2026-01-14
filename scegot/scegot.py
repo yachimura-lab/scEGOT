@@ -410,9 +410,12 @@ class scEGOT:
         X_concated = self._normalize_log1p(X_concated)
         return X_concated
 
-    def _select_highly_variable_genes(self, X_concated, n_select_genes=2000, hvg_method="dispersion", **recode_params):
+    def _select_highly_variable_genes(self, X_concated, n_select_genes=2000, hvg_method="dispersion", force_include_genes=None, **recode_params):
         if hvg_method not in ["dispersion", "RECODE"]:
             raise ValueError("The parameter 'hvg_method' should be 'dispersion' or 'RECODE'.")
+
+        if isinstance(force_include_genes, str):
+            force_include_genes = [force_include_genes]
         
         genes = pd.DataFrame(index=X_concated.columns)
         
@@ -435,6 +438,11 @@ class scEGOT:
             adata = recode.fit_transform(adata)
             recode.highly_variable_genes(adata, n_top_genes=n_select_genes) 
             highvar_gene_names = adata.var.index[adata.var["RECODE_highly_variable"]]
+        
+        if force_include_genes is not None:
+            for gene in force_include_genes:
+                if gene not in highvar_gene_names and gene in X_concated.columns:
+                    highvar_gene_names = highvar_gene_names.append(pd.Index([gene]))
 
         highvar_genes = X_concated.loc[:, highvar_gene_names]
         return highvar_genes
@@ -459,6 +467,7 @@ class scEGOT:
         apply_normalization_umi=True,
         select_genes=True,
         n_select_genes=2000,
+        force_include_genes=None,
         hvg_method="dispersion",
     ):
         """
@@ -501,6 +510,9 @@ class scEGOT:
             Number of highly variable genes to select, by default 2000
             Used only when 'select_genes' is True.
         
+        force_include_genes : str or list of str, optional
+            A gene name or List of gene names to forcefully selected as highly variable genes, by default None
+        
         hvg_method : {'dispersion', 'RECODE'}, optional
             Method to select highly variable genes, by default 'dispersion'
             * 'dispersion': select genes based on dispersion.
@@ -522,6 +534,9 @@ class scEGOT:
 
         if hvg_method not in ["dispersion", "RECODE"]:
             raise ValueError("The parameter 'hvg_method' should be 'dispersion' or 'RECODE'.")
+    
+        if isinstance(force_include_genes, str):
+            force_include_genes = [force_include_genes]
         
         X_concated = pd.concat(self.X_raw)
 
@@ -551,7 +566,8 @@ class scEGOT:
             X_concated = self._select_highly_variable_genes(
                 X_concated,
                 n_select_genes=n_select_genes,
-                hvg_method=hvg_method
+                hvg_method=hvg_method,
+                force_include_genes=force_include_genes
             )
 
         self.gene_names = X_concated.columns
