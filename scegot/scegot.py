@@ -71,7 +71,7 @@ def is_notebook():
         return False
 
 
-def _check_input_data(input_data, day_names, adata_day_key):
+def _check_input_data(input_data, day_names, adata_day_key, as_sparse):
     """
     Check the input data and return the processed data.
 
@@ -106,11 +106,27 @@ def _check_input_data(input_data, day_names, adata_day_key):
             raise ValueError(
                 "When 'X' is an array of DataFrame, 'day_names' should be specified."
             )
+        X = []
         for df in input_data:
             if not isinstance(df, pd.DataFrame):
                 raise TypeError("'X' should be an array of DataFrames.")
-        return input_data, day_names
-
+            if as_sparse:
+                if all(isinstance(dtype, pd.SparseDtype) for dtype in df.dtypes):
+                    X.append(df.copy())
+                else:
+                    sparse_dtype = df.dtypes.apply(
+                        lambda dtype: dtype if isinstance(dtype, pd.SparseDtype) else pd.SparseDtype(dtype, 0)
+                    )
+                    X.append(df.astype(sparse_dtype))
+            else:
+                if all(not isinstance(dtype, pd.SparseDtype) for dtype in df.dtypes):
+                    X.append(df.copy())
+                else:
+                    dense_dtype = df.dtypes.apply(
+                        lambda dtype: dtype.subtype if isinstance(dtype, pd.SparseDtype) else dtype
+                    )
+                    X.append(df.astype(dense_dtype))
+        
     elif isinstance(input_data, anndata.AnnData):
         if adata_day_key is None:
             raise ValueError(
@@ -119,15 +135,18 @@ def _check_input_data(input_data, day_names, adata_day_key):
 
         print("Processing AnnData...")
 
-        if issparse(input_data.X):
+        is_sparse = issparse(input_data.X)
+
+        if as_sparse:
+            input_X_sparse = input_data.X if is_sparse else csc_matrix(input_data.X)
             X_concated = pd.DataFrame.sparse.from_spmatrix(
-                input_data.X, index=input_data.obs.index, columns=input_data.var.index
+                input_X_sparse, index=input_data.obs.index, columns=input_data.var.index
             )
         else:
+            input_X_dense = input_data.X.todense() if is_sparse else input_data.X
             X_concated = pd.DataFrame(
-                input_data.X, index=input_data.obs.index, columns=input_data.var.index
+                input_X_dense, index=input_data.obs.index, columns=input_data.var.index
             )
-
         if day_names is None:
             day_names = pd.Series(input_data.obs[adata_day_key]).unique().tolist()
 
@@ -135,11 +154,10 @@ def _check_input_data(input_data, day_names, adata_day_key):
         for c_ in day_names:
             X.append(X_concated[input_data.obs[adata_day_key] == c_])
 
-        return X, day_names
-
     else:
         raise TypeError("'X' should be AnnData or an array of DataFrames.")
 
+    return X, day_names
 
 def integrate_data(
     input_data_dict,
@@ -256,6 +274,7 @@ class scEGOT:
         day_names=None,
         verbose=True,
         adata_day_key=None,
+        as_sparse=False
     ):
         """
         Initialize the scEGOT object.
@@ -275,6 +294,11 @@ class scEGOT:
             Should be specified when 'X' is AnnData.
             Day names are extracted from the specified key.
             The order of the day names will be the same as the order of appearance in the data.
+        as_sparse : bool, optional
+            If True, the input data will be treated as sparse data and processed as sparse data.
+            Defaults to False.
+            If 'as_sparse' is True, each DataFrame will be converted to a sparse DataFrame.
+            If 'as_sparse' is False, each DataFrame will be converted to a dense DataFrame.
 
         Attributes
         ----------
@@ -345,9 +369,9 @@ class scEGOT:
 
         self.verbose = verbose
 
-        X, day_names = _check_input_data(X, day_names, adata_day_key)
+        X_raw, day_names = _check_input_data(X, day_names, adata_day_key, as_sparse)
 
-        self.X_raw = [df.copy() for df in X]
+        self.X_raw = X_raw
         self.X_normalized = None
         self.X_selected = None
         self.X_pca = None
@@ -366,16 +390,32 @@ class scEGOT:
 
         self.solutions = None
 
-    def _preprocess_recode(self, X_concated, recode_params={}):
-        X_concated = pd.DataFrame(
-            screcode.RECODE(
-                verbose=self.verbose,
-                **recode_params,
-            ).fit_transform(X_concated.values),
-            index=X_concated.index,
-            columns=X_concated.columns,
-        )
-        return X_concated
+        self.as_sparse = as_sparse
+
+    def _preprocess_recode(self, X_concated, as_sparse=False, recode_params={}):
+        recode = screcode.RECODE(verbose=self.verbose, **recode_params)
+        X_recode = recode.fit_transform(X_concated.values)
+        is_result_sparse=as_sparse
+        if as_sparse:
+            X_concated = pd.DataFrame(
+                X_recode,
+                index=X_concated.index,
+                columns=X_concated.columns,
+            ).astype(X_concated.dtypes)
+            if X_concated.sparse.density > 0.7:
+                warnings.warn(
+                    "The density of the RECODE-processed data is higher than 0.7. "
+                    "Converting to dense DataFrame for efficiency."
+                )
+                X_concated = X_concated.sparse.to_dense()
+                is_result_sparse = False
+        else:
+            X_concated = pd.DataFrame(
+                X_recode,
+                index=X_concated.index,
+                columns=X_concated.columns
+            ).astype(X_concated.dtypes)
+        return X_concated, is_result_sparse
 
     def _preprocess_pca(
         self, X_concated, n_components, random_state=None, pca_other_params={}
@@ -392,18 +432,36 @@ class scEGOT:
         )
         return X_concated, pca_model
 
-    def _normalize_umi(self, X_concated, target_sum=1e4):
-        X_concated = X_concated.div(X_concated.sum(axis=1), axis=0) * target_sum
-        return X_concated
+    def _normalize_umi(self, X_concated, target_sum=1e4, as_sparse=False):
+        if as_sparse:
+            X_concated_mat = X_concated.sparse.to_coo()
+            normalized_mat = X_concated_mat / X_concated_mat.sum(axis=1) * target_sum
+            normalized_X_concated = pd.DataFrame.sparse.from_spmatrix(
+                normalized_mat,
+                index=X_concated.index,
+                columns=X_concated.columns
+            ).astype(X_concated.dtypes)
+        else:
+            normalized_X_concated = X_concated.div(X_concated.sum(axis=1), axis=0) * target_sum
+        return normalized_X_concated
 
-    def _normalize_log1p(self, X_concated):
+    def _normalize_log1p(self, X_concated, as_sparse=False):
         X_concated = X_concated.where(X_concated > 0, 0)
-        X_concated = pd.DataFrame(
-            np.log1p(X_concated.values),
-            index=X_concated.index,
-            columns=X_concated.columns,
-        )
-        return X_concated
+        if as_sparse:
+            normalized_mat = np.log1p(X_concated.sparse.to_coo())
+            normalized_X_concated = pd.DataFrame.sparse.from_spmatrix(
+                normalized_mat,
+                index=X_concated.index,
+                columns=X_concated.columns
+            ).astype(X_concated.dtypes)
+        else:
+            normalized_mat = np.log1p(X_concated.values)
+            normalized_X_concated = pd.DataFrame(
+                normalized_mat,
+                index=X_concated.index,
+                columns=X_concated.columns
+            ).astype(X_concated.dtypes)
+        return normalized_X_concated
 
     def _normalize_data(self, X_concated, target_sum=1e4):
         X_concated = self._normalize_umi(X_concated, target_sum)
@@ -539,24 +597,27 @@ class scEGOT:
             force_include_genes = [force_include_genes]
         
         X_concated = pd.concat(self.X_raw)
+        as_sparse = self.as_sparse
 
         if apply_recode:
             if self.verbose:
                 print("Applying RECODE...")
-            X_concated = self._preprocess_recode(
+            X_concated, is_X_RECODE_sparse = self._preprocess_recode(
                 X_concated,
-                recode_params,
+                as_sparse,
+                recode_params
             )
+            as_sparse = is_X_RECODE_sparse
 
         if apply_normalization_umi:
             if self.verbose:
                 print("Applying UMI normalization...")
-            X_concated = self._normalize_umi(X_concated, umi_target_sum)
+            X_concated = self._normalize_umi(X_concated, umi_target_sum, as_sparse)
 
         if apply_normalization_log1p:
             if self.verbose:
                 print("Applying log1p normalization...")
-            X_concated = self._normalize_log1p(X_concated)
+            X_concated = self._normalize_log1p(X_concated, as_sparse)
 
         self.X_normalized = self._split_dataframe_by_row(
             X_concated.copy(), [len(x) for x in self.X_raw]
